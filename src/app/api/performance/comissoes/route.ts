@@ -8,7 +8,12 @@ function getDb() {
   if (!url) {
     throw new Error("Variável DATABASE_URL não configurada no servidor.");
   }
-  return postgres(url, { ssl: "require" });
+  // Pgbouncer e Pooler (porta 6543) exigem prepare: false no driver postgres.js
+  const isPooler = url.includes("pooler.supabase.com") || url.includes(":6543") || url.includes("pgbouncer=true");
+  return postgres(url, {
+    ssl: "require",
+    prepare: !isPooler,
+  });
 }
 
 // Garante que as tabelas existem
@@ -35,7 +40,7 @@ async function ensureTables(sql: ReturnType<typeof postgres>) {
 // GET /api/performance/comissoes
 export async function GET(request: NextRequest) {
   if (!process.env.DATABASE_URL) {
-    return NextResponse.json([], { status: 200 }); // Retorna vazio se ainda não configurou no Vercel
+    return NextResponse.json([], { status: 200 });
   }
   const sql = getDb();
   try {

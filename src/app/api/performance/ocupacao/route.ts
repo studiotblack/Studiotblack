@@ -8,7 +8,11 @@ function getDb() {
   if (!url) {
     throw new Error("Variável DATABASE_URL não configurada no servidor.");
   }
-  return postgres(url, { ssl: "require" });
+  const isPooler = url.includes("pooler.supabase.com") || url.includes(":6543") || url.includes("pgbouncer=true");
+  return postgres(url, {
+    ssl: "require",
+    prepare: !isPooler,
+  });
 }
 
 // Garante que a tabela existe
