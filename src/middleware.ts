@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Rotas que qualquer pessoa pode acessar, mesmo sem login
 const rotasPublicas = ["/", "/api/auth/login"];
+
+const EXTENSOES_ESTATICAS = /\.(png|jpg|jpeg|svg|ico|css|js)
+$
+/;
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -11,9 +14,7 @@ export function middleware(request: NextRequest) {
   const isArquivoEstatico =
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
-    /\.(png|jpg|jpeg|svg|ico|css|js)
-$
-/.test(pathname);
+    EXTENSOES_ESTATICAS.test(pathname);
 
   if (isRotaPublica || isArquivoEstatico) {
     return NextResponse.next();
@@ -30,8 +31,5 @@ $
 }
 
 export const config = {
-  matcher: [
-    // Aplica em tudo, EXCETO: login (api), arquivos internos do Next e estáticos
-    "/((?!api/auth/login|_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!api/auth/login|_next/static|_next/image|favicon.ico).*)"],
 };
