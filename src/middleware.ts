@@ -3,9 +3,7 @@ import type { NextRequest } from "next/server";
 
 const rotasPublicas = ["/", "/api/auth/login"];
 
-const EXTENSOES_ESTATICAS = /\.(png|jpg|jpeg|svg|ico|css|js)
-$
-/;
+const EXTENSOES_ESTATICAS = [".png", ".jpg", ".jpeg", ".svg", ".ico", ".css", ".js"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,7 +12,9 @@ export function middleware(request: NextRequest) {
   const isArquivoEstatico =
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
-    EXTENSOES_ESTATICAS.test(pathname);
+    EXTENSOES_ESTATICAS.some(function (ext) {
+      return pathname.endsWith(ext);
+    });
 
   if (isRotaPublica || isArquivoEstatico) {
     return NextResponse.next();
