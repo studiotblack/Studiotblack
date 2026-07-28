@@ -283,7 +283,8 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
               dataStr = `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()} 00:00`;
             }
 
-            const prof = row["Profissional"];
+            const rawProf = row["Profissional"];
+            const prof = normalizeProfName(rawProf);
             const serv = row["Serviço/Produto/Pacote"] || "Serviço";
             const cli = row["Cliente"] || "Cliente Avulso";
             const uid = `${prof}-${serv}-${String(dataStr)}-${cli}`.replace(/\s/g, "");

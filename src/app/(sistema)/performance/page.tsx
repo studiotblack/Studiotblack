@@ -61,13 +61,21 @@ export default function PerformancePage() {
     loadAll();
   }, []);
 
-  const handleDataImport = (newData: DesempenhoProfissional[]) => {
-    setData(prev => {
-      const filtered = newData.filter(d => d.profissional && !d.profissional.toLowerCase().includes("total") && !d.profissional.toLowerCase().includes("comissã") && !d.profissional.toLowerCase().includes("comissao"));
-      const merged = [...prev, ...filtered];
-      const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-      return unique;
-    });
+  const handleDataImport = async () => {
+    try {
+      const res = await fetch("/api/performance/comissoes");
+      if (res.ok) {
+        const comissoes: DesempenhoProfissional[] = await res.json();
+        setData(comissoes.filter(d =>
+          d.profissional &&
+          !d.profissional.toLowerCase().includes("total") &&
+          !d.profissional.toLowerCase().includes("comissã") &&
+          !d.profissional.toLowerCase().includes("comissao")
+        ));
+      }
+    } catch (err) {
+      console.error("Erro ao recarregar comissões:", err);
+    }
   };
 
   const handleOcupacaoImport = async () => {
