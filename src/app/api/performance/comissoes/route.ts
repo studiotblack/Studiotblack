@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import postgres from "postgres";
 
-// Impede pré-renderização estática no build — necessário para rotas com banco de dados
 export const dynamic = "force-dynamic";
 
 function getDb() {
-  return postgres(process.env.DATABASE_URL as string, { ssl: "require" });
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("Variável DATABASE_URL não configurada no servidor.");
+  }
+  return postgres(url, { ssl: "require" });
 }
 
 // Garante que as tabelas existem
@@ -31,6 +34,9 @@ async function ensureTables(sql: ReturnType<typeof postgres>) {
 
 // GET /api/performance/comissoes
 export async function GET(request: NextRequest) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json([], { status: 200 }); // Retorna vazio se ainda não configurou no Vercel
+  }
   const sql = getDb();
   try {
     await ensureTables(sql);
@@ -50,9 +56,9 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(rows);
-  } catch (error) {
+  } catch (error: any) {
     console.error("[GET /api/performance/comissoes]", error);
-    return NextResponse.json({ error: "Erro ao buscar comissões" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Erro ao buscar comissões" }, { status: 500 });
   } finally {
     await sql.end();
   }
@@ -60,6 +66,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/performance/comissoes — substitui o mês inteiro do profissional
 export async function POST(request: NextRequest) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: "Variável DATABASE_URL não configurada no Vercel. Adicione em Settings -> Environment Variables." }, { status: 500 });
+  }
   const sql = getDb();
   try {
     await ensureTables(sql);
@@ -67,7 +76,7 @@ export async function POST(request: NextRequest) {
     const { registros, mesAno, profissional } = body;
 
     if (!registros || !Array.isArray(registros) || registros.length === 0) {
-      return NextResponse.json({ error: "Nenhum registro recebido" }, { status: 400 });
+      return NextResponse.json({ error: "Nenhum registro recebido no arquivo" }, { status: 400 });
     }
 
     // Apaga registros anteriores do mesmo profissional+mês
@@ -95,16 +104,17 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ sucesso: true, inseridos, profissional, mesAno });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[POST /api/performance/comissoes]", error);
-    return NextResponse.json({ error: "Erro ao salvar comissões" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Erro ao salvar comissões no banco" }, { status: 500 });
   } finally {
     await sql.end();
   }
 }
 
-// DELETE /api/performance/comissoes?profissional=X&mesAno=Y
+// DELETE /api/performance/comissoes
 export async function DELETE(request: NextRequest) {
+  if (!process.env.DATABASE_URL) return NextResponse.json({ sucesso: true });
   const sql = getDb();
   try {
     await ensureTables(sql);
@@ -122,8 +132,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ sucesso: true });
   } catch (error) {
-    console.error("[DELETE /api/performance/comissoes]", error);
-    return NextResponse.json({ error: "Erro ao deletar comissões" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao deletar" }, { status: 500 });
   } finally {
     await sql.end();
   }

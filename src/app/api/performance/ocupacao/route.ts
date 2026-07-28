@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import postgres from "postgres";
 
-// Impede pré-renderização estática no build — necessário para rotas com banco de dados
 export const dynamic = "force-dynamic";
 
 function getDb() {
-  return postgres(process.env.DATABASE_URL as string, { ssl: "require" });
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("Variável DATABASE_URL não configurada no servidor.");
+  }
+  return postgres(url, { ssl: "require" });
 }
 
 // Garante que a tabela existe
@@ -29,6 +32,9 @@ async function ensureTable(sql: ReturnType<typeof postgres>) {
 
 // GET /api/performance/ocupacao
 export async function GET(request: NextRequest) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json([], { status: 200 });
+  }
   const sql = getDb();
   try {
     await ensureTable(sql);
@@ -48,16 +54,19 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(rows);
-  } catch (error) {
+  } catch (error: any) {
     console.error("[GET /api/performance/ocupacao]", error);
-    return NextResponse.json({ error: "Erro ao buscar taxas de ocupação" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Erro ao buscar ocupação" }, { status: 500 });
   } finally {
     await sql.end();
   }
 }
 
-// POST /api/performance/ocupacao — upsert por profissional+mesAno
+// POST /api/performance/ocupacao
 export async function POST(request: NextRequest) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: "Variável DATABASE_URL não configurada no Vercel. Adicione em Settings -> Environment Variables." }, { status: 500 });
+  }
   const sql = getDb();
   try {
     await ensureTable(sql);
@@ -89,16 +98,17 @@ export async function POST(request: NextRequest) {
     `;
 
     return NextResponse.json({ sucesso: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[POST /api/performance/ocupacao]", error);
-    return NextResponse.json({ error: "Erro ao salvar taxa de ocupação" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Erro ao salvar taxa de ocupação" }, { status: 500 });
   } finally {
     await sql.end();
   }
 }
 
-// DELETE /api/performance/ocupacao?profissional=X&mesAno=Y
+// DELETE /api/performance/ocupacao
 export async function DELETE(request: NextRequest) {
+  if (!process.env.DATABASE_URL) return NextResponse.json({ sucesso: true });
   const sql = getDb();
   try {
     await ensureTable(sql);
@@ -116,8 +126,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ sucesso: true });
   } catch (error) {
-    console.error("[DELETE /api/performance/ocupacao]", error);
-    return NextResponse.json({ error: "Erro ao deletar taxa de ocupação" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao deletar" }, { status: 500 });
   } finally {
     await sql.end();
   }

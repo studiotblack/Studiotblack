@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { UploadCloud, CheckCircle2, Search, Filter } from "lucide-react";
+import { UploadCloud, CheckCircle2, AlertCircle, X, Search, Filter } from "lucide-react";
 import { DesempenhoProfissional, normalizeProfName, taxasOcupacaoImportadas } from "@/lib/performance-data";
 import * as xlsx from "xlsx";
 
@@ -23,16 +23,47 @@ const getMesAno = (dataStr: string): string => {
   return "Geral";
 };
 
+// Interface para os Modais de Status Customizados
+interface ModalState {
+  isOpen: boolean;
+  type: "success" | "error" | "warning";
+  title: string;
+  message: string;
+  details?: string;
+}
+
 export default function ImportacaoDados({ data, onImport, selectedProf, onProfChange, onNavigateToProf, onOcupacaoImport }: ImportacaoDadosProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+
+  // Modal customizado state
+  const [modal, setModal] = useState<ModalState>({
+    isOpen: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
   
   // Relatório state
   const [searchTerm, setSearchTerm] = useState("");
   const [filterProf, setFilterProf] = useState("Todos");
 
   const profissionais = ["Todos", ...Array.from(new Set(data.map(d => d.profissional)))];
+
+  const showNotification = (type: "success" | "error" | "warning", title: string, message: string, details?: string) => {
+    setModal({
+      isOpen: true,
+      type,
+      title,
+      message,
+      details,
+    });
+  };
+
+  const closeModal = () => {
+    setModal(prev => ({ ...prev, isOpen: false }));
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -62,7 +93,7 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
     const isPdf = file.name.endsWith(".pdf");
     
     if (!isExcel && !isPdf) {
-      alert("Por favor, envie um arquivo PDF, Excel (.xlsx) ou CSV da Planilha Mestre AppBarber.");
+      showNotification("warning", "Formato Inválido", "Por favor, envie um arquivo PDF, Excel (.xlsx) ou CSV exportado do AppBarber.");
       return;
     }
 
@@ -83,11 +114,11 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
         if (json.success && json.items) {
           await mergeAndImport(json.items);
         } else {
-          alert("Erro ao ler PDF: " + json.message);
+          showNotification("error", "Falha na Leitura do PDF", json.message || "Não foi possível extrair os dados deste PDF.");
           setIsUploading(false);
         }
-      } catch (err) {
-        alert("Erro de conexão ao enviar PDF.");
+      } catch (err: any) {
+        showNotification("error", "Erro de Conexão", "Não foi possível conectar ao servidor para processar o PDF.");
         setIsUploading(false);
       }
       return;
@@ -103,7 +134,7 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
         const jsonData = xlsx.utils.sheet_to_json(sheet) as any[];
         
         if (jsonData.length === 0) {
-          throw new Error("Planilha vazia");
+          throw new Error("A planilha selecionada está vazia.");
         }
 
         const keys = Object.keys(jsonData[0]);
@@ -112,7 +143,11 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
         if (isOcupacao) {
           // ── TAXA DE OCUPAÇÃO ──────────────────────────────────────────────
           if (!selectedProf || selectedProf === "") {
-            alert("⚠️ Selecione um profissional antes de importar o arquivo de Taxa de Ocupação.");
+            showNotification(
+              "warning", 
+              "Selecione o Barbeiro/Profissional", 
+              "Selecione um profissional no campo 'Visualizar Dashboard do Profissional' acima antes de enviar a planilha de ocupação."
+            );
             setIsUploading(false);
             return;
           }
@@ -120,7 +155,6 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
           let importados = 0;
           const recordsPorMes: Record<string, { jornada: number, atendimento: number, bloqueado: number }> = {};
 
-          // Converte tempo para minutos — aceita "HH:MM:SS" ou número decimal do Excel
           const timeToMins = (t: any): number => {
             if (t === null || t === undefined || t === "") return 0;
             if (typeof t === "number") return Math.round(t * 24 * 60);
@@ -165,51 +199,72 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
 
           const mesesProcessados = Object.keys(recordsPorMes);
           if (mesesProcessados.length === 0) {
-            alert("Não foi possível calcular a jornada (Tempo de Jornada zerado).");
+            showNotification("warning", "Dados Inválidos", "Não foi possível calcular a jornada nesta planilha (valores zerados ou colunas com nomes incompatíveis).");
             setIsUploading(false);
             return;
           }
 
-          // Salva cada mês no banco (upsert por profissional+mesAno)
-          const savePromises = mesesProcessados.map(async mesAno => {
-            const totais = recordsPorMes[mesAno];
-            if (totais.jornada <= 0) return;
-            const taxaOcup = totais.atendimento / totais.jornada;
-            const jornadaEfetiva = totais.jornada - totais.bloqueado;
-            const taxaOcupComBloqueio = jornadaEfetiva > 0 ? totais.atendimento / jornadaEfetiva : taxaOcup;
-            const normalizedProf = normalizeProfName(selectedProf);
+          // Salva no banco via API
+          try {
+            const savePromises = mesesProcessados.map(async mesAno => {
+              const totais = recordsPorMes[mesAno];
+              if (totais.jornada <= 0) return;
+              const taxaOcup = totais.atendimento / totais.jornada;
+              const jornadaEfetiva = totais.jornada - totais.bloqueado;
+              const taxaOcupComBloqueio = jornadaEfetiva > 0 ? totais.atendimento / jornadaEfetiva : taxaOcup;
+              const normalizedProf = normalizeProfName(selectedProf);
 
-            await fetch("/api/performance/ocupacao", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                profissional: normalizedProf,
-                mesAno,
-                taxaOcupacao: taxaOcup,
-                taxaOcupacaoComBloqueios: taxaOcupComBloqueio,
-                tempoAtendimentoStr: minsToTime(totais.atendimento),
-                tempoBloqueadoStr: minsToTime(totais.bloqueado),
-                tempoJornadaStr: minsToTime(totais.jornada),
-              }),
+              const res = await fetch("/api/performance/ocupacao", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  profissional: normalizedProf,
+                  mesAno,
+                  taxaOcupacao: taxaOcup,
+                  taxaOcupacaoComBloqueios: taxaOcupComBloqueio,
+                  tempoAtendimentoStr: minsToTime(totais.atendimento),
+                  tempoBloqueadoStr: minsToTime(totais.bloqueado),
+                  tempoJornadaStr: minsToTime(totais.jornada),
+                }),
+              });
+
+              if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Erro de servidor ao salvar ocupação.");
+              }
             });
-          });
 
-          await Promise.all(savePromises);
+            await Promise.all(savePromises);
 
-          setIsUploading(false);
-          setUploadSuccess(true);
+            setIsUploading(false);
+            setUploadSuccess(true);
 
-          const resumo = Object.keys(recordsPorMes).map(mes => {
-            const t = recordsPorMes[mes];
-            const taxa = t.jornada > 0 ? ((t.atendimento / t.jornada) * 100).toFixed(1) : "0";
-            const jornadaEfetiva = t.jornada - t.bloqueado;
-            const taxaComBloq = jornadaEfetiva > 0 ? ((t.atendimento / jornadaEfetiva) * 100).toFixed(1) : "0";
-            return `  📅 ${mes}: ${taxa}% (s/ bloqueios) | ${taxaComBloq}% (c/ bloqueios)`;
-          }).join("\n");
+            const resumo = Object.keys(recordsPorMes).map(mes => {
+              const t = recordsPorMes[mes];
+              const taxa = t.jornada > 0 ? ((t.atendimento / t.jornada) * 100).toFixed(1) : "0";
+              const jornadaEfetiva = t.jornada - t.bloqueado;
+              const taxaComBloq = jornadaEfetiva > 0 ? ((t.atendimento / jornadaEfetiva) * 100).toFixed(1) : "0";
+              return `📅 Mês ${mes}: ${taxa}% (sem bloqueios) | ${taxaComBloq}% (com bloqueios)`;
+            }).join("\n");
 
-          alert(`✅ Taxa de Ocupação salva no banco para ${normalizeProfName(selectedProf)}!\n\n${importados} dias processados.\n\n${resumo}`);
-          onOcupacaoImport?.();
-          setTimeout(() => setUploadSuccess(false), 5000);
+            showNotification(
+              "success",
+              "Taxa de Ocupação Atualizada!",
+              `A planilha foi sincronizada com sucesso para ${normalizeProfName(selectedProf)} (${importados} dias processados).`,
+              resumo
+            );
+
+            onOcupacaoImport?.();
+            setTimeout(() => setUploadSuccess(false), 5000);
+          } catch (err: any) {
+            setIsUploading(false);
+            showNotification(
+              "error", 
+              "Falha ao Salvar Ocupação", 
+              err.message || "Ocorreu um erro ao comunicar com o banco de dados.",
+              "Se você estiver usando o Vercel, certifique-se de que a variável DATABASE_URL foi configurada no painel."
+            );
+          }
           return;
         }
         
@@ -245,36 +300,30 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
           });
 
         await mergeAndImport(novosDados);
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        alert("Erro ao ler arquivo Excel. Verifique se o formato está correto.");
         setIsUploading(false);
+        showNotification("error", "Erro no Formato do Arquivo", err.message || "Erro ao interpretar as colunas da planilha Excel.");
       }
     };
     reader.readAsBinaryString(file);
   };
 
   /**
-   * Salva comissões no banco.
-   * Regras:
-   *  - Agrupa por profissional + mês
-   *  - Para cada grupo: substitui TODOS os dados daquele profissional+mês no banco
-   *  - Outros meses/profissionais NÃO são afetados
+   * Salva comissões no banco com feedback bonito
    */
   const mergeAndImport = async (novosDados: DesempenhoProfissional[]) => {
     if (novosDados.length === 0) {
       setIsUploading(false);
-      alert("⚠️ Nenhum registro encontrado no arquivo.");
+      showNotification("warning", "Planilha Vazia", "Nenhum registro de serviço ou comissão foi localizado neste arquivo.");
       return;
     }
 
-    // Normaliza nomes
     const normalized = novosDados.map(d => ({
       ...d,
       profissional: normalizeProfName(d.profissional),
     }));
 
-    // Agrupa por profissional+mês
     const grupos = new Map<string, { profissional: string; mesAno: string; items: DesempenhoProfissional[] }>();
     normalized.forEach(d => {
       const mesAno = getMesAno(d.data);
@@ -284,7 +333,6 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
     });
 
     try {
-      // Substitui cada grupo no banco (DELETE + INSERT do mesmo prof+mês)
       for (const grupo of grupos.values()) {
         const res = await fetch("/api/performance/comissoes", {
           method: "POST",
@@ -295,11 +343,14 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
             profissional: grupo.profissional,
           }),
         });
-        if (!res.ok) throw new Error(await res.text());
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Erro de conexão HTTP (${res.status})`);
+        }
       }
 
-      // Atualiza estado local:
-      // Remove apenas os meses reimportados, preserva todos os outros
+      // Atualiza estado local mantendo os outros meses
       const gruposKeys = new Set(
         Array.from(grupos.values()).map(g => `${g.profissional}||${g.mesAno}`)
       );
@@ -311,14 +362,26 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
       setUploadSuccess(true);
 
       const resumo = Array.from(grupos.values())
-        .map(g => `  • ${g.profissional} — ${g.mesAno}: ${g.items.length} registros`)
+        .map(g => `• ${g.profissional} (${g.mesAno}): ${g.items.length} itens gravados`)
         .join("\n");
-      alert(`✅ Dados salvos no banco!\n\n${resumo}\n\n📌 Outros meses não foram alterados.`);
+
+      showNotification(
+        "success",
+        "Base de Comissões Atualizada!",
+        `Os dados foram importados com sucesso para o banco de dados. Os meses anteriores importados continuam preservados intactos.`,
+        resumo
+      );
+
       setTimeout(() => setUploadSuccess(false), 5000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setIsUploading(false);
-      alert("❌ Erro ao salvar comissões no banco. Verifique a conexão.");
+      showNotification(
+        "error",
+        "Erro ao Conectar ao Banco",
+        err.message || "Não foi possível salvar os registros no Supabase.",
+        "Se o aplicativo estiver publicado na Vercel, certifique-se de cadastrar a variável DATABASE_URL nas configurações do projeto (Settings -> Environment Variables) e fazer um Redeploy."
+      );
     }
   };
 
@@ -332,6 +395,119 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
       
+      {/* ── MODAL CUSTOMIZADO (BLACK & GOLD) ────────────────────────────── */}
+      {modal.isOpen && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.8)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: "1rem",
+          animation: "fadeIn 0.2s ease-out"
+        }}>
+          <div style={{
+            background: "linear-gradient(145deg, #181818 0%, #0d0d0d 100%)",
+            border: `1px solid ${modal.type === "success" ? "rgba(46, 204, 113, 0.4)" : modal.type === "error" ? "rgba(231, 76, 60, 0.4)" : "rgba(212, 175, 55, 0.4)"}`,
+            borderRadius: "16px",
+            boxShadow: "0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(212, 175, 55, 0.1)",
+            maxWidth: "500px",
+            width: "100%",
+            padding: "2rem",
+            position: "relative",
+          }}>
+            {/* Botão fechar */}
+            <button 
+              onClick={closeModal}
+              style={{
+                position: "absolute",
+                top: "1.25rem",
+                right: "1.25rem",
+                background: "transparent",
+                border: "none",
+                color: "var(--color-muted)",
+                cursor: "pointer",
+                padding: "0.25rem"
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            {/* Header com Ícone e Título */}
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
+              <div style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: modal.type === "success" ? "rgba(46, 204, 113, 0.15)" : modal.type === "error" ? "rgba(231, 76, 60, 0.15)" : "rgba(212, 175, 55, 0.15)",
+                color: modal.type === "success" ? "#2ecc71" : modal.type === "error" ? "#e74c3c" : "#d4af37"
+              }}>
+                {modal.type === "success" ? <CheckCircle2 size={28} /> : <AlertCircle size={28} />}
+              </div>
+              <div>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff", margin: 0 }}>{modal.title}</h3>
+                <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "1px", color: modal.type === "success" ? "#2ecc71" : modal.type === "error" ? "#e74c3c" : "#d4af37", fontWeight: 600 }}>
+                  {modal.type === "success" ? "Operação Concluída" : modal.type === "error" ? "Atenção Requerida" : "Aviso de Validação"}
+                </span>
+              </div>
+            </div>
+
+            {/* Mensagem Principal */}
+            <p style={{ color: "#d1d1d1", fontSize: "0.95rem", lineHeight: "1.5", marginBottom: modal.details ? "1rem" : "1.5rem" }}>
+              {modal.message}
+            </p>
+
+            {/* Caixa de Detalhes Adicionais (se houver) */}
+            {modal.details && (
+              <pre style={{
+                background: "rgba(0, 0, 0, 0.4)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "8px",
+                padding: "0.85rem 1rem",
+                color: "#e0e0e0",
+                fontSize: "0.85rem",
+                whiteSpace: "pre-wrap",
+                fontFamily: "sans-serif",
+                marginBottom: "1.5rem",
+                maxHeight: "150px",
+                overflowY: "auto"
+              }}>
+                {modal.details}
+              </pre>
+            )}
+
+            {/* Botão de Ação */}
+            <button
+              onClick={closeModal}
+              style={{
+                width: "100%",
+                padding: "0.85rem",
+                borderRadius: "8px",
+                border: "none",
+                fontWeight: 700,
+                fontSize: "0.95rem",
+                cursor: "pointer",
+                background: modal.type === "success" 
+                  ? "linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)" 
+                  : modal.type === "error" 
+                  ? "linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)" 
+                  : "linear-gradient(135deg, #d4af37 0%, #aa8c2c 100%)",
+                color: "#fff",
+                boxShadow: "0 4px 15px rgba(0,0,0,0.3)"
+              }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Seletor de Profissional Rápido */}
       <div className="card" style={{ padding: "1.5rem", display: "flex", gap: "1rem", alignItems: "flex-end", background: "linear-gradient(45deg, rgba(20,20,20,1) 0%, rgba(30,25,20,1) 100%)", border: "1px solid rgba(212, 175, 55, 0.2)" }}>
         <div style={{ flex: 1 }}>
