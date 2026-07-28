@@ -6,15 +6,38 @@ import { Scissors, Eye, EyeOff, Lock, Mail } from "lucide-react";
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("admin@blackgestao.com");
-  const [password, setPassword] = useState("black2024");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErro("");
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
-    router.push("/dashboard");
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErro(data.error || "Email ou senha inválidos");
+        setLoading(false);
+        return;
+      }
+
+      // Login válido — guarda os dados do usuário localmente
+      localStorage.setItem("usuario", JSON.stringify(data.user));
+      router.push("/dashboard");
+    } catch (error) {
+      setErro("Erro ao conectar. Tente novamente.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,7 +53,6 @@ export default function LoginPage() {
           borderRight: "1px solid var(--color-border)",
         }}
       >
-        {/* Background decoration */}
         <div style={{
           position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none"
         }}>
@@ -44,7 +66,6 @@ export default function LoginPage() {
             borderRadius: "50%", bottom: -80, right: -80,
             background: "radial-gradient(circle, rgba(212,175,140,0.04) 0%, transparent 70%)"
           }} />
-          {/* Grid pattern */}
           <div style={{
             position: "absolute", inset: 0,
             backgroundImage: `
@@ -56,7 +77,6 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10 text-center">
-          {/* Logo */}
           <div style={{
             width: 80, height: 80, borderRadius: "50%",
             background: "linear-gradient(135deg, #d4af8c, #a88660)",
@@ -106,7 +126,6 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div style={{ width: "100%", maxWidth: 420 }} className="animate-fadeIn">
 
-          {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div style={{
               width: 48, height: 48, borderRadius: "50%",
@@ -131,7 +150,6 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            {/* Email */}
             <div>
               <label className="form-label">E-mail</label>
               <div style={{ position: "relative" }}>
@@ -150,7 +168,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label className="form-label">Senha</label>
               <div style={{ position: "relative" }}>
@@ -181,7 +198,19 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Submit */}
+            {erro && (
+              <div style={{
+                padding: "0.75rem 1rem",
+                background: "rgba(220,38,38,0.1)",
+                border: "1px solid rgba(220,38,38,0.3)",
+                borderRadius: "0.75rem",
+                color: "#f87171",
+                fontSize: "0.875rem",
+              }}>
+                {erro}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -200,21 +229,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Hint */}
-          <div style={{
-            marginTop: "2rem", padding: "1rem",
-            background: "rgba(212,175,140,0.06)",
-            border: "1px solid rgba(212,175,140,0.12)",
-            borderRadius: "0.75rem",
-          }}>
-            <p style={{ fontSize: "0.8125rem", color: "var(--color-gold-dim)", marginBottom: "0.375rem", fontWeight: 600 }}>
-              🔑 Acesso demonstração:
-            </p>
-            <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)" }}>
-              admin@blackgestao.com / black2024
-            </p>
-          </div>
 
           <p style={{ marginTop: "2rem", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-muted-2)" }}>
             Black Gestão © {new Date().getFullYear()} — Studio T' Black
