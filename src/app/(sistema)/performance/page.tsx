@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { TrendingUp, Users, FileUp, BarChart3, Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { TrendingUp, Users, FileUp, BarChart3, Loader2 } from "lucide-react";
 import DashboardBI from "./components/DashboardBI";
 import ProfissionalStats from "./components/ProfissionalStats";
 import ImportacaoDados from "./components/ImportacaoDados";
 import ConfigHorarios, { ConfigHorariosType } from "./components/ConfigHorarios";
 import ConfigMetas, { ConfigMetasType } from "./components/ConfigMetas";
-import { mockPdfData, DesempenhoProfissional } from "@/lib/performance-data";
+import { DesempenhoProfissional, taxasOcupacaoImportadas, TaxaOcupacaoImportada } from "@/lib/performance-data";
 import { Clock, Target } from "lucide-react";
 
 type Tab = "bi" | "profissionais" | "importacao" | "config-metas";
@@ -15,9 +15,8 @@ type Tab = "bi" | "profissionais" | "importacao" | "config-metas";
 export default function PerformancePage() {
   const [activeTab, setActiveTab] = useState<Tab>("bi");
   const [globalSelectedProf, setGlobalSelectedProf] = useState<string>("");
-  const [data, setData] = useState<DesempenhoProfissional[]>(() => {
-    return mockPdfData.filter(d => d.profissional && !d.profissional.toLowerCase().includes("total") && !d.profissional.toLowerCase().includes("comissã") && !d.profissional.toLowerCase().includes("comissao"));
-  });
+  const [data, setData] = useState<DesempenhoProfissional[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   // Contador incrementado a cada importação de taxa de ocupação — força re-render do ProfissionalStats
   const [ocupacaoVersion, setOcupacaoVersion] = useState<number>(0);
   const [metas, setMetas] = useState<ConfigMetasType>({
@@ -28,6 +27,40 @@ export default function PerformancePage() {
     "Tiago": { metaServicos: 10000, metaProdutos: 2000, metaTicket: 80, bonusServicos: 200, bonusProdutos: 100, bonusTicket: 100 },
   });
 
+  // Carrega dados do Supabase ao inicializar
+  useEffect(() => {
+    const loadAll = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Carrega comissões
+        const resComissoes = await fetch("/api/performance/comissoes");
+        if (resComissoes.ok) {
+          const comissoes: DesempenhoProfissional[] = await resComissoes.json();
+          setData(comissoes.filter(d =>
+            d.profissional &&
+            !d.profissional.toLowerCase().includes("total") &&
+            !d.profissional.toLowerCase().includes("comissã") &&
+            !d.profissional.toLowerCase().includes("comissao")
+          ));
+        }
+
+        // 2. Carrega taxas de ocupação e popula o array in-memory que os componentes leem
+        const resOcupacao = await fetch("/api/performance/ocupacao");
+        if (resOcupacao.ok) {
+          const taxas: TaxaOcupacaoImportada[] = await resOcupacao.json();
+          // Limpa e repopula o array compartilhado
+          taxasOcupacaoImportadas.splice(0, taxasOcupacaoImportadas.length, ...taxas);
+          setOcupacaoVersion(v => v + 1);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar dados do banco:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadAll();
+  }, []);
+
   const handleDataImport = (newData: DesempenhoProfissional[]) => {
     setData(prev => {
       const filtered = newData.filter(d => d.profissional && !d.profissional.toLowerCase().includes("total") && !d.profissional.toLowerCase().includes("comissã") && !d.profissional.toLowerCase().includes("comissao"));
@@ -37,7 +70,17 @@ export default function PerformancePage() {
     });
   };
 
-  const handleOcupacaoImport = () => {
+  const handleOcupacaoImport = async () => {
+    // Recarrega taxas do banco após nova importação
+    try {
+      const res = await fetch("/api/performance/ocupacao");
+      if (res.ok) {
+        const taxas: TaxaOcupacaoImportada[] = await res.json();
+        taxasOcupacaoImportadas.splice(0, taxasOcupacaoImportadas.length, ...taxas);
+      }
+    } catch (err) {
+      console.error("Erro ao recarregar taxas:", err);
+    }
     setOcupacaoVersion(v => v + 1);
   };
 

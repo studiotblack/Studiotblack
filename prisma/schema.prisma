@@ -215,3 +215,38 @@ model IntegracaoBancaria {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
+
+// ─── Performance / Importações ───────────────────────────────────────────────
+
+model DesempenhoProfissionalDB {
+  id            String   @id @default(uuid())
+  profissional  String
+  item          String
+  data          String
+  valorBruto    Float
+  valorComissao Float
+  pagamento     String?
+  percentual    Float?
+  cliente       String
+  pago          Boolean  @default(false)
+  mesAno        String   // ex: "07/2026"
+  createdAt     DateTime @default(now())
+
+  @@index([profissional, mesAno])
+}
+
+model TaxaOcupacao {
+  id                       String   @id @default(uuid())
+  profissional             String
+  mesAno                   String
+  taxaOcupacao             Float
+  taxaOcupacaoComBloqueios Float
+  tempoAtendimentoStr      String
+  tempoBloqueadoStr        String
+  tempoJornadaStr          String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@unique([profissional, mesAno])
+}
+

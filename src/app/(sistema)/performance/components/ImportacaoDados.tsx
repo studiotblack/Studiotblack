@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { UploadCloud, CheckCircle2, Search, Filter } from "lucide-react";
-import { DesempenhoProfissional, taxasOcupacaoImportadas, normalizeProfName } from "@/lib/performance-data";
+import { DesempenhoProfissional, normalizeProfName, taxasOcupacaoImportadas } from "@/lib/performance-data";
 import * as xlsx from "xlsx";
 
 interface ImportacaoDadosProps {
@@ -15,6 +15,13 @@ interface ImportacaoDadosProps {
 }
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+// Extrai mesAno (MM/YYYY) de uma string de data DD/MM/YYYY ou DD/MM/YYYY HH:mm
+const getMesAno = (dataStr: string): string => {
+  const parts = dataStr.split("/");
+  if (parts.length >= 3) return `${parts[1]}/${parts[2].substring(0, 4)}`;
+  return "Geral";
+};
 
 export default function ImportacaoDados({ data, onImport, selectedProf, onProfChange, onNavigateToProf, onOcupacaoImport }: ImportacaoDadosProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -74,22 +81,23 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
         const json = await res.json();
         
         if (json.success && json.items) {
-          mergeAndImport(json.items);
+          await mergeAndImport(json.items);
         } else {
           alert("Erro ao ler PDF: " + json.message);
+          setIsUploading(false);
         }
       } catch (err) {
         alert("Erro de conexão ao enviar PDF.");
+        setIsUploading(false);
       }
-      setIsUploading(false);
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
-        const data = e.target?.result;
-        const workbook = xlsx.read(data, { type: "binary" });
+        const fileData = e.target?.result;
+        const workbook = xlsx.read(fileData, { type: "binary" });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const jsonData = xlsx.utils.sheet_to_json(sheet) as any[];
@@ -102,30 +110,24 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
         const isOcupacao = keys.includes("Taxa de ocupação") || keys.includes("Média de Ocupação no Período");
 
         if (isOcupacao) {
-          // Novo Relatório de Taxa de Ocupação
+          // ── TAXA DE OCUPAÇÃO ──────────────────────────────────────────────
           if (!selectedProf || selectedProf === "") {
-            alert("⚠️ Selecione um profissional na caixa 'Visualizar Dashboard do Profissional' antes de importar o arquivo de Taxa de Ocupação.");
+            alert("⚠️ Selecione um profissional antes de importar o arquivo de Taxa de Ocupação.");
             setIsUploading(false);
             return;
           }
 
           let importados = 0;
-          
           const recordsPorMes: Record<string, { jornada: number, atendimento: number, bloqueado: number }> = {};
 
-          // Converte tempo para minutos — aceita string "HH:MM:SS" ou número decimal do Excel (fração de dia)
+          // Converte tempo para minutos — aceita "HH:MM:SS" ou número decimal do Excel
           const timeToMins = (t: any): number => {
             if (t === null || t === undefined || t === "") return 0;
-            // Número decimal do Excel: 0.25 = 6h, 1.0 = 24h
-            if (typeof t === "number") {
-              return Math.round(t * 24 * 60);
-            }
+            if (typeof t === "number") return Math.round(t * 24 * 60);
             const s = String(t).trim();
             const parts = s.split(":");
             if (parts.length >= 2) {
-              const h = parseInt(parts[0], 10) || 0;
-              const m = parseInt(parts[1], 10) || 0;
-              return h * 60 + m;
+              return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
             }
             return 0;
           };
@@ -133,133 +135,116 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
           const minsToTime = (m: number) => {
             const h = Math.floor(m / 60);
             const mins = Math.floor(m % 60);
-            return `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`;
+            return `${String(h).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
           };
 
           jsonData.forEach(row => {
             const diaRaw = row["Dia"];
-
-            // Pula linhas de total/média
             if (!diaRaw) return;
             const diaStr = String(diaRaw).trim().toLowerCase();
             if (diaStr.includes("total") || diaStr.includes("média") || diaStr.includes("media")) return;
 
-            // Se o Excel armazenou a data como número serial, converte
             let diaFormatado = diaStr;
             if (typeof diaRaw === "number") {
               const dateObj = new Date((diaRaw - (25567 + 2)) * 86400 * 1000);
-              diaFormatado = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+              diaFormatado = `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()}`;
             }
 
             let mesAno = "Geral";
             const parts = diaFormatado.split("/");
-            if (parts.length === 3) {
-              mesAno = `${parts[1]}/${parts[2]}`;
-            } else if (parts.length === 2) {
-              mesAno = `${parts[0]}/${parts[1]}`;
-            }
+            if (parts.length === 3) mesAno = `${parts[1]}/${parts[2]}`;
+            else if (parts.length === 2) mesAno = `${parts[0]}/${parts[1]}`;
 
-            if (!recordsPorMes[mesAno]) {
-              recordsPorMes[mesAno] = { jornada: 0, atendimento: 0, bloqueado: 0 };
-            }
+            if (!recordsPorMes[mesAno]) recordsPorMes[mesAno] = { jornada: 0, atendimento: 0, bloqueado: 0 };
 
-            const jornada = row["Tempo de Jornada"];
-            const atendimento = row["Tempo em Atendimento"];
-            const bloqueado = row["Tempo Bloqueado"];
-
-            recordsPorMes[mesAno].jornada += timeToMins(jornada);
-            recordsPorMes[mesAno].atendimento += timeToMins(atendimento);
-            recordsPorMes[mesAno].bloqueado += timeToMins(bloqueado);
+            recordsPorMes[mesAno].jornada += timeToMins(row["Tempo de Jornada"]);
+            recordsPorMes[mesAno].atendimento += timeToMins(row["Tempo em Atendimento"]);
+            recordsPorMes[mesAno].bloqueado += timeToMins(row["Tempo Bloqueado"]);
             importados++;
           });
 
           const mesesProcessados = Object.keys(recordsPorMes);
-          
-          if (mesesProcessados.length > 0) {
-            mesesProcessados.forEach(mesAno => {
-              const totais = recordsPorMes[mesAno];
-              if (totais.jornada > 0) {
-                const taxaOcup = totais.atendimento / totais.jornada;
-                const jornadaEfetiva = totais.jornada - totais.bloqueado;
-                const taxaOcupComBloqueio = jornadaEfetiva > 0 ? totais.atendimento / jornadaEfetiva : taxaOcup;
-
-                const normalizedProf = normalizeProfName(selectedProf);
-                const existingIdx = taxasOcupacaoImportadas.findIndex(t => t.profissional === normalizedProf && t.mesAno === mesAno);
-                const newRecord = { 
-                  profissional: normalizedProf, 
-                  mesAno: mesAno,
-                  taxaOcupacao: taxaOcup, 
-                  taxaOcupacaoComBloqueios: taxaOcupComBloqueio,
-                  tempoAtendimentoStr: minsToTime(totais.atendimento),
-                  tempoBloqueadoStr: minsToTime(totais.bloqueado),
-                  tempoJornadaStr: minsToTime(totais.jornada)
-                };
-
-                if (existingIdx >= 0) {
-                  taxasOcupacaoImportadas[existingIdx] = newRecord;
-                } else {
-                  taxasOcupacaoImportadas.push(newRecord);
-                }
-              }
-            });
-
-            setIsUploading(false);
-            setUploadSuccess(true);
-            
-            const resumo = Object.keys(recordsPorMes).map(mes => {
-              const t = recordsPorMes[mes];
-              const taxa = t.jornada > 0 ? ((t.atendimento / t.jornada) * 100).toFixed(1) : "0";
-              const jornadaEfetiva = t.jornada - t.bloqueado;
-              const taxaComBloq = jornadaEfetiva > 0 ? ((t.atendimento / jornadaEfetiva) * 100).toFixed(1) : "0";
-              return `  📅 ${mes}: ${taxa}% (s/ bloqueios) | ${taxaComBloq}% (c/ bloqueios)`;
-            }).join("\n");
-            
-            alert(`✅ Taxa de Ocupação importada para ${normalizeProfName(selectedProf)}!\n\n${importados} dias processados.\n\n${resumo}`);
-            onOcupacaoImport?.(); // Notifica o page para forçar re-render do ProfissionalStats
-            setTimeout(() => setUploadSuccess(false), 5000);
-          } else {
+          if (mesesProcessados.length === 0) {
             alert("Não foi possível calcular a jornada (Tempo de Jornada zerado).");
             setIsUploading(false);
+            return;
           }
+
+          // Salva cada mês no banco (upsert por profissional+mesAno)
+          const savePromises = mesesProcessados.map(async mesAno => {
+            const totais = recordsPorMes[mesAno];
+            if (totais.jornada <= 0) return;
+            const taxaOcup = totais.atendimento / totais.jornada;
+            const jornadaEfetiva = totais.jornada - totais.bloqueado;
+            const taxaOcupComBloqueio = jornadaEfetiva > 0 ? totais.atendimento / jornadaEfetiva : taxaOcup;
+            const normalizedProf = normalizeProfName(selectedProf);
+
+            await fetch("/api/performance/ocupacao", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                profissional: normalizedProf,
+                mesAno,
+                taxaOcupacao: taxaOcup,
+                taxaOcupacaoComBloqueios: taxaOcupComBloqueio,
+                tempoAtendimentoStr: minsToTime(totais.atendimento),
+                tempoBloqueadoStr: minsToTime(totais.bloqueado),
+                tempoJornadaStr: minsToTime(totais.jornada),
+              }),
+            });
+          });
+
+          await Promise.all(savePromises);
+
+          setIsUploading(false);
+          setUploadSuccess(true);
+
+          const resumo = Object.keys(recordsPorMes).map(mes => {
+            const t = recordsPorMes[mes];
+            const taxa = t.jornada > 0 ? ((t.atendimento / t.jornada) * 100).toFixed(1) : "0";
+            const jornadaEfetiva = t.jornada - t.bloqueado;
+            const taxaComBloq = jornadaEfetiva > 0 ? ((t.atendimento / jornadaEfetiva) * 100).toFixed(1) : "0";
+            return `  📅 ${mes}: ${taxa}% (s/ bloqueios) | ${taxaComBloq}% (c/ bloqueios)`;
+          }).join("\n");
+
+          alert(`✅ Taxa de Ocupação salva no banco para ${normalizeProfName(selectedProf)}!\n\n${importados} dias processados.\n\n${resumo}`);
+          onOcupacaoImport?.();
+          setTimeout(() => setUploadSuccess(false), 5000);
           return;
         }
         
-        // Se não for ocupação, assume que é Comissões
+        // ── COMISSÕES ─────────────────────────────────────────────────────
         const novosDados: DesempenhoProfissional[] = jsonData
           .filter(row => row.Profissional && row.Data && !String(row.Profissional).toLowerCase().includes("total") && !String(row.Profissional).toLowerCase().includes("comissã"))
-          .map((row, idx) => {
+          .map((row) => {
             const parseToNum = (val: any) => typeof val === "string" ? parseFloat(val.replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0 : Number(val) || 0;
             
             const valorBruto = parseToNum(row["Valor Item"] || row["Valor"] || 0);
             const valorComissao = parseToNum(row["Valor"] || 0);
             
-            const rawPerc = row["%"] || "0%";
-            const perc = typeof rawPerc === "string" ? parseFloat(rawPerc.replace("%", "")) / 100 : (rawPerc > 1 ? rawPerc / 100 : rawPerc);
-            
-            // Corrige o formato da Data se vier do Excel como numero serial
             let dataStr = row["Data"];
             if (typeof dataStr === "number") {
-                const dateObj = new Date((dataStr - (25567 + 2)) * 86400 * 1000);
-                dataStr = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()} 00:00`;
+              const dateObj = new Date((dataStr - (25567 + 2)) * 86400 * 1000);
+              dataStr = `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()} 00:00`;
             }
 
             const prof = row["Profissional"];
             const serv = row["Serviço/Produto/Pacote"] || "Serviço";
             const cli = row["Cliente"] || "Cliente Avulso";
-            const uid = `${prof}-${serv}-${String(dataStr)}-${cli}`.replace(/\s/g, '');
+            const uid = `${prof}-${serv}-${String(dataStr)}-${cli}`.replace(/\s/g, "");
 
             return {
               id: uid,
-              profissional: row["Profissional"],
+              profissional: prof,
               data: String(dataStr),
-              cliente: row["Cliente"] || "Cliente Avulso",
-              item: row["Serviço/Produto/Pacote"] || "Serviço",
-              valorBruto: valorBruto,
-              valorComissao: valorComissao
+              cliente: cli,
+              item: serv,
+              valorBruto,
+              valorComissao,
             };
-        });
+          });
 
-        mergeAndImport(novosDados);
+        await mergeAndImport(novosDados);
       } catch (err) {
         console.error(err);
         alert("Erro ao ler arquivo Excel. Verifique se o formato está correto.");
@@ -269,40 +254,72 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
     reader.readAsBinaryString(file);
   };
 
-  const mergeAndImport = (novosDados: DesempenhoProfissional[]) => {
-    const uniqueMap = new Map<string, DesempenhoProfissional>();
-    data.forEach(d => {
-      uniqueMap.set(d.id, {
-        ...d,
-        profissional: normalizeProfName(d.profissional)
-      });
-    });
-    
-    let novosAdicionados = 0;
-    novosDados.forEach(d => {
-      const normalized = {
-        ...d,
-        profissional: normalizeProfName(d.profissional)
-      };
-      if (!uniqueMap.has(d.id)) {
-        uniqueMap.set(d.id, normalized);
-        novosAdicionados++;
-      }
+  /**
+   * Salva comissões no banco.
+   * Regras:
+   *  - Agrupa por profissional + mês
+   *  - Para cada grupo: substitui TODOS os dados daquele profissional+mês no banco
+   *  - Outros meses/profissionais NÃO são afetados
+   */
+  const mergeAndImport = async (novosDados: DesempenhoProfissional[]) => {
+    if (novosDados.length === 0) {
+      setIsUploading(false);
+      alert("⚠️ Nenhum registro encontrado no arquivo.");
+      return;
+    }
+
+    // Normaliza nomes
+    const normalized = novosDados.map(d => ({
+      ...d,
+      profissional: normalizeProfName(d.profissional),
+    }));
+
+    // Agrupa por profissional+mês
+    const grupos = new Map<string, { profissional: string; mesAno: string; items: DesempenhoProfissional[] }>();
+    normalized.forEach(d => {
+      const mesAno = getMesAno(d.data);
+      const key = `${d.profissional}||${mesAno}`;
+      if (!grupos.has(key)) grupos.set(key, { profissional: d.profissional, mesAno, items: [] });
+      grupos.get(key)!.items.push({ ...d, mesAno } as DesempenhoProfissional);
     });
 
-    const mergedData = Array.from(uniqueMap.values());
-    onImport(mergedData);
-    
-    setIsUploading(false);
-    setUploadSuccess(true);
-    
-    if (novosAdicionados > 0) {
-      alert(`✅ Base de comissões importada com sucesso!\n\n✨ ${novosAdicionados} novos serviços e produtos registrados.\n( ${novosDados.length - novosAdicionados} duplicados ignorados )`);
-    } else {
-      alert(`⚠️ Nenhum novo serviço importado.\n\nTodos os ${novosDados.length} registros da planilha já existiam no sistema (ignorados por duplicidade).`);
+    try {
+      // Substitui cada grupo no banco (DELETE + INSERT do mesmo prof+mês)
+      for (const grupo of grupos.values()) {
+        const res = await fetch("/api/performance/comissoes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            registros: grupo.items,
+            mesAno: grupo.mesAno,
+            profissional: grupo.profissional,
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+      }
+
+      // Atualiza estado local:
+      // Remove apenas os meses reimportados, preserva todos os outros
+      const gruposKeys = new Set(
+        Array.from(grupos.values()).map(g => `${g.profissional}||${g.mesAno}`)
+      );
+      const dataPreservada = data.filter(d => !gruposKeys.has(`${d.profissional}||${getMesAno(d.data)}`));
+      const mergedData = [...dataPreservada, ...normalized];
+      onImport(mergedData);
+
+      setIsUploading(false);
+      setUploadSuccess(true);
+
+      const resumo = Array.from(grupos.values())
+        .map(g => `  • ${g.profissional} — ${g.mesAno}: ${g.items.length} registros`)
+        .join("\n");
+      alert(`✅ Dados salvos no banco!\n\n${resumo}\n\n📌 Outros meses não foram alterados.`);
+      setTimeout(() => setUploadSuccess(false), 5000);
+    } catch (err) {
+      console.error(err);
+      setIsUploading(false);
+      alert("❌ Erro ao salvar comissões no banco. Verifique a conexão.");
     }
-    
-    setTimeout(() => setUploadSuccess(false), 5000);
   };
 
   const filteredData = data.filter(d => {
@@ -315,7 +332,7 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
       
-      {/* NOVO: Seletor de Profissional Rápido */}
+      {/* Seletor de Profissional Rápido */}
       <div className="card" style={{ padding: "1.5rem", display: "flex", gap: "1rem", alignItems: "flex-end", background: "linear-gradient(45deg, rgba(20,20,20,1) 0%, rgba(30,25,20,1) 100%)", border: "1px solid rgba(212, 175, 55, 0.2)" }}>
         <div style={{ flex: 1 }}>
           <label style={{ display: "block", fontSize: "0.9rem", color: "var(--color-cream)", marginBottom: "0.5rem", fontWeight: 600 }}>
