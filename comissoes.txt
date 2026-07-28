@@ -1,0 +1,221 @@
+10                                                              GONZAGA
+Henrique     Botelho      Corte    Masculino                03/07/2026  10: R$  21,00       R$  60,00    PIX           35.00%      ANDREZA   FERREIRA        0
+30                                                              GONZAGA
+Henrique     Botelho      Corte    Masculino                03/07/2026  09: R$  21,00       R$  60,00    PIX           35.00%      ANDREZA   FERREIRA        0
+00                                     Crédito
+Henrique     Botelho      Corte    Masculino                03/07/2026  08: R$  21,00       R$  60,00    Cartão     de       35.00%      FELIPE MARZ             0
+40
+Henrique     Botelho      Hidratação     masculina           02/07/2026  18: R$  28,00       R$  80,00    PIX           35.00%      Othon    Neves               0
+00                                                              SILVA
+Henrique     Botelho      Corte    Masculino                02/07/2026  18: R$  21,00       R$  60,00    PIX           35.00%      MARCELO  APARECIDO  DA    0
+00                                     Crédito                      SANTOS
+Henrique     Botelho      Corte    e  Barba               02/07/2026  17: R$  40,25       R$  115,00   Cartão     de       35.00%      JAIR  ARAGÃO   DOS          0
+00                                                              CAFALCHIO
+Henrique     Botelho      Corte    Masculino                02/07/2026  15: R$  21,00       R$  60,00    PIX           35.00%      GABRIEL MATIAS           0
+20                                     Crédito
+Henrique     Botelho      Corte    Masculino                02/07/2026  12:  R$  21,00       R$  60,00    Cartão     de       35.00%      Tiago  soares                 0
+00                                     Crédito
+Henrique     Botelho      Corte    Masculino                02/07/2026  11: R$  21,00       R$  60,00    Cartão     de       35.00%      YANNA  DIAS  COSTA        0
+50                                     Crédito                      Coelho   Penna
+Henrique     Botelho      Sobrancelha   (  Masculina)        02/07/2026  08: R$  8,00        R$  20,00    Cartão     de       40.00%      João     Paulo   machado         0
+00                                     Crédito                      Coelho   Penna
+Henrique     Botelho      Corte    Masculino                02/07/2026  08: R$  21,00       R$  60,00    Cartão     de       35.00%      João     Paulo   machado         0
+30
+Henrique     Botelho      Hidratação     masculina           01/07/2026  18: R$  28,00       R$  80,00    PIX           35.00%      Andre   Luiz   de  Oliveira      0
+00
+Henrique     Botelho      Corte    e  Barba               01/07/2026  18: R$  21,00       R$  60,00    PIX           35.00%      Andre   Luiz   de  Oliveira      0
+40
+Henrique     Botelho      Corte    Masculino                01/07/2026  13: R$  21,00       R$  60,00    PIX           35.00%      Gabriela Correia             0
+15
+Henrique     Botelho      Sobrancelha   (  Masculina)        01/07/2026  12:  R$  8,00        R$  20,00    PIX           40.00%      GUTO                    0
+00
+Henrique     Botelho      Corte    e  Barba               01/07/2026  11: R$  36,75       R$  105,00   PIX           35.00%      GUTO                    0
+40
+Henrique     Botelho      Corte    Masculino                01/07/2026  08: R$  21,00       R$  60,00    PIX           35.00%      Franklin   Moraes     dos   santos      0
+Profissional                          Serviço/          Produto/          Pacote                     Data                   Valor                Valor         Item         Pagamento                          %                       Cliente                        Pago
+AppBarber -     Comissões       01/07/2026 -  20/07/2026
+----------------Page (0) Break----------------
+20                                     Débito
+Henrique     Botelho      Sobrancelha   (  Masculina)        06/07/2026  13: R$  8,00        R$  20,00    Cartão     de       40.00%      ADILSON                 0
+30                                     Débito
+Henrique     Botelho      Corte    Masculino                06/07/2026  12:  R$  21,00       R$  60,00    Cartão     de       35.00%      ADILSON                 0
+00                                     Débito                      DA  SILVA
+Henrique     Botelho      Corte    Masculino                06/07/2026  09: R$  21,00       R$  60,00    Cartão     de       35.00%      PEDRO  YURI  APARECIDO     0
+40                                     Crédito
+Henrique     Botelho      Corte    Masculino                04/07/2026  17: R$  21,00       R$  60,00    Cartão     de       35.00%      Lucas   Baptista              0
+00                                     Crédito
+Henrique     Botelho      Corte    e  Barba               04/07/2026  17: R$  36,75       R$  105,00   Cartão     de       35.00%      Lucas   Baptista              0
+finalização     (MASCULINO)       30                                     Crédito
+Henrique     Botelho      Corte    afro   e  cacheado  com       04/07/2026  16: R$  26,25       R$  75,00    Cartão     de       35.00%      DOUGLAS   JUNIO  PEREIRA  0
+40                                     Crédito
+Henrique     Botelho      Corte    Masculino                04/07/2026  14: R$  21,00       R$  60,00    Cartão     de       35.00%      Cassiano                    0
+35                                     Débito
+Henrique     Botelho      Hidratação     masculina           04/07/2026  14: R$  28,00       R$  80,00    Cartão     de       35.00%      peter    xavier   da  trindade       0
+00                                     Débito
+Henrique     Botelho      Corte    Masculino                04/07/2026  14: R$  21,00       R$  60,00    Cartão     de       35.00%      peter    xavier   da  trindade       0
+00                                     Débito                      FEITOSA  MARTINS
+Henrique     Botelho      Lavar   e  finalizar  (FEMININO)    04/07/2026  12:  R$  0,00        R$  65,00    Cartão     de       0.00%       RYCHARD   RODRIGO         0
+40
+Henrique     Botelho      Corte    Masculino                04/07/2026  11: R$  21,00       R$  60,00    PIX           35.00%      Marcelle Diniz              0
+10                                     Débito                      FEITOSA  MARTINS
+Henrique     Botelho      Sobrancelha   (  Masculina)        04/07/2026  11: R$  8,00        R$  20,00    Cartão     de       40.00%      RYCHARD   RODRIGO         0
+30                                     Débito                      FEITOSA  MARTINS
+Henrique     Botelho      Corte    Masculino                04/07/2026  10: R$  21,00       R$  60,00    Cartão     de       35.00%      RYCHARD   RODRIGO         0
+55                                                              castilhoi
+Henrique     Botelho      Corte    Masculino                04/07/2026  09: R$  21,00       R$  60,00    PIX           35.00%      deborah  laisa de  sousa          0
+20
+Henrique     Botelho      Corte    Masculino                04/07/2026  09: R$  21,00       R$  60,00    PIX           35.00%      Adrielle Ribas             0
+30                                                              castilhoi
+Henrique     Botelho      Hidratação     masculina           04/07/2026  08: R$  28,00       R$  80,00    PIX           35.00%      deborah  laisa de  sousa          0
+00                                                              ARAUJO   DE  ALMEIDA
+Henrique     Botelho      Corte    e  Barba               03/07/2026  15: R$  36,75       R$  105,00   PIX           35.00%      AUGUSTO   ROBERTO        0
+finalização     (MASCULINO)       00                                                              DÁQUINA
+Henrique     Botelho      Corte    afro   e  cacheado  com       03/07/2026  11: R$  26,25       R$  75,00    Dinheiro         35.00%      ALEXSANDER   RAMOS        0
+Profissional                          Serviço/          Produto/          Pacote                     Data                   Valor                Valor         Item         Pagamento                          %                       Cliente                        Pago
+----------------Page (1) Break----------------
+finalização     (MASCULINO)       20                                     Débito
+Henrique     Botelho      Corte    afro   e  cacheado  com       09/07/2026  16: R$  26,25       R$  75,00    Cartão     de       35.00%      Gabriel Damasio              0
+40                                     Débito
+Henrique     Botelho      Corte    Masculino                09/07/2026  14: R$  21,00       R$  60,00    Cartão     de       35.00%      NATAN   FERREIRA         0
+finalização     (MASCULINO)       00                                     Crédito                      NASCIMENTO
+Henrique     Botelho      Corte    afro   e  cacheado  com       09/07/2026  14: R$  26,25       R$  75,00    Cartão     de       35.00%      JOÃO   VICTOR              0
+45
+Henrique     Botelho      Hidratação     masculina           09/07/2026  11: R$  28,00       R$  80,00    PIX           35.00%      Nathan   Fernandes             0
+finalização     (MASCULINO)       00                                     Débito
+Henrique     Botelho      Corte    afro   e  cacheado  com       09/07/2026  11: R$  26,25       R$  75,00    Cartão     de       35.00%      LUAN  GOIS DA  SILVA      0
+15
+Henrique     Botelho      Corte    e  Barba               09/07/2026  10: R$  36,75       R$  105,00   PIX           35.00%      Nathan   Fernandes             0
+35                                                              gonçalves
+Henrique     Botelho      Corte    Masculino                08/07/2026  19: R$  21,00       R$  60,00    PIX           35.00%      gustavo      henrique              0
+35                                                              gonçalves
+Henrique     Botelho      Hidratação     masculina           08/07/2026  19: R$  28,00       R$  80,00    PIX           35.00%      gustavo      henrique              0
+00
+Henrique     Botelho      Corte    Masculino                08/07/2026  15: R$  21,00       R$  60,00    PIX           35.00%      NICOLAS  GARRIDO         0
+finalização     (MASCULINO)       10                                     Crédito
+Henrique     Botelho      Corte    afro   e  cacheado  com       08/07/2026  14: R$  29,75       R$  85,00    Cartão     de       35.00%      Ana   Ferreira                0
+20                                     Crédito
+Henrique     Botelho      Corte    Masculino                08/07/2026  11: R$  21,00       R$  60,00    Cartão     de       35.00%      Raian  Edson                0
+00                                                              Junior
+Henrique     Botelho      Corte    Masculino                07/07/2026  18: R$  21,00       R$  60,00    PIX           35.00%      Gilberto  Alves   dos   Santos        0
+30
+Henrique     Botelho      Corte    Masculino                07/07/2026  10: R$  21,00       R$  60,00    PIX           35.00%      carlos   eduardo    ferreira       0
+finalização     (MASCULINO)       40                                     Débito
+Henrique     Botelho      Corte    afro   e  cacheado  com       07/07/2026  09: R$  26,25       R$  75,00    Cartão     de       35.00%      Igor  mota    dos   Santos          0
+00                                     Crédito
+Henrique     Botelho      Corte    Masculino                06/07/2026  18: R$  21,00       R$  60,00    Cartão     de       35.00%      higor  feltrin                0
+20                                     Crédito
+Henrique     Botelho      Corte    Masculino                06/07/2026  17: R$  21,00       R$  60,00    Cartão     de       35.00%      Bryan    Gonçalves              0
+00
+Henrique     Botelho      Corte    Masculino                06/07/2026  16: R$  21,00       R$  60,00    PIX           35.00%      marcos     rodrigues             0
+00                                     Crédito                      SANTOS  BARBOSA
+Henrique     Botelho      Hidratação     Feminina            06/07/2026  14: R$  0,00        R$  120,00   Cartão     de       0.00%       MARA  ALICE RANGEL  DOS    0
+Profissional                          Serviço/          Produto/          Pacote                     Data                   Valor                Valor         Item         Pagamento                          %                       Cliente                        Pago
+----------------Page (2) Break----------------
+finalização     (MASCULINO)       00                                     Crédito
+Henrique     Botelho      Corte    afro   e  cacheado  com       14/07/2026  10: R$  26,25       R$  75,00    Cartão     de       35.00%      Ciel                    0
+35                                     Crédito                      Rodrigues
+Henrique     Botelho      Sobrancelha   (  Masculina)        13/07/2026  15: R$  7,00        R$  20,00    Cartão     de       35.00%      Marcos    Paulo   Leme          0
+00                                     Crédito                      Rodrigues
+Henrique     Botelho      Corte    Masculino                13/07/2026  15: R$  21,00       R$  60,00    Cartão     de       35.00%      Marcos    Paulo   Leme          0
+00
+Henrique     Botelho      Corte    Masculino                13/07/2026  14: R$  21,00       R$  60,00    Dinheiro         35.00%      Vitor   Toledo                0
+15                                     Crédito                      Davino
+Henrique     Botelho      Barba                     13/07/2026  10: R$  21,00       R$  60,00    Cartão     de       35.00%      Guilherme   do  Nascimento        0
+00                                     Crédito                      OLIVEIRA
+Henrique     Botelho      Corte    e  Barba               13/07/2026  10: R$  36,75       R$  105,00   Cartão     de       35.00%      ANDERSON   KAUE  LUIZ  DE    0
+MASCULINO)                20                                                              NEVES
+Henrique     Botelho      Corte    e  Sobrancelha      (         11/07/2026  15: R$  28,00       R$  80,00    PIX           35.00%      EMERSON  LUIZ  DELFIM       0
+MASCULINO)                40                                                              dos   santos
+Henrique     Botelho      Corte    e  Sobrancelha      (         11/07/2026  14: R$  28,00       R$  80,00    PIX           35.00%      leonardo    matheus     alves       0
+40                                     Crédito                      ribeiro
+Henrique     Botelho      Corte    e  Barba               11/07/2026  13: R$  36,75       R$  105,00   Cartão     de       35.00%      bruno     henrique    dos   santos        0
+00                                     Débito
+Henrique     Botelho      Corte    Masculino                11/07/2026  13: R$  21,00       R$  60,00    Cartão     de       35.00%      marcio   tavares    da  rocha      0
+00
+Henrique     Botelho      Corte    Masculino                11/07/2026  12:  R$  10,50       R$  30,00    PIX           35.00%      rafael  domingos               0
+00                                     Débito
+Henrique     Botelho      Corte    Masculino                11/07/2026  11: R$  21,00       R$  60,00    Cartão     de       35.00%      FRANCYNE   TEIXEIRA      0
+20
+Henrique     Botelho      Hidratação     masculina           11/07/2026  10: R$  35,00       R$  100,00   PIX           35.00%      max   ribeiro   maciel messias     0
+00                                     Crédito
+Henrique     Botelho      Corte    Masculino                11/07/2026  10: R$  21,00       R$  60,00    Cartão     de       35.00%      paola   nunes     bocalari       0
+finalização     (MASCULINO)       50                                     Crédito
+Henrique     Botelho      Corte    afro   e  cacheado  com       11/07/2026  08: R$  26,25       R$  75,00    Cartão     de       35.00%      Lucas   Vinicius   Carvalho      0
+20                                     Débito
+Henrique     Botelho      Corte    Masculino                10/07/2026  14: R$  21,00       R$  60,00    Cartão     de       35.00%      renata   neves                0
+40                                     Crédito
+Henrique     Botelho      Corte    Masculino                10/07/2026  13: R$  21,00       R$  60,00    Cartão     de       35.00%      maria   rita  vasconcelos          0
+00                                                              Macelino
+Henrique     Botelho      Corte    Masculino                10/07/2026  12:  R$  17,50       R$  50,00    PIX           35.00%      Carlito   José     Pereira          0
+Profissional                          Serviço/          Produto/          Pacote                     Data                   Valor                Valor         Item         Pagamento                          %                       Cliente                        Pago
+----------------Page (3) Break----------------
+finalização     (MASCULINO)       00
+Henrique     Botelho      Corte    afro   e  cacheado  com       17/07/2026  15: R$  25,90       R$  74,00    PIX           35.00%      gabriel diniz               0
+00
+Henrique     Botelho      Barba                     17/07/2026  13: R$  21,00       R$  60,00    PIX           35.00%      Cleslei Telles             0
+00                                     Débito                      santos
+Henrique     Botelho      Corte    Masculino                17/07/2026  11: R$  29,75       R$  85,00    Cartão     de       35.00%      lucas   demetrius     alves   dos      0
+20                                     Débito
+Henrique     Botelho      Corte    Masculino                17/07/2026  10: R$  21,00       R$  60,00    Cartão     de       35.00%      Luis   Filipi Coelho           0
+30                                                              SANTOS
+Henrique     Botelho      Corte    Masculino                17/07/2026  09: R$  21,00       R$  60,00    PIX           35.00%      LUAN  BARBOSA  DOS        0
+40                                     Crédito                      palmeira
+Henrique     Botelho      Corte    Masculino                16/07/2026  17: R$  21,00       R$  60,00    Cartão     de       35.00%      joão    vitor    rodrigues             0
+40                                     Crédito
+Henrique     Botelho      Corte    Masculino                16/07/2026  16: R$  21,00       R$  60,00    Cartão     de       35.00%      Josiane    Souza    e  Silva      0
+55                                                              OLIVEIRA
+Henrique     Botelho      Sobrancelha   (  Masculina)        16/07/2026  15: R$  7,00        R$  20,00    PIX           35.00%      PEDRO  LUCAS  DUMAS    DE    0
+finalização     (MASCULINO)       00                                                              OLIVEIRA
+Henrique     Botelho      Corte    afro   e  cacheado  com       16/07/2026  15: R$  26,25       R$  75,00    PIX           35.00%      PEDRO  LUCAS  DUMAS    DE    0
+20
+Henrique     Botelho      Hidratação     masculina           16/07/2026  13: R$  28,00       R$  80,00    PIX           35.00%      Emanuel    Elias            0
+20                                     Crédito                      Coelho   Penna
+Henrique     Botelho      Corte    e  Barba               16/07/2026  12:  R$  36,75       R$  105,00   Cartão     de       35.00%      João     Paulo   machado         0
+00                                     Crédito
+Henrique     Botelho      Corte    Masculino                16/07/2026  09: R$  21,00       R$  60,00    Cartão     de       35.00%      Paulo   Junior                 0
+20                                     Débito
+Henrique     Botelho      Corte    Masculino                15/07/2026  19: R$  21,00       R$  60,00    Cartão     de       35.00%      lucas   gabriel             0
+40                                     Crédito
+Henrique     Botelho      Corte    e  Barba               15/07/2026  10: R$  36,75       R$  105,00   Cartão     de       35.00%      RODRIGO  KAGAMI         0
+00                                     Débito                      Sueli
+Henrique     Botelho      Corte    Masculino                14/07/2026  19: R$  21,00       R$  60,00    Cartão     de       35.00%      Maria  Vitória   da  Silva -  Mãe     0
+00                                     Débito
+Henrique     Botelho      Barba                     14/07/2026  18: R$  21,00       R$  60,00    Cartão     de       35.00%      DR  PEDRO  PREDIO         0
+finalização     (MASCULINO)       20                                     Crédito
+Henrique     Botelho      Corte    afro   e  cacheado  com       14/07/2026  17: R$  26,25       R$  75,00    Cartão     de       35.00%      Luis   Dias                  0
+40                                     Crédito
+Henrique     Botelho      Corte    Masculino                14/07/2026  10: R$  21,00       R$  60,00    Cartão     de       35.00%      Otavio   Minarim              0
+Profissional                          Serviço/          Produto/          Pacote                     Data                   Valor                Valor         Item         Pagamento                          %                       Cliente                        Pago
+----------------Page (4) Break----------------
+												R$              2392,40            2392,40                             344,51              2392,40          R$    0,0         10,00              R$    0,0
+Total :                                Total         Liq. :             												R$                     Produtos:             R$        Serviços:           R$         Pacotes:                Gorjetas:         R$         Auxiliar:
+25
+Henrique     Botelho      Corte    Masculino                18/07/2026  15: R$  21,00       R$  60,00    PIX           35.00%      jose   miguel  sales   silva       0
+20                                     Crédito                      fernandes
+Henrique     Botelho      Corte    Masculino                18/07/2026  15: R$  21,00       R$  60,00    Cartão     de       35.00%      rodrigo    da  rosa    venancio        0
+Primeira   vez   (MASCULINO)      00
+Henrique     Botelho      Corte    Afro/  Cacheado.         18/07/2026  15: R$  35,00       R$  100,00   PIX           35.00%      beatriz   alves   fonseca         0
+20
+Henrique     Botelho      Hidratação     masculina           18/07/2026  14: R$  28,00       R$  80,00    PIX           35.00%      jose   miguel  sales   silva       0
+00                                     Crédito
+Henrique     Botelho      Corte    e  Barba               18/07/2026  13: R$  36,75       R$  105,00   Cartão     de       35.00%      Adalberto   Almeida         0
+55
+Henrique     Botelho      Sobrancelha   (  Masculina)        18/07/2026  11: R$  5,25        R$  15,00    PIX           35.00%      Arthur    Alves   dos   Santos        0
+55
+Henrique     Botelho      Sobrancelha   (  Masculina)        18/07/2026  11: R$  5,25        R$  15,00    PIX           35.00%      Heitor   Alves   dos   Santos        0
+finalização     (MASCULINO)       40
+Henrique     Botelho      Corte    afro   e  cacheado  com       18/07/2026  10: R$  26,25       R$  75,00    PIX           35.00%      Arthur    Alves   dos   Santos        0
+finalização     (MASCULINO)       00
+Henrique     Botelho      Corte    afro   e  cacheado  com       18/07/2026  10: R$  26,25       R$  75,00    PIX           35.00%      Heitor   Alves   dos   Santos        0
+00
+Henrique     Botelho      Hidratação     Feminina            18/07/2026  09: R$  42,00       R$  120,00   PIX           35.00%      ana  julia sales             0
+00                                     Crédito
+Henrique     Botelho      Corte    e  Barba               17/07/2026  18: R$  36,75       R$  105,00   Cartão     de       35.00%      bruno     freire  garcia         0
+05                                     Crédito
+Henrique     Botelho      Corte    Masculino                17/07/2026  17: R$  21,00       R$  60,00    Cartão     de       35.00%      bruno     freire  garcia         0
+00
+Henrique     Botelho      Corte    e  Barba               17/07/2026  17: R$  36,75       R$  105,00   PIX           35.00%      Pedro   Eli Vieira Costa         0
+20                                     Crédito
+Henrique     Botelho      Corte    Masculino                17/07/2026  16: R$  21,00       R$  60,00    Cartão     de       35.00%      bruno     freire  garcia         0
+Profissional                          Serviço/          Produto/          Pacote                     Data                   Valor                Valor         Item         Pagamento                          %                       Cliente                        Pago
+----------------Page (5) Break----------------

@@ -1,0 +1,337 @@
+00
+finalização    (MASCULINO)                                   Botelho        2026 10:       Crédito                           08:11
+Corte   afro  e cacheado  com      Ciel                 12981622540  Henrique        14/07/   75,00  Cartão    de    0   R     Ciel        14/07/2026   Normal
+50
+finalização    (MASCULINO)                                   Botelho        2026 08:       Crédito                           10:18
+Corte   afro  e cacheado  com      Lucas   Vinicius   Carvalho      12988093439   Henrique        11/07/   75,00  Cartão    de    0   R     RECEPÇÃO      13/06/2026   Normal
+20
+finalização    (MASCULINO)                         9131        Botelho        2026 16:       Débito                 Henrique       16:18            Agendamento
+Corte   afro  e cacheado  com      Gabriel  Damasio           (12)  98807-  Henrique        09/07/   75,00  Cartão    de    0   R     Tiago         09/07/2026   Encaixe   Comanda     Aberta  por 
+00
+finalização    (MASCULINO)     NASCIMENTO            9901        Botelho        2026 14:       Crédito                           14:30
+Corte   afro  e cacheado  com      JOÃO  VICTOR           (17)  99125-   Henrique        09/07/   75,00  Cartão    de    0   R     RECEPÇÃO      04/07/2026   Normal
+00
+finalização    (MASCULINO)                         1376        Botelho        2026 11:       Débito                           19:30
+Corte   afro  e cacheado  com      LUAN  GOIS  DA  SILVA     (12)  99630-   Henrique        09/07/   75,00  Cartão    de    0   R     Luan   Gois      08/07/2026   Normal
+10
+finalização    (MASCULINO)                                   Botelho        2026 14:       Crédito                 Henrique       17:40             Agendamento
+Corte   afro  e cacheado  com      Ana  Ferreira            11912638802 Henrique        08/07/   85,00  Cartão    de    0   R     Tiago         08/07/2026   Encaixe   Comanda     Aberta  por 
+40
+finalização    (MASCULINO)                         3580        Botelho        2026 09:       Débito                           12:56
+Corte   afro  e cacheado  com      Igor  mota    dos   Santos        (12)  99731-   Henrique        07/07/   75,00  Cartão    de    0   R     RECEPÇÃO      06/07/2026   Normal
+30
+finalização    (MASCULINO)                         127        Botelho        2026 16:       Crédito                           13:12
+Corte   afro  e cacheado  com      DOUGLAS    JUNIO  PEREIRA   (31)  94973-    Henrique        04/07/   75,00  Cartão    de    0   R     RECEPÇÃO      04/07/2026   Encaixe
+00
+finalização    (MASCULINO)     DÁQUINA               5624        Botelho        2026 11:                                    08:49
+Corte   afro  e cacheado  com      ALEXSANDER    RAMOS       (12)  99123-   Henrique        03/07/   75,00  Dinheiro     0   R     RECEPÇÃO      02/07/2026   Normal
+00
+1685       Botelho        2026 13:                                     15:13
+Barba                 Cleslei  Telles            (12)  99674-   Henrique        17/07/   60,00  PIX       0   R     Cleslei  Telles    11/07/2026   Normal
+00
+6082       Botelho        2026 18:       Débito                           17:03
+Barba                 DR  PEDRO  PREDIO       (12)  99728-   Henrique        14/07/   60,00  Cartão    de    0   R     RECEPÇÃO      14/07/2026   Normal
+15
+Davino                            Botelho        2026 10:       Crédito                           10:14             Agendamento
+Barba                 Guilherme    do   Nascimento       12981093667  Henrique        13/07/   60,00  Cartão    de    0   R     RECEPÇÃO      13/07/2026   Encaixe   Comanda     Aberta  por 
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+AppBarber -   Agendamentos
+----------------Page (0) Break----------------
+ribeiro                5281       Botelho        2026 13:  00    Crédito                           09:45
+Corte   e Barba            bruno    henrique    dos   santos      (12)  98888-  Henrique        11/07/   105,  Cartão    de    0   R     RECEPÇÃO      11/07/2026   Normal
+15
+Botelho        2026 10:  00                      Henrique       10:13
+Corte   e Barba            Nathan   Fernandes          12981313532   Henrique        09/07/   105,  PIX       0   R     Tiago         09/07/2026   Encaixe
+00
+Botelho        2026 17:  00    Crédito                           14:19
+Corte   e Barba            Lucas   Baptista           11951252899 Henrique        04/07/   105,  Cartão    de    0   R     RECEPÇÃO      04/07/2026   Encaixe
+00
+ARAUJO  DE  ALMEIDA      785        Botelho        2026 15:  00                                 14:52
+Corte   e Barba            AUGUSTO    ROBERTO        (64)  93376-   Henrique        03/07/   105,  PIX       0   R     RECEPÇÃO      03/07/2026   Normal
+00
+SANTOS               8373        Botelho        2026 17:  00    Crédito                           16:06
+Corte   e Barba            JAIR  ARAGÃO    DOS        (12)  98133-   Henrique        02/07/   115,  Cartão    de    0   R     RECEPÇÃO      30/06/2026   Normal
+00
+8227       Botelho        2026 18:                                    09:14             INCLUSA
+Corte   e Barba            Andre   Luiz  de  Oliveira      (12)  99670-   Henrique        01/07/   60,00  PIX       0   R     RECEPÇÃO      26/06/2026   Normal     FINALIZAÇÃO 
+00
+9490        Botelho        2026 11: 00                                 10:47
+Corte   e Barba            GUTO                 (12)  98226-  Henrique        01/07/   105,  PIX       0   R     RECEPÇÃO      01/07/2026   Normal
+00
+Primeira   vez   (MASCULINO)                        2410        Botelho        2026 15:  00                                 15:44              Agendamento
+Corte   Afro/ Cacheado.        beatriz   alves   fonseca       (12)  99125-   Henrique        18/07/   100,  PIX       0   R     RECEPÇÃO      18/07/2026   Encaixe   Comanda     Aberta  por 
+40
+finalização    (MASCULINO)                         5920        Botelho        2026 10:                                    14:39
+Corte   afro  e cacheado  com      Arthur    Alves   dos   Santos       (11) 97460-   Henrique        18/07/   75,00  PIX       0   R     RECEPÇÃO      16/07/2026   Normal
+00
+finalização    (MASCULINO)                         5920        Botelho        2026 10:                                    14:39
+Corte   afro  e cacheado  com      Heitor   Alves   dos   Santos       (11) 97460-   Henrique        18/07/   75,00  PIX       0   R     RECEPÇÃO      16/07/2026   Normal
+00
+finalização    (MASCULINO)                         8256       Botelho        2026 15:                          Botelho        12:12
+Corte   afro  e cacheado  com      gabriel  diniz            (12)  99106-  Henrique        17/07/   74,00  PIX       0   R     Henrique        17/07/2026   Normal
+00
+finalização    (MASCULINO)     OLIVEIRA             9964        Botelho        2026 15:                                    18:58
+Corte   afro  e cacheado  com      PEDRO  LUCAS   DUMAS   DE    (12)  99162-  Henrique        16/07/   75,00  PIX       0   R     RECEPÇÃO      14/07/2026   Normal
+20
+finalização    (MASCULINO)                                   Botelho        2026 17:       Crédito                           16:57
+Corte   afro  e cacheado  com      Luis   Dias              87991235583  Henrique        14/07/   75,00  Cartão    de    0   R     Luis   Dias     14/07/2026   Normal
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (1) Break----------------
+Corte   Masculino             Tiago  soares             12982538060  Henrique        02/07/   60,00  Cartão    de    0   R     Tiago  soares     02/07/2026   Normal
+00
+9149        Botelho        2026 11:       Crédito                           15:06
+Corte   Masculino             YANNA  DIAS  COSTA       (11) 98938-   Henrique        02/07/   60,00  Cartão    de    0   R     RECEPÇÃO      01/07/2026   Normal     FILHO 4  ANOS
+00
+Coelho   Penna            0008        Botelho        2026 08:       Crédito                 Penna        23:16
+Corte   Masculino             João    Paulo   machado         (31)  97342-    Henrique        02/07/   60,00  Cartão    de    0   R     João    Paulo      01/07/2026   Normal
+40
+Botelho        2026 13:                          Correia       13:07
+Corte   Masculino             Gabriela  Correia          31971229980  Henrique        01/07/   60,00  PIX       0   R     Gabriela       01/07/2026   Normal
+40
+santos                  4550        Botelho        2026 08:                                    17:00
+Corte   Masculino             Franklin    Moraes    dos         (12)  98806-  Henrique        01/07/   60,00  PIX       0   R     RECEPÇÃO      26/06/2026   Normal
+20
+MASCULINO)             NEVES                3184        Botelho        2026 15:                                    17:31
+Corte   e Sobrancelha       (       EMERSON    LUIZ  DELFIM     (12)  99769-   Henrique        11/07/   80,00  PIX       0   R     RECEPÇÃO      10/07/2026   Normal
+40
+MASCULINO)             dos   santos                9817       Botelho        2026 14:                                     11:33
+Corte   e Sobrancelha       (       leonardo     matheus    alves      (12)  98874-   Henrique        11/07/   80,00  PIX       0   R     RECEPÇÃO      11/07/2026   Normal
+00
+Botelho        2026 13:  00    Crédito                 Almeida       21:00
+Corte   e Barba            Adalberto    Almeida         11994109687  Henrique        18/07/   105,  Cartão    de    0   R     Adalberto        16/07/2026   Normal
+00
+2505        Botelho        2026 18: 00    Crédito                 Botelho        16:34
+Corte   e Barba            bruno    freire  garcia       (12)  98270-   Henrique        17/07/   105,  Cartão    de    0   R     Henrique        17/07/2026   Normal
+00
+2909        Botelho        2026 17:  00                                 10:38
+Corte   e Barba            Pedro   Eli  Vieira Costa       (12)  99644-   Henrique        17/07/   105,  PIX       0   R     RECEPÇÃO      06/07/2026   Normal
+20
+Coelho   Penna            0008        Botelho        2026 12:  00    Crédito                 Penna        11:58
+Corte   e Barba            João    Paulo   machado         (31)  97342-    Henrique        16/07/   105,  Cartão    de    0   R     João    Paulo      15/07/2026   Normal
+40
+0586       Botelho        2026 10:  00    Crédito                 KAGAMI      12:19
+Corte   e Barba            RODRIGO   KAGAMI        (12)  98171-  Henrique        15/07/   105,  Cartão    de    0   R     RODRIGO      12/07/2026   Normal     Corte   para   Bruno.
+00
+OLIVEIRA             7554        Botelho        2026 10:  00    Crédito                           15:04
+Corte   e Barba            ANDERSON   KAUE  LUIZ  DE    (12)  98102-  Henrique        13/07/   105,  Cartão    de    0   R     RECEPÇÃO      11/07/2026   Normal
+40
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (2) Break----------------
+40
+Botelho        2026 17:       Crédito                           14:19
+Corte   Masculino             Lucas   Baptista           11951252899 Henrique        04/07/   60,00  Cartão    de    0   R     RECEPÇÃO      04/07/2026   Encaixe
+40
+2811       Botelho        2026 14:       Crédito                           19:27
+Corte   Masculino             Cassiano                (12)  99652-  Henrique        04/07/   60,00  Cartão    de    0   R     RECEPÇÃO      02/07/2026   Normal
+00
+9385        Botelho        2026 14:       Débito                           18:31
+Corte   Masculino             peter   xavier   da  trindade      (12)  99625-  Henrique        04/07/   60,00  Cartão    de    0   R     RECEPÇÃO      01/07/2026   Normal
+40
+Botelho        2026 11:                                    15:01
+Corte   Masculino             Marcelle   Diniz           12988581235  Henrique        04/07/   60,00  PIX       0   R     Marcelle   Diniz   01/07/2026   Normal
+30
+FEITOSA   MARTINS        7739        Botelho        2026 10:       Débito                           13:46
+Corte   Masculino             RYCHARD   RODRIGO        (12)  99726-   Henrique        04/07/   60,00  Cartão    de    0   R     RECEPÇÃO      01/07/2026   Normal
+55
+castilhoi               8031        Botelho        2026 09:                                     09:52             Agendamento
+Corte   Masculino             deborah   laisa  de  sousa        (12)  98299-   Henrique        04/07/   60,00  PIX       0   R     RECEPÇÃO      04/07/2026   Encaixe   Comanda     Aberta  por 
+20
+6648       Botelho        2026 09:                                     13:24
+Corte   Masculino             Adrielle   Ribas           (12)  99127-   Henrique        04/07/   60,00  PIX       0   R     RECEPÇÃO      03/07/2026   Normal
+10
+GONZAGA              0020        Botelho        2026 10:                                    09:24
+Corte   Masculino             ANDREZA   FERREIRA        (12)  99737-   Henrique        03/07/   60,00  PIX       0   R     RECEPÇÃO      02/07/2026   Normal
+30
+GONZAGA              0020        Botelho        2026 09:                                     09:24
+Corte   Masculino             ANDREZA   FERREIRA        (12)  99737-   Henrique        03/07/   60,00  PIX       0   R     RECEPÇÃO      02/07/2026   Normal
+00
+0705        Botelho        2026 08:       Crédito                           11:16
+Corte   Masculino             FELIPE  MARZ           (12)  99746-   Henrique        03/07/   60,00  Cartão    de    0   R     RECEPÇÃO      02/07/2026   Normal
+00
+SILVA               5126       Botelho        2026 18:                                    14:04
+Corte   Masculino             MARCELO   APARECIDO  DA   (12)  99651-  Henrique        02/07/   60,00  PIX       0   R     RECEPÇÃO      25/06/2026   Normal
+00
+CAFALCHIO           1952       Botelho        2026 15:                                    10:47
+Corte   Masculino             GABRIEL  MATIAS          (12)  99111-  Henrique        02/07/   60,00  PIX       0   R     RECEPÇÃO      02/07/2026   Normal
+20
+Botelho        2026 12:       Crédito                           09:07
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (3) Break----------------
+5887       Botelho        2026 13:       Crédito                           18:39
+Corte   Masculino             maria   rita  vasconcelos         (12)  99207-   Henrique        10/07/   60,00  Cartão    de    0   R     RECEPÇÃO      06/07/2026   Normal
+00
+Macelino               5427        Botelho        2026 12:                                    12:22
+Corte   Masculino             Carlito   José    Pereira        (12)  99625-  Henrique        10/07/   50,00  PIX       0   R     RECEPÇÃO      10/07/2026   Normal
+40
+9038        Botelho        2026 14:       Débito                 Henrique       13:09
+Corte   Masculino             NATAN  FERREIRA         (12)  99222-   Henrique        09/07/   60,00  Cartão    de    0   R     Tiago         09/07/2026   Normal
+35
+gonçalves                 1372        Botelho        2026 19:                                    19:31             Agendamento
+Corte   Masculino             gustavo     henrique           (12)  98299-   Henrique        08/07/   60,00  PIX       0   R     RECEPÇÃO      08/07/2026   Encaixe   Comanda     Aberta  por 
+00
+5093        Botelho        2026 15:                                    11:17
+Corte   Masculino             NICOLAS  GARRIDO        (12)  99106-  Henrique        08/07/   60,00  PIX       0   R     RECEPÇÃO      08/07/2026   Normal
+20
+7178       Botelho        2026 11:       Crédito                           22:21
+Corte   Masculino             Raian  Edson              (12)  99149-   Henrique        08/07/   60,00  Cartão    de    0   R     Raian  Edson      07/07/2026   Normal
+00
+Junior                  8539        Botelho        2026 18:                                    17:23
+Corte   Masculino             Gilberto    Alves   dos   Santos       (12)  99180-  Henrique        07/07/   60,00  PIX       0   R     RECEPÇÃO      06/07/2026   Normal
+30
+0945        Botelho        2026 10:                                    17:01
+Corte   Masculino             carlos    eduardo    ferreira     (12)  98250-   Henrique        07/07/   60,00  PIX       0   R     RECEPÇÃO      06/07/2026   Normal
+00
+2493         Botelho        2026 18:       Crédito                 Henrique       11:43
+Corte   Masculino             higor  feltrin             (48)  99629-   Henrique        06/07/   60,00  Cartão    de    0   R     Tiago         06/07/2026   Encaixe
+20
+Botelho        2026 17:       Crédito                 Gonçalves         14:07
+Corte   Masculino             Bryan   Gonçalves             12997522511  Henrique        06/07/   60,00  Cartão    de    0   R     Bryan          06/07/2026   Normal
+00
+1708       Botelho        2026 16:                                    16:41
+Corte   Masculino             marcos     rodrigues           (12)  98804-   Henrique        06/07/   60,00  PIX       0   R     RECEPÇÃO      04/07/2026   Normal
+30
+0952        Botelho        2026 12:       Débito                           11:42
+Corte   Masculino             ADILSON              (12)  98155-  Henrique        06/07/   60,00  Cartão    de    0   R     RECEPÇÃO      06/07/2026   Normal
+00
+DA  SILVA             124         Botelho        2026 09:       Débito                           11:18
+Corte   Masculino             PEDRO  YURI  APARECIDO    (35)  99395-   Henrique        06/07/   60,00  Cartão    de    0   R     RECEPÇÃO      03/07/2026   Normal
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (4) Break----------------
+Corte   Masculino             joão   vitor    rodrigues           12996412981  Henrique        16/07/   60,00  Cartão    de    0   R     RECEPÇÃO      16/07/2026   Normal
+40
+9094        Botelho        2026 16:       Crédito                           15:36
+Corte   Masculino             Josiane   Souza    e Silva      (12)  99797-   Henrique        16/07/   60,00  Cartão    de    0   R     RECEPÇÃO      30/06/2026   Normal
+00
+4970        Botelho        2026 09:       Crédito                           15:33
+Corte   Masculino             Paulo   Junior              (12)  97412-   Henrique        16/07/   60,00  Cartão    de    0   R     RECEPÇÃO      15/07/2026   Normal
+20
+2164        Botelho        2026 19:       Débito                           18:57
+Corte   Masculino             lucas   gabriel           (12)  98238-   Henrique        15/07/   60,00  Cartão    de    0   R     RECEPÇÃO      14/07/2026   Normal
+00
+Sueli                 5124        Botelho        2026 19:       Débito                           20:13
+Corte   Masculino             Maria  Vitória  da  Silva -  Mãe   (35)  99939-   Henrique        14/07/   60,00  Cartão    de    0   R     RECEPÇÃO      14/07/2026   Normal
+40
+Botelho        2026 10:       Crédito                 Minarim       20:41
+Corte   Masculino             Otavio   Minarim           12981948707  Henrique        14/07/   60,00  Cartão    de    0   R     Otavio         12/07/2026   Normal
+00
+Rodrigues                0467        Botelho        2026 15:       Crédito                           11:00
+Corte   Masculino             Marcos    Paulo   Leme        (12)  97616-  Henrique        13/07/   60,00  Cartão    de    0   R     RECEPÇÃO      13/07/2026   Normal
+00
+5364        Botelho        2026 14:                                     14:18
+Corte   Masculino             Vitor   Toledo              (11) 98205-   Henrique        13/07/   60,00  Dinheiro     0   R     RECEPÇÃO      13/07/2026   Normal
+00
+1608       Botelho        2026 13:       Débito                           16:52
+Corte   Masculino             marcio   tavares    da  rocha    (12)  99749-   Henrique        11/07/   60,00  Cartão    de    0   R     RECEPÇÃO      10/07/2026   Normal
+00
+7088       Botelho        2026 12:                                    09:13
+Corte   Masculino             rafael  domingos             (12)  98893-   Henrique        11/07/   30,00  PIX       0   R     RECEPÇÃO      11/07/2026   Encaixe   eletrobidu
+00
+1215       Botelho        2026 11:       Débito                           17:04
+Corte   Masculino             FRANCYNE   TEIXEIRA      (11) 98708-  Henrique        11/07/   60,00  Cartão    de    0   R     RECEPÇÃO      10/07/2026   Normal
+00
+8242        Botelho        2026 10:       Crédito                           09:08
+Corte   Masculino             paola   nunes    bocalari       (12)  98847-   Henrique        11/07/   60,00  Cartão    de    0   R     RECEPÇÃO      11/07/2026   Encaixe
+20
+937         Botelho        2026 14:       Débito                 Henrique       18:47
+Corte   Masculino             renata   neves             (81) 81267-  Henrique        10/07/   60,00  Cartão    de    0   R     Tiago         09/07/2026   Normal
+40
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (5) Break----------------
+30
+castilhoi               8031        Botelho        2026 08:                                    17:23
+Hidratação     masculina          deborah   laisa  de  sousa        (12)  98299-   Henrique        04/07/   80,00  PIX       0   R     RECEPÇÃO      30/06/2026   Normal     AVALIAÇÃO
+40
+Botelho        2026 18:                                    11:29
+Hidratação     masculina          Othon   Neves            31997757365   Henrique        02/07/   80,00  PIX       0   R     Othon   Neves    26/06/2026   Normal
+30
+8227       Botelho        2026 18:                                    19:39             Agendamento
+Hidratação     masculina          Andre   Luiz  de  Oliveira      (12)  99670-   Henrique        01/07/   80,00  PIX       0   R     RECEPÇÃO      01/07/2026   Encaixe   Comanda     Aberta  por 
+00
+7533         Botelho        2026 09:  00                                 16:35
+Hidratação     Feminina         ana  julia  sales            (12)  98899-  Henrique        18/07/   120,  PIX       0   R     RECEPÇÃO      18/07/2026   Normal
+00
+SANTOS   BARBOSA       1983        Botelho        2026 14:  00    Crédito                           19:19
+Hidratação     Feminina         MARA  ALICE  RANGEL   DOS   (12)  98877-  Henrique        06/07/   120,  Cartão    de    0   R     RECEPÇÃO      06/07/2026   Encaixe
+25
+7917        Botelho        2026 15:                                    15:24             Agendamento
+Corte   Masculino             jose  miguel   sales   silva      (12)  99261-  Henrique        18/07/   60,00  PIX       0   R     RECEPÇÃO      18/07/2026   Encaixe   Comanda     Aberta  por 
+20
+fernandes               4091        Botelho        2026 15:       Crédito                           15:16
+Corte   Masculino             rodrigo    da  rosa   venancio       (12)  98831-   Henrique        18/07/   60,00  Cartão    de    0   R     RECEPÇÃO      17/07/2026   Normal
+05
+2505        Botelho        2026 17:       Crédito                           17:01             Agendamento
+Corte   Masculino             bruno    freire  garcia       (12)  98270-   Henrique        17/07/   60,00  Cartão    de    0   R     RECEPÇÃO      17/07/2026   Encaixe   Comanda     Aberta  por 
+20
+2505        Botelho        2026 16:       Crédito                           19:44
+Corte   Masculino             bruno    freire  garcia       (12)  98270-   Henrique        17/07/   60,00  Cartão    de    0   R     RECEPÇÃO      16/07/2026   Normal
+00
+santos                  8406        Botelho        2026 11:       Débito                           15:32
+Corte   Masculino             lucas   demetrius     alves   dos     (12)  98233-   Henrique        17/07/   85,00  Cartão    de    0   R     RECEPÇÃO      14/07/2026   Normal
+20
+Botelho        2026 10:       Débito                 Coelho        23:01
+Corte   Masculino             Luis   Filipi  Coelho          12996563802  Henrique        17/07/   60,00  Cartão    de    0   R     Luis   Filipi     16/07/2026   Normal
+30
+SANTOS               7879        Botelho        2026 09:                                     09:55
+Corte   Masculino             LUAN  BARBOSA  DOS       (12)  98865-  Henrique        17/07/   60,00  PIX       0   R     RECEPÇÃO      15/07/2026   Normal
+40
+palmeira                           Botelho        2026 17:       Crédito                           15:35
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (6) Break----------------
+OLIVEIRA             9964        Botelho        2026 15:                                    15:50             Agendamento
+Sobrancelha    (  Masculina)       PEDRO  LUCAS   DUMAS   DE    (12)  99162-  Henrique        16/07/   20,00  PIX       0   R     RECEPÇÃO      16/07/2026   Encaixe   Comanda     Aberta  por 
+35
+Rodrigues                0467        Botelho        2026 15:       Crédito                           15:34              Agendamento
+Sobrancelha    (  Masculina)       Marcos    Paulo   Leme        (12)  97616-  Henrique        13/07/   20,00  Cartão    de    0   R     RECEPÇÃO      13/07/2026   Encaixe   Comanda     Aberta  por 
+20
+0952        Botelho        2026 13:       Débito                           13:17             Agendamento
+Sobrancelha    (  Masculina)       ADILSON              (12)  98155-  Henrique        06/07/   20,00  Cartão    de    0   R     RECEPÇÃO      06/07/2026   Encaixe   Comanda     Aberta  por 
+10
+FEITOSA   MARTINS        7739        Botelho        2026 11:       Débito                           11:26            Agendamento
+Sobrancelha    (  Masculina)       RYCHARD   RODRIGO        (12)  99726-   Henrique        04/07/   20,00  Cartão    de    0   R     RECEPÇÃO      04/07/2026   Encaixe   Comanda     Aberta  por 
+50
+Coelho   Penna            0008        Botelho        2026 08:       Crédito                           08:47             Agendamento
+Sobrancelha    (  Masculina)       João    Paulo   machado         (31)  97342-    Henrique        02/07/   20,00  Cartão    de    0   R     RECEPÇÃO      02/07/2026   Encaixe   Comanda     Aberta  por 
+15
+9490        Botelho        2026 12:                                    12:13             Agendamento
+Sobrancelha    (  Masculina)       GUTO                 (12)  98226-  Henrique        01/07/   20,00  PIX       0   R     RECEPÇÃO      01/07/2026   Encaixe   Comanda     Aberta  por 
+00
+FEITOSA   MARTINS        7739        Botelho        2026 12:       Débito                           12:00
+Lavar   e finalizar   (FEMININO)   RYCHARD   RODRIGO        (12)  99726-   Henrique        04/07/   65,00  Cartão    de    0   R     RECEPÇÃO      04/07/2026   Encaixe
+20
+7917        Botelho        2026 14:                                     13:26
+Hidratação     masculina          jose  miguel   sales   silva      (12)  99261-  Henrique        18/07/   80,00  PIX       0   R     RECEPÇÃO      18/07/2026   Normal
+20
+Botelho        2026 13:                                     13:17
+Hidratação     masculina          Emanuel     Elias           12981031294  Henrique        16/07/   80,00  PIX       0   R     RECEPÇÃO      16/07/2026   Normal
+20
+0767        Botelho        2026 10:  00                      Henrique       18:55
+Hidratação     masculina          max   ribeiro  maciel  messias    (12)  99611-  Henrique        11/07/   100,  PIX       0   R     Tiago         07/07/2026   Normal
+45
+Botelho        2026 11:                         Henrique       11:42             Agendamento
+Hidratação     masculina          Nathan   Fernandes          12981313532   Henrique        09/07/   80,00  PIX       0   R     Tiago         09/07/2026   Encaixe   Comanda     Aberta  por 
+35
+gonçalves                 1372        Botelho        2026 19:                                    19:31             Agendamento
+Hidratação     masculina          gustavo     henrique           (12)  98299-   Henrique        08/07/   80,00  PIX       0   R     RECEPÇÃO      08/07/2026   Encaixe   Comanda     Aberta  por 
+35
+9385        Botelho        2026 14:       Débito                           14:32             Agendamento
+Hidratação     masculina          peter   xavier   da  trindade      (12)  99625-  Henrique        04/07/   80,00  Cartão    de    0   R     RECEPÇÃO      04/07/2026   Encaixe   Comanda     Aberta  por 
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (7) Break----------------
+55
+5920        Botelho        2026 11:                                    11:54             Agendamento
+Sobrancelha    (  Masculina)       Arthur    Alves   dos   Santos       (11) 97460-   Henrique        18/07/   15,00  PIX       0   R     RECEPÇÃO      18/07/2026   Encaixe   Comanda     Aberta  por 
+55
+5920        Botelho        2026 11:                                    11:53             Agendamento
+Sobrancelha    (  Masculina)       Heitor   Alves   dos   Santos       (11) 97460-   Henrique        18/07/   15,00  PIX       0   R     RECEPÇÃO      18/07/2026   Encaixe   Comanda     Aberta  por 
+55
+Pgto.                Cadastrou          Cadastro
+Serviço                   Cliente             Telefone         Profissional           Data      Valor      Forma        Pts.   Status        Quem          Data    de      Tipo
+----------------Page (8) Break----------------

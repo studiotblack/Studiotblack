@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Negócio ────────────────────────────────────────────────────────────────
+
+model ConfiguracaoNegocio {
+  id                String   @id @default(uuid())
+  nomeNegocio       String   @default("Black Gestão")
+  cnpj              String?
+  telefone          String?
+  email             String?
+  endereco          String?
+  logo              String?
+  corPrimaria       String   @default("#d4af8c")
+  fusoHorario       String   @default("America/Sao_Paulo")
+  intervaloAgenda   Int      @default(30) // minutos
+  horaAbertura      String   @default("08:00")
+  horaFechamento    String   @default("20:00")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ─── Usuário / Auth ──────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   @default("COLLABORATOR") // ADMIN | MANAGER | COLLABORATOR
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Colaboradores ───────────────────────────────────────────────────────────
+
+model Colaborador {
+  id                String               @id @default(uuid())
+  nome              String
+  cargo             String               @default("Barbeiro")
+  telefone          String?
+  email             String?
+  cpf               String?
+  foto              String?
+  cor               String               @default("#d4af8c") // cor na agenda
+  comissaoPercent   Float                @default(40.0)
+  ativo             Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  horarios          HorarioColaborador[]
+  bloqueios         BloqueioAgenda[]
+  agendamentos      Agendamento[]
+}
+
+model HorarioColaborador {
+  id             String      @id @default(uuid())
+  colaboradorId  String
+  colaborador    Colaborador @relation(fields: [colaboradorId], references: [id])
+  diaSemana      Int         // 0=Dom, 1=Seg, ..., 6=Sab
+  horaInicio     String      // "08:00"
+  horaFim        String      // "18:00"
+  ativo          Boolean     @default(true)
+}
+
+model BloqueioAgenda {
+  id             String      @id @default(uuid())
+  colaboradorId  String
+  colaborador    Colaborador @relation(fields: [colaboradorId], references: [id])
+  dataInicio     DateTime
+  dataFim        DateTime
+  motivo         String?
+  createdAt      DateTime    @default(now())
+}
+
+// ─── Clientes ────────────────────────────────────────────────────────────────
+
+model Cliente {
+  id           String        @id @default(uuid())
+  nome         String
+  telefone     String?
+  email        String?
+  cpf          String?
+  dataNasc     DateTime?
+  foto         String?
+  observacoes  String?
+  ativo        Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  agendamentos Agendamento[]
+}
+
+// ─── Serviços ────────────────────────────────────────────────────────────────
+
+model Servico {
+  id               String               @id @default(uuid())
+  nome             String
+  descricao        String?
+  preco            Float
+  duracao          Int                  // minutos
+  categoria        String               @default("Geral")
+  comissaoPercent  Float                @default(40.0)
+  ativo            Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  agendamentoServicos AgendamentoServico[]
+}
+
+// ─── Produtos / Estoque ──────────────────────────────────────────────────────
+
+model Produto {
+  id                  String              @id @default(uuid())
+  nome                String
+  descricao           String?
+  marca               String?
+  categoria           String              @default("Geral")
+  sku                 String?
+  precoCompra         Float               @default(0)
+  precoVenda          Float               @default(0)
+  estoqueAtual        Float               @default(0)
+  estoqueMinimo       Float               @default(5)
+  unidade             String              @default("un") // un, ml, g, kg
+  ativo               Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  movimentos          MovimentoEstoque[]
+  agendamentoProdutos AgendamentoProduto[]
+}
+
+model MovimentoEstoque {
+  id             String   @id @default(uuid())
+  produtoId      String
+  produto        Produto  @relation(fields: [produtoId], references: [id])
+  tipo           String   // ENTRADA | SAIDA | USO | AJUSTE
+  quantidade     Float
+  estoqueAntes   Float
+  estoqueDepois  Float
+  observacao     String?
+  agendamentoId  String?
+  createdAt      DateTime @default(now())
+}
+
+// ─── Agendamentos ────────────────────────────────────────────────────────────
+
+model Agendamento {
+  id                  String               @id @default(uuid())
+  clienteId           String
+  cliente             Cliente              @relation(fields: [clienteId], references: [id])
+  colaboradorId       String
+  colaborador         Colaborador          @relation(fields: [colaboradorId], references: [id])
+  dataHora            DateTime
+  duracao             Int                  // minutos (calculado dos serviços)
+  status              String               @default("AGENDADO") // AGENDADO | CONFIRMADO | CONCLUIDO | CANCELADO | FALTA
+  observacoes         String?
+  valorTotal          Float                @default(0)
+  comissaoTotal       Float                @default(0)
+  metodoPagamento     String?              // DINHEIRO | PIX | CARTAO_DEBITO | CARTAO_CREDITO
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  servicos            AgendamentoServico[]
+  produtos            AgendamentoProduto[]
+  movimentoFinanceiro MovimentoFinanceiro?
+}
+
+model AgendamentoServico {
+  id            String      @id @default(uuid())
+  agendamentoId String
+  agendamento   Agendamento @relation(fields: [agendamentoId], references: [id])
+  servicoId     String
+  servico       Servico     @relation(fields: [servicoId], references: [id])
+  preco         Float
+  comissao      Float
+}
+
+model AgendamentoProduto {
+  id            String      @id @default(uuid())
+  agendamentoId String
+  agendamento   Agendamento @relation(fields: [agendamentoId], references: [id])
+  produtoId     String
+  produto       Produto     @relation(fields: [produtoId], references: [id])
+  quantidade    Float
+  preco         Float
+}
+
+// ─── Financeiro ──────────────────────────────────────────────────────────────
+
+model MovimentoFinanceiro {
+  id              String       @id @default(uuid())
+  tipo            String       // ENTRADA | SAIDA
+  categoria       String       // Serviço | Produto | Aluguel | Salário | etc.
+  descricao       String
+  valor           Float
+  data            DateTime
+  agendamentoId   String?      @unique
+  agendamento     Agendamento? @relation(fields: [agendamentoId], references: [id])
+  metodoPagamento String?
+  observacoes     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model IntegracaoBancaria {
+  id             String   @id @default(uuid())
+  banco          String   // "Itau" | "Bradesco" | "Sicoob" | etc.
+  clientId       String?
+  secret         String?
+  certificadoPath String?
+  ambiente       String   @default("SANDBOX") // SANDBOX | PRODUCAO
+  ativo          Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
