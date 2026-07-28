@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     await sql`
-      INSERT INTO "TaxaOcupacao" (id, profissional, "mesAno", "taxaOcupacao", "taxaOcupacaoComBloqueios", "tempoAtendimentoStr", "tempoBloqueadoStr", "tempoJornadaStr")
+      INSERT INTO "TaxaOcupacao" (id, profissional, "mesAno", "taxaOcupacao", "taxaOcupacaoComBloqueios", "tempoAtendimentoStr", "tempoBloqueadoStr", "tempoJornadaStr", "updatedAt")
       VALUES (
         gen_random_uuid()::text,
         ${taxa.profissional},
@@ -90,7 +90,8 @@ export async function POST(request: NextRequest) {
         ${taxa.taxaOcupacaoComBloqueios},
         ${taxa.tempoAtendimentoStr},
         ${taxa.tempoBloqueadoStr},
-        ${taxa.tempoJornadaStr}
+        ${taxa.tempoJornadaStr},
+        NOW()
       )
       ON CONFLICT (profissional, "mesAno") DO UPDATE SET
         "taxaOcupacao" = EXCLUDED."taxaOcupacao",
