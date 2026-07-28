@@ -158,16 +158,25 @@ export const normalizeProfName = (name: string): string => {
 
 export const getProfissionaisUnicos = (data: DesempenhoProfissional[]) => {
   const defaultProfs = ["Bruna", "Wallacy", "Henrique Botelho", "Vanessa", "Tiago"];
-  if (data.length === 0) {
-    return defaultProfs;
-  }
+
   const profissionais = new Set<string>();
+
+  // Adiciona profissionais com dados de comissão importados
   data.forEach(d => {
     if (d.profissional && !d.profissional.toLowerCase().includes("total") && !d.profissional.toLowerCase().includes("comissão") && !d.profissional.toLowerCase().includes("comissao")) {
       profissionais.add(normalizeProfName(d.profissional));
     }
   });
-  return profissionais.size > 0 ? Array.from(profissionais) : defaultProfs;
+
+  // Garante que profissionais com taxa de ocupação importada também apareçam
+  taxasOcupacaoImportadas.forEach(t => {
+    if (t.profissional) {
+      profissionais.add(normalizeProfName(t.profissional));
+    }
+  });
+
+  // Se nenhum dado foi importado ainda, mostra os profissionais padrão
+  return profissionais.size > 0 ? Array.from(profissionais).sort() : defaultProfs;
 };
 
 export const getServicosMaisRealizados = (data: DesempenhoProfissional[]) => {
