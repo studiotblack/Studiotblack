@@ -49,7 +49,52 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
   const [searchTerm, setSearchTerm] = useState("");
   const [filterProf, setFilterProf] = useState("Todos");
 
+  // Gerenciar / Excluir dados state
+  const [deleteProf, setDeleteProf] = useState("");
+  const [deleteMes, setDeleteMes] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const profissionais = ["Todos", ...Array.from(new Set(data.map(d => d.profissional)))];
+
+  // Lista de meses disponíveis no banco para o profissional selecionado
+  const mesesDisponiveis = Array.from(
+    new Set(data
+      .filter(d => !deleteProf || d.profissional === deleteProf)
+      .map(d => getMesAno(d.data))
+    )
+  ).sort().reverse();
+
+  const deleteData = async () => {
+    if (!deleteProf || !deleteMes) {
+      showNotification("warning", "Seleção Incompleta", "Selecione o profissional e o mês que deseja excluir.");
+      return;
+    }
+    setConfirmDelete(false);
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/performance/comissoes?profissional=${encodeURIComponent(deleteProf)}&mesAno=${encodeURIComponent(deleteMes)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Erro HTTP ${res.status}`);
+      }
+      // Recarrega do banco
+      const resComissoes = await fetch("/api/performance/comissoes");
+      if (resComissoes.ok) {
+        const comissoes = await resComissoes.json();
+        onImport(comissoes);
+      }
+      setDeleteProf("");
+      setDeleteMes("");
+      showNotification("success", "Dados Excluídos!", `Os registros de ${deleteProf} em ${deleteMes} foram removidos com sucesso do banco.`);
+    } catch (err: any) {
+      showNotification("error", "Erro ao Excluir", err.message || "Não foi possível excluir os dados.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const showNotification = (type: "success" | "error" | "warning", title: string, message: string, details?: string) => {
     setModal({
@@ -508,6 +553,144 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
           </div>
         </div>
       )}
+
+      {/* ── MODAL DE CONFIRMAÇÃO DE EXCLUSÃO ───────────────────────── */}
+      {confirmDelete && (
+        <div style={{
+          position: "fixed", inset: 0,
+          backgroundColor: "rgba(0,0,0,0.85)",
+          backdropFilter: "blur(6px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 10000, padding: "1rem"
+        }}>
+          <div style={{
+            background: "linear-gradient(145deg, #1a0a0a 0%, #0d0505 100%)",
+            border: "1px solid rgba(231, 76, 60, 0.5)",
+            borderRadius: "16px",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.9), 0 0 25px rgba(231,76,60,0.15)",
+            maxWidth: "460px", width: "100%", padding: "2rem", textAlign: "center"
+          }}>
+            <div style={{
+              width: "64px", height: "64px", borderRadius: "50%",
+              background: "rgba(231, 76, 60, 0.15)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 1.25rem", border: "2px solid rgba(231,76,60,0.4)"
+            }}>
+              <AlertCircle size={32} color="#e74c3c" />
+            </div>
+            <h3 style={{ color: "#fff", fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.5rem" }}>Confirmar Exclusão</h3>
+            <p style={{ color: "#d1d1d1", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "1.5rem" }}>
+              Você está prestes a excluir <strong style={{ color: "#e74c3c" }}>todos os registros</strong> de<br />
+              <strong style={{ color: "#fff" }}>{deleteProf}</strong> no mês <strong style={{ color: "#fff" }}>{deleteMes}</strong>.<br />
+              <span style={{ fontSize: "0.85rem", color: "#888" }}>Esta ação não pode ser desfeita.</span>
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{
+                  flex: 1, padding: "0.85rem", borderRadius: "8px",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(255,255,255,0.05)", color: "#d1d1d1",
+                  fontWeight: 600, cursor: "pointer"
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteData}
+                style={{
+                  flex: 1, padding: "0.85rem", borderRadius: "8px", border: "none",
+                  background: "linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)",
+                  color: "#fff", fontWeight: 700, cursor: "pointer",
+                  boxShadow: "0 4px 15px rgba(231,76,60,0.3)"
+                }}
+              >
+                Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── GERENCIAR BASE DE DADOS ──────────────────────────────────── */}
+      <div className="card" style={{ padding: "1.5rem", background: "linear-gradient(135deg, rgba(20,8,8,1) 0%, rgba(15,10,10,1) 100%)", border: "1px solid rgba(231, 76, 60, 0.25)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "rgba(231,76,60,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <AlertCircle size={18} color="#e74c3c" />
+          </div>
+          <div>
+            <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>Gerenciar Base de Dados</h3>
+            <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: 0 }}>Selecione um profissional e mês para excluir os registros do banco</p>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+          {/* Select Profissional */}
+          <div style={{ flex: 1, minWidth: "160px" }}>
+            <label style={{ display: "block", fontSize: "0.8rem", color: "var(--color-muted)", marginBottom: "0.4rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Profissional</label>
+            <select
+              value={deleteProf}
+              onChange={e => { setDeleteProf(e.target.value); setDeleteMes(""); }}
+              style={{ width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(231,76,60,0.25)", borderRadius: "6px", color: "white", outline: "none", fontSize: "0.9rem" }}
+            >
+              <option value="">Selecione...</option>
+              {["Henrique Botelho", "Tiago", "Bruna", "Wallacy", "Vanessa"].map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Select Mês */}
+          <div style={{ flex: 1, minWidth: "140px" }}>
+            <label style={{ display: "block", fontSize: "0.8rem", color: "var(--color-muted)", marginBottom: "0.4rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Mês / Ano</label>
+            <select
+              value={deleteMes}
+              onChange={e => setDeleteMes(e.target.value)}
+              disabled={!deleteProf}
+              style={{ width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(231,76,60,0.25)", borderRadius: "6px", color: deleteProf ? "white" : "#888", outline: "none", fontSize: "0.9rem", opacity: deleteProf ? 1 : 0.5 }}
+            >
+              <option value="">{deleteProf ? (mesesDisponiveis.length > 0 ? "Selecione o mês..." : "Nenhum mês encontrado") : "Primeiro selecione o profissional"}</option>
+              {mesesDisponiveis.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Botão Excluir */}
+          <button
+            onClick={() => {
+              if (!deleteProf || !deleteMes) {
+                showNotification("warning", "Seleção Incompleta", "Selecione o profissional e o mês que deseja excluir antes de continuar.");
+                return;
+              }
+              setConfirmDelete(true);
+            }}
+            disabled={isDeleting || !deleteProf || !deleteMes}
+            style={{
+              padding: "0.75rem 1.5rem",
+              background: isDeleting ? "rgba(231,76,60,0.3)" : "linear-gradient(135deg, rgba(231,76,60,0.9) 0%, rgba(192,57,43,0.9) 100%)",
+              color: "#fff", border: "1px solid rgba(231,76,60,0.4)",
+              borderRadius: "6px", fontWeight: 700, cursor: (!deleteProf || !deleteMes || isDeleting) ? "not-allowed" : "pointer",
+              opacity: (!deleteProf || !deleteMes) ? 0.5 : 1,
+              transition: "all 0.2s", whiteSpace: "nowrap",
+              display: "flex", alignItems: "center", gap: "0.5rem"
+            }}
+          >
+            {isDeleting ? (
+              <><div style={{ width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} /> Excluindo...</>
+            ) : (
+              <>🗑️ Excluir Mês</>
+            )}
+          </button>
+        </div>
+
+        {/* Info visual do que será deletado */}
+        {deleteProf && deleteMes && (
+          <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", background: "rgba(231,76,60,0.08)", border: "1px solid rgba(231,76,60,0.2)", borderRadius: "8px", fontSize: "0.85rem", color: "#e0e0e0" }}>
+            ⚠️ Serão excluídos <strong style={{ color: "#e74c3c" }}>todos os registros de comissão</strong> de <strong>{deleteProf}</strong> referentes a <strong>{deleteMes}</strong>.
+          </div>
+        )}
+      </div>
 
       {/* Seletor de Profissional Rápido */}
       <div className="card" style={{ padding: "1.5rem", display: "flex", gap: "1rem", alignItems: "flex-end", background: "linear-gradient(45deg, rgba(20,20,20,1) 0%, rgba(30,25,20,1) 100%)", border: "1px solid rgba(212, 175, 55, 0.2)" }}>
