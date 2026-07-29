@@ -19,6 +19,7 @@ export default function PerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
   // Contador incrementado a cada importação de taxa de ocupação — força re-render do ProfissionalStats
   const [ocupacaoVersion, setOcupacaoVersion] = useState<number>(0);
+  const [dataVersion, setDataVersion] = useState<number>(0);
   const [metas, setMetas] = useState<ConfigMetasType>({
     "Bruna": { metaServicos: 10000, metaProdutos: 2000, metaTicket: 80, bonusServicos: 200, bonusProdutos: 100, bonusTicket: 100 },
     "Wallacy": { metaServicos: 10000, metaProdutos: 2000, metaTicket: 80, bonusServicos: 200, bonusProdutos: 100, bonusTicket: 100 },
@@ -61,21 +62,15 @@ export default function PerformancePage() {
     loadAll();
   }, []);
 
-  const handleDataImport = async () => {
-    try {
-      const res = await fetch("/api/performance/comissoes");
-      if (res.ok) {
-        const comissoes: DesempenhoProfissional[] = await res.json();
-        setData(comissoes.filter(d =>
-          d.profissional &&
-          !d.profissional.toLowerCase().includes("total") &&
-          !d.profissional.toLowerCase().includes("comissã") &&
-          !d.profissional.toLowerCase().includes("comissao")
-        ));
-      }
-    } catch (err) {
-      console.error("Erro ao recarregar comissões:", err);
-    }
+  const handleDataImport = (newData: DesempenhoProfissional[]) => {
+    const filtered = newData.filter(d =>
+      d.profissional &&
+      !d.profissional.toLowerCase().includes("total") &&
+      !d.profissional.toLowerCase().includes("comissã") &&
+      !d.profissional.toLowerCase().includes("comissao")
+    );
+    setData(filtered);
+    setDataVersion(v => v + 1);
   };
 
   const handleOcupacaoImport = async () => {
@@ -128,8 +123,8 @@ export default function PerformancePage() {
 
       {/* Content */}
       <div style={{ paddingBottom: "2rem" }}>
-        {activeTab === "bi" && <DashboardBI data={data} metas={metas} />}
-        {activeTab === "profissionais" && <ProfissionalStats data={data} metas={metas} initialSelectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} ocupacaoVersion={ocupacaoVersion} />}
+        {activeTab === "bi" && <DashboardBI key={dataVersion} data={data} metas={metas} />}
+        {activeTab === "profissionais" && <ProfissionalStats key={`${dataVersion}-${ocupacaoVersion}`} data={data} metas={metas} initialSelectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} ocupacaoVersion={ocupacaoVersion} />}
         {activeTab === "importacao" && <ImportacaoDados data={data} onImport={handleDataImport} selectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} onNavigateToProf={() => setActiveTab("profissionais")} onOcupacaoImport={handleOcupacaoImport} />}
         {activeTab === "config-metas" && <ConfigMetas data={data} metas={metas} setMetas={setMetas} />}
       </div>
