@@ -2,11 +2,15 @@
 
 import { useState } from "react";
 import { UploadCloud, CheckCircle2, AlertCircle, X, Search, Filter } from "lucide-react";
-import { DesempenhoProfissional, normalizeProfName, taxasOcupacaoImportadas } from "@/lib/performance-data";
+import {
+  DesempenhoProfissional, normalizeProfName, TaxaOcupacaoImportada,
+  getMesAno, isPlanilhaOcupacao, parseComissoesRows, aggregateOcupacaoRows, buildTaxaOcupacaoPayload,
+} from "@/lib/performance-data";
 import * as xlsx from "xlsx";
 
 interface ImportacaoDadosProps {
   data: DesempenhoProfissional[];
+  ocupacao: TaxaOcupacaoImportada[];
   onImport: (data: DesempenhoProfissional[]) => void;
   selectedProf?: string;
   onProfChange?: (prof: string) => void;
@@ -15,13 +19,6 @@ interface ImportacaoDadosProps {
 }
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-// Extrai mesAno (MM/YYYY) de uma string de data DD/MM/YYYY ou DD/MM/YYYY HH:mm
-const getMesAno = (dataStr: string): string => {
-  const parts = dataStr.split("/");
-  if (parts.length >= 3) return `${parts[1]}/${parts[2].substring(0, 4)}`;
-  return "Geral";
-};
 
 // Interface para os Modais de Status Customizados
 interface ModalState {
@@ -32,7 +29,7 @@ interface ModalState {
   details?: string;
 }
 
-export default function ImportacaoDados({ data, onImport, selectedProf, onProfChange, onNavigateToProf, onOcupacaoImport }: ImportacaoDadosProps) {
+export default function ImportacaoDados({ data, ocupacao, onImport, selectedProf, onProfChange, onNavigateToProf, onOcupacaoImport }: ImportacaoDadosProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -183,65 +180,20 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
         }
 
         const keys = Object.keys(jsonData[0]);
-        const isOcupacao = keys.includes("Taxa de ocupação") || keys.includes("Média de Ocupação no Período");
 
-        if (isOcupacao) {
+        if (isPlanilhaOcupacao(keys)) {
           // ── TAXA DE OCUPAÇÃO ──────────────────────────────────────────────
           if (!selectedProf || selectedProf === "") {
             showNotification(
-              "warning", 
-              "Selecione o Barbeiro/Profissional", 
+              "warning",
+              "Selecione o Barbeiro/Profissional",
               "Selecione um profissional no campo 'Visualizar Dashboard do Profissional' acima antes de enviar a planilha de ocupação."
             );
             setIsUploading(false);
             return;
           }
 
-          let importados = 0;
-          const recordsPorMes: Record<string, { jornada: number, atendimento: number, bloqueado: number }> = {};
-
-          const timeToMins = (t: any): number => {
-            if (t === null || t === undefined || t === "") return 0;
-            if (typeof t === "number") return Math.round(t * 24 * 60);
-            const s = String(t).trim();
-            const parts = s.split(":");
-            if (parts.length >= 2) {
-              return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
-            }
-            return 0;
-          };
-
-          const minsToTime = (m: number) => {
-            const h = Math.floor(m / 60);
-            const mins = Math.floor(m % 60);
-            return `${String(h).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
-          };
-
-          jsonData.forEach(row => {
-            const diaRaw = row["Dia"];
-            if (!diaRaw) return;
-            const diaStr = String(diaRaw).trim().toLowerCase();
-            if (diaStr.includes("total") || diaStr.includes("média") || diaStr.includes("media")) return;
-
-            let diaFormatado = diaStr;
-            if (typeof diaRaw === "number") {
-              const dateObj = new Date((diaRaw - (25567 + 2)) * 86400 * 1000);
-              diaFormatado = `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()}`;
-            }
-
-            let mesAno = "Geral";
-            const parts = diaFormatado.split("/");
-            if (parts.length === 3) mesAno = `${parts[1]}/${parts[2]}`;
-            else if (parts.length === 2) mesAno = `${parts[0]}/${parts[1]}`;
-
-            if (!recordsPorMes[mesAno]) recordsPorMes[mesAno] = { jornada: 0, atendimento: 0, bloqueado: 0 };
-
-            recordsPorMes[mesAno].jornada += timeToMins(row["Tempo de Jornada"]);
-            recordsPorMes[mesAno].atendimento += timeToMins(row["Tempo em Atendimento"]);
-            recordsPorMes[mesAno].bloqueado += timeToMins(row["Tempo Bloqueado"]);
-            importados++;
-          });
-
+          const recordsPorMes = aggregateOcupacaoRows(jsonData);
           const mesesProcessados = Object.keys(recordsPorMes);
           if (mesesProcessados.length === 0) {
             showNotification("warning", "Dados Inválidos", "Não foi possível calcular a jornada nesta planilha (valores zerados ou colunas com nomes incompatíveis).");
@@ -254,23 +206,12 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
             const savePromises = mesesProcessados.map(async mesAno => {
               const totais = recordsPorMes[mesAno];
               if (totais.jornada <= 0) return;
-              const taxaOcup = totais.atendimento / totais.jornada;
-              const jornadaEfetiva = totais.jornada - totais.bloqueado;
-              const taxaOcupComBloqueio = jornadaEfetiva > 0 ? totais.atendimento / jornadaEfetiva : taxaOcup;
-              const normalizedProf = normalizeProfName(selectedProf);
+              const payload = buildTaxaOcupacaoPayload(selectedProf, mesAno, totais);
 
               const res = await fetch("/api/performance/ocupacao", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  profissional: normalizedProf,
-                  mesAno,
-                  taxaOcupacao: taxaOcup,
-                  taxaOcupacaoComBloqueios: taxaOcupComBloqueio,
-                  tempoAtendimentoStr: minsToTime(totais.atendimento),
-                  tempoBloqueadoStr: minsToTime(totais.bloqueado),
-                  tempoJornadaStr: minsToTime(totais.jornada),
-                }),
+                body: JSON.stringify(payload),
               });
 
               if (!res.ok) {
@@ -295,7 +236,7 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
             showNotification(
               "success",
               "Taxa de Ocupação Atualizada!",
-              `A planilha foi sincronizada com sucesso para ${normalizeProfName(selectedProf)} (${importados} dias processados).`,
+              `A planilha foi sincronizada com sucesso para ${normalizeProfName(selectedProf)} (${jsonData.length} dias processados).`,
               resumo
             );
 
@@ -314,37 +255,7 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
         }
         
         // ── COMISSÕES ─────────────────────────────────────────────────────
-        const novosDados: DesempenhoProfissional[] = jsonData
-          .filter(row => row.Profissional && row.Data && !String(row.Profissional).toLowerCase().includes("total") && !String(row.Profissional).toLowerCase().includes("comissã"))
-          .map((row) => {
-            const parseToNum = (val: any) => typeof val === "string" ? parseFloat(val.replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0 : Number(val) || 0;
-            
-            const valorBruto = parseToNum(row["Valor Item"] || row["Valor"] || 0);
-            const valorComissao = parseToNum(row["Valor"] || 0);
-            
-            let dataStr = row["Data"];
-            if (typeof dataStr === "number") {
-              const dateObj = new Date((dataStr - (25567 + 2)) * 86400 * 1000);
-              dataStr = `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()} 00:00`;
-            }
-
-            const rawProf = row["Profissional"];
-            const prof = normalizeProfName(rawProf);
-            const serv = row["Serviço/Produto/Pacote"] || "Serviço";
-            const cli = row["Cliente"] || "Cliente Avulso";
-            const uid = `${prof}-${serv}-${String(dataStr)}-${cli}`.replace(/\s/g, "");
-
-            return {
-              id: uid,
-              profissional: prof,
-              data: String(dataStr),
-              cliente: cli,
-              item: serv,
-              valorBruto,
-              valorComissao,
-            };
-          });
-
+        const novosDados = parseComissoesRows(jsonData);
         await mergeAndImport(novosDados);
       } catch (err: any) {
         console.error(err);
@@ -711,7 +622,7 @@ export default function ImportacaoDados({ data, onImport, selectedProf, onProfCh
             {Array.from(new Set([
               "Henrique Botelho", "Tiago", "Bruna", "Wallacy", "Vanessa",
               ...data.map(d => d.profissional),
-              ...taxasOcupacaoImportadas.map(t => t.profissional)
+              ...ocupacao.map(t => t.profissional)
             ])).map(p => (
               <option key={p} value={p}>{p}</option>
             ))}

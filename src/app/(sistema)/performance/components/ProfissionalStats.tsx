@@ -6,8 +6,8 @@ import {
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { User, Scissors, DollarSign, Percent, Target, TrendingUp } from "lucide-react";
-import { 
-  DesempenhoProfissional, getProfissionaisUnicos, catalogoServicos, catalogoProdutos, taxasOcupacaoImportadas, normalizeProfName
+import {
+  DesempenhoProfissional, getProfissionaisUnicos, catalogoServicos, catalogoProdutos, TaxaOcupacaoImportada, normalizeProfName
 } from "@/lib/performance-data";
 import { ConfigMetasType } from "./ConfigMetas";
 
@@ -35,16 +35,16 @@ const parseMesAno = (dateStr: string): string => {
 
 interface ProfissionalStatsProps {
   data: DesempenhoProfissional[];
+  ocupacao: TaxaOcupacaoImportada[];
   metas?: ConfigMetasType;
   initialSelectedProf?: string;
   onProfChange?: (prof: string) => void;
-  ocupacaoVersion?: number;
 }
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-export default function ProfissionalStats({ data, metas, initialSelectedProf, onProfChange, ocupacaoVersion = 0 }: ProfissionalStatsProps) {
-  const profissionais = getProfissionaisUnicos(data);
+export default function ProfissionalStats({ data, ocupacao, metas, initialSelectedProf, onProfChange }: ProfissionalStatsProps) {
+  const profissionais = getProfissionaisUnicos(data, ocupacao);
   const [selectedProf, setSelectedProf] = useState<string>(initialSelectedProf || profissionais[0] || "");
 
   // Update local state when parent changes (for when user navigates directly here)
@@ -84,7 +84,7 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
       }
     });
 
-    taxasOcupacaoImportadas.forEach(t => {
+    ocupacao.forEach(t => {
       if (normalizeProfName(t.profissional) === normalizedProf && t.mesAno) {
         const parts = t.mesAno.split("/");
         if (parts.length === 2) {
@@ -100,7 +100,7 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
     });
 
     return latest;
-  }, [profData, selectedProf, ocupacaoVersion]);
+  }, [profData, selectedProf, ocupacao]);
 
   // Filtra dados do profissional para usar apenas os do mês atual (mais recente) nos cartões principais
   const currentMonthData = useMemo(() => {
@@ -147,7 +147,7 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
   const faltaServicosCard = metaServicosVal > 0 ? metaServicosVal - faturadoServicos : 0;
   const faltaProdutosCard = metaProdutosVal > 0 ? metaProdutosVal - faturadoProdutos : 0;
 
-  const importedOcupacao = taxasOcupacaoImportadas.find(t => normalizeProfName(t.profissional) === normalizedProf && t.mesAno === latestMesAno) || taxasOcupacaoImportadas.find(t => normalizeProfName(t.profissional) === normalizedProf);
+  const importedOcupacao = ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf && t.mesAno === latestMesAno) || ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf);
   const taxaOcupacao = importedOcupacao ? importedOcupacao.taxaOcupacao : 0;
   const taxaOcupacaoComBloqueios = importedOcupacao ? importedOcupacao.taxaOcupacaoComBloqueios : 0;
   
@@ -273,7 +273,7 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
   // Taxa de Ocupação Mensal deste profissional
   const ocupacaoMensalProf = useMemo(() => {
     const normalizedProf = normalizeProfName(selectedProf);
-    return taxasOcupacaoImportadas
+    return ocupacao
       .filter(t => normalizeProfName(t.profissional) === normalizedProf)
       .map(t => ({
         name: t.mesAno || "Geral",
@@ -287,7 +287,7 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
         const [m2, y2] = b.name.split("/");
         return new Date(Number(y1), Number(m1) - 1).getTime() - new Date(Number(y2), Number(m2) - 1).getTime();
       });
-  }, [selectedProf]);
+  }, [selectedProf, ocupacao]);
 
   // Top Produtos deste profissional
   const topProdutosProf = useMemo(() => {
@@ -349,6 +349,8 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
           </span>
         )}
       </div>
+
+      <div className="divider-text">Indicadores do Mês</div>
 
       {/* Indicadores Individuais */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
@@ -421,6 +423,8 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "#9b59b6" }}>{profData.length === 0 ? 0 : servicosPorCliente.toFixed(2)}</div>
         </div>
       </div>
+
+      <div className="divider-text">Ocupação</div>
 
       {/* Indicadores de Ocupação */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
@@ -579,9 +583,11 @@ export default function ProfissionalStats({ data, metas, initialSelectedProf, on
         );
       })()}
 
+      <div className="divider-text">Gráficos e Histórico</div>
+
       {/* Gráficos Individuais */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem" }}>
-        
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.5rem" }}>
+
         {/* Evolução Diária */}
         <div className="card">
           <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem" }}>Evolução de Ganhos</h3>

@@ -7,7 +7,7 @@ import ProfissionalStats from "./components/ProfissionalStats";
 import ImportacaoDados from "./components/ImportacaoDados";
 import ConfigHorarios, { ConfigHorariosType } from "./components/ConfigHorarios";
 import ConfigMetas, { ConfigMetasType } from "./components/ConfigMetas";
-import { DesempenhoProfissional, taxasOcupacaoImportadas, TaxaOcupacaoImportada } from "@/lib/performance-data";
+import { DesempenhoProfissional, TaxaOcupacaoImportada } from "@/lib/performance-data";
 import { Clock, Target } from "lucide-react";
 
 type Tab = "bi" | "profissionais" | "importacao" | "config-metas";
@@ -16,9 +16,8 @@ export default function PerformancePage() {
   const [activeTab, setActiveTab] = useState<Tab>("bi");
   const [globalSelectedProf, setGlobalSelectedProf] = useState<string>("");
   const [data, setData] = useState<DesempenhoProfissional[]>([]);
+  const [ocupacao, setOcupacao] = useState<TaxaOcupacaoImportada[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Contador incrementado a cada importação de taxa de ocupação — força re-render do ProfissionalStats
-  const [ocupacaoVersion, setOcupacaoVersion] = useState<number>(0);
   const [dataVersion, setDataVersion] = useState<number>(0);
   const [metas, setMetas] = useState<ConfigMetasType>({
     "Bruna": { metaServicos: 10000, metaProdutos: 2000, metaTicket: 80, bonusServicos: 200, bonusProdutos: 100, bonusTicket: 100 },
@@ -45,13 +44,11 @@ export default function PerformancePage() {
           ));
         }
 
-        // 2. Carrega taxas de ocupação e popula o array in-memory que os componentes leem
+        // 2. Carrega taxas de ocupação
         const resOcupacao = await fetch("/api/performance/ocupacao");
         if (resOcupacao.ok) {
           const taxas: TaxaOcupacaoImportada[] = await resOcupacao.json();
-          // Limpa e repopula o array compartilhado
-          taxasOcupacaoImportadas.splice(0, taxasOcupacaoImportadas.length, ...taxas);
-          setOcupacaoVersion(v => v + 1);
+          setOcupacao(taxas);
         }
       } catch (err) {
         console.error("Erro ao carregar dados do banco:", err);
@@ -79,12 +76,11 @@ export default function PerformancePage() {
       const res = await fetch("/api/performance/ocupacao");
       if (res.ok) {
         const taxas: TaxaOcupacaoImportada[] = await res.json();
-        taxasOcupacaoImportadas.splice(0, taxasOcupacaoImportadas.length, ...taxas);
+        setOcupacao(taxas);
       }
     } catch (err) {
       console.error("Erro ao recarregar taxas:", err);
     }
-    setOcupacaoVersion(v => v + 1);
   };
 
   const tabs = [
@@ -123,9 +119,9 @@ export default function PerformancePage() {
 
       {/* Content */}
       <div style={{ paddingBottom: "2rem" }}>
-        {activeTab === "bi" && <DashboardBI key={dataVersion} data={data} metas={metas} />}
-        {activeTab === "profissionais" && <ProfissionalStats key={`${dataVersion}-${ocupacaoVersion}`} data={data} metas={metas} initialSelectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} ocupacaoVersion={ocupacaoVersion} />}
-        {activeTab === "importacao" && <ImportacaoDados data={data} onImport={handleDataImport} selectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} onNavigateToProf={() => setActiveTab("profissionais")} onOcupacaoImport={handleOcupacaoImport} />}
+        {activeTab === "bi" && <DashboardBI key={dataVersion} data={data} ocupacao={ocupacao} metas={metas} />}
+        {activeTab === "profissionais" && <ProfissionalStats key={dataVersion} data={data} ocupacao={ocupacao} metas={metas} initialSelectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} />}
+        {activeTab === "importacao" && <ImportacaoDados data={data} ocupacao={ocupacao} onImport={handleDataImport} selectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} onNavigateToProf={() => setActiveTab("profissionais")} onOcupacaoImport={handleOcupacaoImport} />}
         {activeTab === "config-metas" && <ConfigMetas data={data} metas={metas} setMetas={setMetas} />}
       </div>
     </div>

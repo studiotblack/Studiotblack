@@ -32,8 +32,6 @@ export interface TaxaOcupacaoImportada {
   tempoJornadaStr: string;
 }
 
-export const taxasOcupacaoImportadas: TaxaOcupacaoImportada[] = [];
-
 export const mockPdfData: DesempenhoProfissional[] = [];
 
 // Catálogo Oficial de Serviços
@@ -145,18 +143,159 @@ export const catalogoProdutos: ProdutoCatalogo[] = [
   { nome: "TOUCA DE CETIM DIFUSORA", marca: "Soulta", preco: 50, comissao: 0.10, estoque: 13 },
 ];
 
+// Compara pela PRIMEIRA palavra do nome (não por substring solta em qualquer posição) — o nome
+// completo do Tiago no AppBarber é "Tiago Henrique", então um match por .includes("henrique")
+// classificava incorretamente os dados dele como sendo do Henrique Botelho.
 export const normalizeProfName = (name: string): string => {
   if (!name) return "";
-  const n = name.trim().toLowerCase();
-  if (n.includes("henrique")) return "Henrique Botelho";
-  if (n.includes("wallacy")) return "Wallacy";
-  if (n.includes("tiago")) return "Tiago";
-  if (n.includes("vanessa")) return "Vanessa";
-  if (n.includes("bruna")) return "Bruna";
-  return name.trim();
+  const trimmed = name.trim();
+  const firstWord = trimmed.toLowerCase().split(/\s+/)[0];
+  if (firstWord === "henrique") return "Henrique Botelho";
+  if (firstWord === "wallacy") return "Wallacy";
+  if (firstWord === "tiago") return "Tiago";
+  if (firstWord === "vanessa") return "Vanessa";
+  if (firstWord === "bruna") return "Bruna";
+  return trimmed;
 };
 
-export const getProfissionaisUnicos = (data: DesempenhoProfissional[]) => {
+export const getPrimeiroNome = (name: string): string => {
+  if (!name) return "";
+  return name.trim().split(" ")[0];
+};
+
+// ── Parsing compartilhado (usado pelo upload manual em ImportacaoDados.tsx E pelo script de automação scripts/import-watch.ts) ──
+
+// Extrai mesAno (MM/YYYY) de uma string de data DD/MM/YYYY ou DD/MM/YYYY HH:mm
+export const getMesAno = (dataStr: string): string => {
+  const parts = dataStr.split("/");
+  if (parts.length >= 3) return `${parts[1]}/${parts[2].substring(0, 4)}`;
+  return "Geral";
+};
+
+export const parseValorBR = (val: any): number => {
+  if (typeof val === "string") {
+    return parseFloat(val.replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0;
+  }
+  return Number(val) || 0;
+};
+
+// Converte data serial do Excel (número de dias desde 1900) para "DD/MM/YYYY HH:mm"
+export const excelSerialToDateTimeStr = (serial: number): string => {
+  const dateObj = new Date((serial - (25567 + 2)) * 86400 * 1000);
+  return `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()} 00:00`;
+};
+
+export const excelSerialToDateStr = (serial: number): string => {
+  const dateObj = new Date((serial - (25567 + 2)) * 86400 * 1000);
+  return `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()}`;
+};
+
+export const timeToMins = (t: any): number => {
+  if (t === null || t === undefined || t === "") return 0;
+  if (typeof t === "number") return Math.round(t * 24 * 60);
+  const s = String(t).trim();
+  const parts = s.split(":");
+  if (parts.length >= 2) {
+    return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+  }
+  return 0;
+};
+
+export const minsToTime = (m: number): string => {
+  const h = Math.floor(m / 60);
+  const mins = Math.floor(m % 60);
+  return `${String(h).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
+};
+
+// Detecta se a planilha (pelas colunas) é um relatório de Taxa de Ocupação do AppBarber
+export const isPlanilhaOcupacao = (keys: string[]): boolean => {
+  return keys.includes("Taxa de ocupação") || keys.includes("Média de Ocupação no Período");
+};
+
+// Converte as linhas cruas da planilha de Comissões do AppBarber (xlsx.utils.sheet_to_json) em DesempenhoProfissional[]
+export const parseComissoesRows = (jsonData: any[]): DesempenhoProfissional[] => {
+  return jsonData
+    .filter(row => row.Profissional && row.Data && !String(row.Profissional).toLowerCase().includes("total") && !String(row.Profissional).toLowerCase().includes("comissã"))
+    .map((row) => {
+      const valorBruto = parseValorBR(row["Valor Item"] || row["Valor"] || 0);
+      const valorComissao = parseValorBR(row["Valor"] || 0);
+
+      let dataStr = row["Data"];
+      if (typeof dataStr === "number") {
+        dataStr = excelSerialToDateTimeStr(dataStr);
+      }
+
+      const prof = normalizeProfName(row["Profissional"]);
+      const serv = row["Serviço/Produto/Pacote"] || "Serviço";
+      const cli = row["Cliente"] || "Cliente Avulso";
+      const uid = `${prof}-${serv}-${String(dataStr)}-${cli}`.replace(/\s/g, "");
+
+      return {
+        id: uid,
+        profissional: prof,
+        data: String(dataStr),
+        cliente: cli,
+        item: serv,
+        valorBruto,
+        valorComissao,
+      };
+    });
+};
+
+export interface TotaisOcupacaoMes {
+  jornada: number;
+  atendimento: number;
+  bloqueado: number;
+}
+
+// Agrega as linhas cruas da planilha de Taxa de Ocupação do AppBarber (uma linha por dia) em totais por mesAno
+export const aggregateOcupacaoRows = (jsonData: any[]): Record<string, TotaisOcupacaoMes> => {
+  const recordsPorMes: Record<string, TotaisOcupacaoMes> = {};
+
+  jsonData.forEach(row => {
+    const diaRaw = row["Dia"];
+    if (!diaRaw) return;
+    const diaStr = String(diaRaw).trim().toLowerCase();
+    if (diaStr.includes("total") || diaStr.includes("média") || diaStr.includes("media")) return;
+
+    let diaFormatado = diaStr;
+    if (typeof diaRaw === "number") {
+      diaFormatado = excelSerialToDateStr(diaRaw);
+    }
+
+    let mesAno = "Geral";
+    const parts = diaFormatado.split("/");
+    if (parts.length === 3) mesAno = `${parts[1]}/${parts[2]}`;
+    else if (parts.length === 2) mesAno = `${parts[0]}/${parts[1]}`;
+
+    if (!recordsPorMes[mesAno]) recordsPorMes[mesAno] = { jornada: 0, atendimento: 0, bloqueado: 0 };
+
+    recordsPorMes[mesAno].jornada += timeToMins(row["Tempo de Jornada"]);
+    recordsPorMes[mesAno].atendimento += timeToMins(row["Tempo em Atendimento"]);
+    recordsPorMes[mesAno].bloqueado += timeToMins(row["Tempo Bloqueado"]);
+  });
+
+  return recordsPorMes;
+};
+
+// Converte os totais agregados de um mês em um payload pronto para POST /api/performance/ocupacao
+export const buildTaxaOcupacaoPayload = (profissional: string, mesAno: string, totais: TotaisOcupacaoMes) => {
+  const taxaOcup = totais.jornada > 0 ? totais.atendimento / totais.jornada : 0;
+  const jornadaEfetiva = totais.jornada - totais.bloqueado;
+  const taxaOcupComBloqueio = jornadaEfetiva > 0 ? totais.atendimento / jornadaEfetiva : taxaOcup;
+
+  return {
+    profissional: normalizeProfName(profissional),
+    mesAno,
+    taxaOcupacao: taxaOcup,
+    taxaOcupacaoComBloqueios: taxaOcupComBloqueio,
+    tempoAtendimentoStr: minsToTime(totais.atendimento),
+    tempoBloqueadoStr: minsToTime(totais.bloqueado),
+    tempoJornadaStr: minsToTime(totais.jornada),
+  };
+};
+
+export const getProfissionaisUnicos = (data: DesempenhoProfissional[], ocupacao: TaxaOcupacaoImportada[] = []) => {
   const defaultProfs = ["Bruna", "Wallacy", "Henrique Botelho", "Vanessa", "Tiago"];
 
   const profissionais = new Set<string>();
@@ -169,7 +308,7 @@ export const getProfissionaisUnicos = (data: DesempenhoProfissional[]) => {
   });
 
   // Garante que profissionais com taxa de ocupação importada também apareçam
-  taxasOcupacaoImportadas.forEach(t => {
+  ocupacao.forEach(t => {
     if (t.profissional) {
       profissionais.add(normalizeProfName(t.profissional));
     }

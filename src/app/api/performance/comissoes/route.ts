@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import postgres from "postgres";
+import { normalizeProfName, getPrimeiroNome } from "@/lib/performance-data";
+import { isAdminRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,24 +17,12 @@ function getDb() {
   });
 }
 
-function normalizeProfName(name: string): string {
-  if (!name) return "";
-  const n = name.trim().toLowerCase();
-  if (n.includes("henrique")) return "Henrique Botelho";
-  if (n.includes("wallacy")) return "Wallacy";
-  if (n.includes("tiago")) return "Tiago";
-  if (n.includes("vanessa")) return "Vanessa";
-  if (n.includes("bruna")) return "Bruna";
-  return name.trim();
-}
-
-function getPrimeiroNome(name: string): string {
-  if (!name) return "";
-  return name.trim().split(" ")[0];
-}
+// As tabelas já existem em produção — cria só uma vez por instância do servidor (evita round-trip extra em toda request)
+let tablesEnsured = false;
 
 // Garante que as tabelas existem
 async function ensureTables(sql: ReturnType<typeof postgres>) {
+  if (tablesEnsured) return;
   await sql`
     CREATE TABLE IF NOT EXISTS "DesempenhoProfissionalDB" (
       id TEXT PRIMARY KEY,
@@ -50,6 +40,7 @@ async function ensureTables(sql: ReturnType<typeof postgres>) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_desemp_prof_mes ON "DesempenhoProfissionalDB" (profissional, "mesAno")`;
+  tablesEnsured = true;
 }
 
 // GET /api/performance/comissoes
@@ -161,6 +152,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/performance/comissoes
 export async function DELETE(request: NextRequest) {
+  if (!isAdminRequest(request)) {
+    return NextResponse.json({ error: "Apenas administradores podem excluir registros." }, { status: 403 });
+  }
   if (!process.env.DATABASE_URL) return NextResponse.json({ sucesso: true });
   const sql = getDb();
   try {

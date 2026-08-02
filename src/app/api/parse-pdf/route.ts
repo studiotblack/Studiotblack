@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import PDFParser from 'pdf2json';
+import { normalizeProfName } from '@/lib/performance-data';
 
 export async function POST(request: Request) {
   try {
@@ -30,9 +31,8 @@ export async function POST(request: Request) {
     let match;
     while ((match = regex.exec(parsedText)) !== null) {
       // Normaliza o nome do profissional (remove espaços extras)
-      let profName = match[1].replace(/\s+/g, ' ').trim();
-      if (profName.includes('Henrique')) profName = 'Henrique Botelho';
-      
+      const profName = normalizeProfName(match[1].replace(/\s+/g, ' ').trim());
+
       const servico = match[2].replace(/\s+/g, ' ').trim();
       const date = match[3];
       const hour = match[4];

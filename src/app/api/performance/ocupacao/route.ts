@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import postgres from "postgres";
+import { isAdminRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,12 @@ function getDb() {
   });
 }
 
+// A tabela já existe em produção — cria só uma vez por instância do servidor (evita round-trip extra em toda request)
+let tableEnsured = false;
+
 // Garante que a tabela existe
 async function ensureTable(sql: ReturnType<typeof postgres>) {
+  if (tableEnsured) return;
   await sql`
     CREATE TABLE IF NOT EXISTS "TaxaOcupacao" (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -32,6 +37,7 @@ async function ensureTable(sql: ReturnType<typeof postgres>) {
       UNIQUE(profissional, "mesAno")
     )
   `;
+  tableEnsured = true;
 }
 
 // GET /api/performance/ocupacao
@@ -113,6 +119,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/performance/ocupacao
 export async function DELETE(request: NextRequest) {
+  if (!isAdminRequest(request)) {
+    return NextResponse.json({ error: "Apenas administradores podem excluir registros." }, { status: 403 });
+  }
   if (!process.env.DATABASE_URL) return NextResponse.json({ sucesso: true });
   const sql = getDb();
   try {
