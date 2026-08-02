@@ -22,6 +22,20 @@ interface DashboardBIProps {
 const COLORS = ['#d4af8c', '#3498db', '#2ecc71', '#e74c3c', '#9b59b6', '#f39c12'];
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// Rótulo de percentual pra fora das fatias dos gráficos de pizza (o texto padrão do recharts fica escuro demais no tema dark)
+const renderPieLabel = (props: any) => {
+  const { cx, cy, midAngle, outerRadius, percent } = props;
+  const RADIAN = Math.PI / 180;
+  const radius = outerRadius + 18;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="#d4c4b0" fontSize={11} fontWeight={600} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
+};
+
 const parseMesAno = (dateStr: string): string => {
   if (!dateStr) return "";
   const clean = dateStr.split(" ")[0];
@@ -449,6 +463,8 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
                   paddingAngle={5}
                   dataKey="count"
                   stroke="none"
+                  label={renderPieLabel}
+                  labelLine={{ stroke: "#7a6060", strokeWidth: 1 }}
                 >
                   {topServicos.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -501,48 +517,57 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
       </div>
 
-      {/* Gráfico de Ocupação Geral */}
-      <div className="card">
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <Users size={18} color="var(--color-gold)" /> Comparativo de Ocupação (Equipe)
-        </h3>
-        <div style={{ width: '100%', height: Math.max(150, ocupacaoGeral.length * 36 + 30) }}>
-          <ResponsiveContainer>
-            <BarChart data={ocupacaoGeral} margin={{ top: 5, right: 35, left: 0, bottom: 5 }} layout="vertical" barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" horizontal={false} />
-              <XAxis type="number" stroke="#7a6060" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
-              <YAxis dataKey="name" type="category" width={72} stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ background: "rgba(22,15,16,0.9)", border: "1px solid var(--color-border)", borderRadius: "8px" }} formatter={(value: any) => [`${value}%`, 'Ocupação']} />
-              <Bar dataKey="Ocupação %" fill="#9b59b6" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                <LabelList dataKey="Ocupação %" position="right" formatter={(v: any) => `${v}%`} fill="#c39bd3" fontSize={12} fontWeight={600} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      {/* Ocupação da Equipe + Composição do Faturamento lado a lado (compactos) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.5rem" }}>
 
-      {/* Evolução Mensal: Serviços + Produtos empilhados (soma = faturamento) com a Comissão sobreposta como linha */}
-      <div className="card">
-        <div style={{ marginBottom: "1.25rem" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        {/* Gráfico de Ocupação Geral */}
+        <div className="card">
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Users size={18} color="var(--color-gold)" /> Comparativo de Ocupação (Equipe)
+          </h3>
+          <div style={{ width: '100%', height: Math.max(130, ocupacaoGeral.length * 28 + 20) }}>
+            <ResponsiveContainer>
+              <BarChart data={ocupacaoGeral} margin={{ top: 0, right: 35, left: 0, bottom: 0 }} layout="vertical" barCategoryGap="25%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" horizontal={false} />
+                <XAxis type="number" stroke="#7a6060" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
+                <YAxis dataKey="name" type="category" width={72} stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ background: "rgba(22,15,16,0.9)", border: "1px solid var(--color-border)", borderRadius: "8px" }} formatter={(value: any) => [`${value}%`, 'Ocupação']} />
+                <Bar dataKey="Ocupação %" fill="#9b59b6" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                  <LabelList dataKey="Ocupação %" position="right" formatter={(v: any) => `${v}%`} fill="#c39bd3" fontSize={12} fontWeight={600} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Evolução Mensal: Serviços + Produtos empilhados (soma = faturamento) com a Comissão sobreposta como linha */}
+        <div className="card">
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <TrendingUp size={18} color="var(--color-gold)" /> Evolução Mensal: Composição do Faturamento
           </h3>
-          <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "4px 0 0 0" }}>Uma coluna por mês (Serviços + Produtos empilhados = faturamento total), com a comissão paga sobreposta em linha</p>
+          <p style={{ fontSize: "0.78rem", color: "var(--color-muted)", margin: "0 0 0.75rem 0" }}>Serviços + Produtos empilhados = faturamento total; comissão paga em linha</p>
+          <div style={{ width: '100%', height: 200 }}>
+            <ResponsiveContainer>
+              <ComposedChart data={evolucaoServicosProdutosMensal} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
+                <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#7a6060" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: "11px" }} />
+                <Bar dataKey="Serviços (R$)" stackId="fat" fill="#d4af8c" maxBarSize={45}>
+                  <LabelList dataKey="Serviços (R$)" position="center" fontSize={9} fill="#3a2a1a" fontWeight={600} formatter={(v: any) => v > 0 ? `R$${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} />
+                </Bar>
+                <Bar dataKey="Produtos (R$)" stackId="fat" fill="#3498db" radius={[4, 4, 0, 0]} maxBarSize={45}>
+                  <LabelList dataKey="Produtos (R$)" position="center" fontSize={9} fill="#0a2233" fontWeight={600} formatter={(v: any) => v > 0 ? `R$${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} />
+                </Bar>
+                <Line type="monotone" dataKey="Comissão (R$)" stroke="#2ecc71" strokeWidth={3} dot={{ fill: '#2ecc71', r: 4 }} activeDot={{ r: 6 }}
+                  label={{ position: 'bottom', fontSize: 9, fill: '#2ecc71', formatter: (v: any) => `R$${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div style={{ width: '100%', height: 260 }}>
-          <ResponsiveContainer>
-            <ComposedChart data={evolucaoServicosProdutosMensal} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
-              <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ paddingTop: "10px" }} />
-              <Bar dataKey="Serviços (R$)" stackId="fat" fill="#d4af8c" maxBarSize={55} />
-              <Bar dataKey="Produtos (R$)" stackId="fat" fill="#3498db" radius={[4, 4, 0, 0]} maxBarSize={55} />
-              <Line type="monotone" dataKey="Comissão (R$)" stroke="#2ecc71" strokeWidth={3} dot={{ fill: '#2ecc71', r: 4 }} activeDot={{ r: 6 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+
       </div>
 
       <div className="divider-text">Histórico e Ranking</div>
@@ -564,8 +589,12 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
                 <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                <Bar dataKey="Retenção do Salão" stackId="fin" fill="#2ecc71" maxBarSize={45} />
-                <Bar dataKey="Comissão" stackId="fin" fill="#e74c3c" radius={[4, 4, 0, 0]} maxBarSize={45} />
+                <Bar dataKey="Retenção do Salão" stackId="fin" fill="#2ecc71" maxBarSize={45}>
+                  <LabelList dataKey="Retenção do Salão" position="center" fontSize={9} fill="#0a2b18" fontWeight={600} formatter={(v: any) => `R$${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} />
+                </Bar>
+                <Bar dataKey="Comissão" stackId="fin" fill="#e74c3c" radius={[4, 4, 0, 0]} maxBarSize={45}>
+                  <LabelList dataKey="Comissão" position="center" fontSize={9} fill="#3a0e0a" fontWeight={600} formatter={(v: any) => `R$${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -583,7 +612,9 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
                 <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
                 <Tooltip contentStyle={{ background: "rgba(22,15,16,0.9)", border: "1px solid var(--color-border)", borderRadius: "8px" }} formatter={(value: any) => [`${value}%`, 'Ocupação Média']} />
-                <Line type="monotone" dataKey="Ocupação %" stroke="#3498db" strokeWidth={3} dot={{ fill: '#3498db', r: 4 }} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="Ocupação %" stroke="#3498db" strokeWidth={3} dot={{ fill: '#3498db', r: 4 }} activeDot={{ r: 6 }}
+                  label={{ position: 'top', fontSize: 10, fill: '#3498db', formatter: (v: any) => `${v}%` }}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -606,6 +637,8 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
                   paddingAngle={5}
                   dataKey="Faturado"
                   stroke="none"
+                  label={renderPieLabel}
+                  labelLine={{ stroke: "#7a6060", strokeWidth: 1 }}
                 >
                   {topProdutos.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
