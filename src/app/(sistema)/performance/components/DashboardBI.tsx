@@ -1,20 +1,21 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { 
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line
+  PieChart, Pie, Cell, LineChart, Line, ComposedChart, LabelList, ReferenceLine
 } from 'recharts';
-import { Target, TrendingUp, DollarSign, Users, Award } from "lucide-react";
-import { 
-  DesempenhoProfissional, getProfissionaisUnicos, 
+import { Target, TrendingUp, DollarSign, Users, Award, Ticket, Percent } from "lucide-react";
+import {
+  DesempenhoProfissional, getProfissionaisUnicos,
   getServicosMaisRealizados, getTotalFaturado, getTotalComissao,
-  catalogoServicos, taxasOcupacaoImportadas, catalogoProdutos, normalizeProfName
+  catalogoServicos, TaxaOcupacaoImportada, catalogoProdutos, normalizeProfName
 } from "@/lib/performance-data";
 import { ConfigMetasType } from "./ConfigMetas";
 
 interface DashboardBIProps {
   data: DesempenhoProfissional[];
+  ocupacao: TaxaOcupacaoImportada[];
   metas?: ConfigMetasType;
 }
 
@@ -39,7 +40,7 @@ const parseMesAno = (dateStr: string): string => {
   return "";
 };
 
-export default function DashboardBI({ data, metas }: DashboardBIProps) {
+export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps) {
   const [metaGlobal, setMetaGlobal] = useState(15000);
 
   // Descobre todos os meses disponíveis na base e ordena do mais recente ao mais antigo
@@ -49,7 +50,7 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
       const m = parseMesAno(d.data);
       if (m) setMeses.add(m);
     });
-    taxasOcupacaoImportadas.forEach(t => {
+    ocupacao.forEach(t => {
       if (t.mesAno) setMeses.add(t.mesAno);
     });
     return Array.from(setMeses).sort((a, b) => {
@@ -57,7 +58,7 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
       const [m2, y2] = b.split("/");
       return (parseInt(y2, 10) * 12 + parseInt(m2, 10)) - (parseInt(y1, 10) * 12 + parseInt(m1, 10));
     });
-  }, [data]);
+  }, [data, ocupacao]);
 
   // Premissa: Seleciona por padrão o mês mais recente
   const [selectedMes, setSelectedMes] = useState<string>(() => {
@@ -84,7 +85,7 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
 
   // Preparando dados para Gráfico: Faturamento por Barbeiro (do mês selecionado)
   const faturamentoPorBarbeiro = useMemo(() => {
-    const profs = getProfissionaisUnicos(filteredData);
+    const profs = getProfissionaisUnicos(filteredData, ocupacao);
     return profs.map(p => {
       const docs = filteredData.filter(d => d.profissional === p);
       const faturado = docs.reduce((acc, curr) => acc + curr.valorBruto, 0);
@@ -95,7 +96,7 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
         Comissao: comissao
       };
     }).sort((a, b) => b.Faturado - a.Faturado);
-  }, [filteredData]);
+  }, [filteredData, ocupacao]);
 
   // Preparando dados para Gráfico: Serviços mais realizados (do mês selecionado)
   const topServicos = useMemo(() => {
@@ -113,7 +114,12 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
         records[mesAno].Comissão += d.valorComissao;
       }
     });
-    return Object.entries(records).map(([name, vals]) => ({ name, ...vals })).sort((a, b) => {
+    return Object.entries(records).map(([name, vals]) => ({
+      name,
+      Faturamento: vals.Faturamento,
+      "Comissão": vals.Comissão,
+      "Retenção do Salão": vals.Faturamento - vals.Comissão,
+    })).sort((a, b) => {
       const [m1, y1] = a.name.split("/");
       const [m2, y2] = b.name.split("/");
       return new Date(Number(y1), Number(m1) - 1).getTime() - new Date(Number(y2), Number(m2) - 1).getTime();
@@ -155,7 +161,7 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
 
   const ocupacaoMensal = useMemo(() => {
     const records: Record<string, { ocupacaoTotal: number, count: number }> = {};
-    taxasOcupacaoImportadas.forEach(t => {
+    ocupacao.forEach(t => {
       const m = t.mesAno || "Geral";
       if (!records[m]) records[m] = { ocupacaoTotal: 0, count: 0 };
       records[m].ocupacaoTotal += t.taxaOcupacao;
@@ -171,7 +177,7 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
       const [m2, y2] = b.name.split("/");
       return new Date(Number(y1), Number(m1) - 1).getTime() - new Date(Number(y2), Number(m2) - 1).getTime();
     });
-  }, []);
+  }, [ocupacao]);
 
   const topProdutos = useMemo(() => {
     const nomeProdutos = new Set(catalogoProdutos.map(p => p.nome.toLowerCase()));
@@ -192,21 +198,50 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
 
   // Preparando dados para Gráfico: Ocupação Geral (do mês selecionado)
   const ocupacaoGeral = useMemo(() => {
-    const profs = getProfissionaisUnicos(filteredData);
+    const profs = getProfissionaisUnicos(filteredData, ocupacao);
     
     return profs.map(prof => {
       const normalized = normalizeProfName(prof);
-      const rec = (selectedMes && selectedMes !== "Todos") 
-        ? taxasOcupacaoImportadas.find(t => normalizeProfName(t.profissional) === normalized && t.mesAno === selectedMes)
-        : taxasOcupacaoImportadas.find(t => normalizeProfName(t.profissional) === normalized);
+      const rec = (selectedMes && selectedMes !== "Todos")
+        ? ocupacao.find(t => normalizeProfName(t.profissional) === normalized && t.mesAno === selectedMes)
+        : ocupacao.find(t => normalizeProfName(t.profissional) === normalized);
       const taxa = rec ? rec.taxaOcupacao * 100 : 0;
-      
+
       return {
         name: prof.split(" ")[0],
         "Ocupação %": Number(taxa.toFixed(1))
       };
     }).sort((a, b) => b["Ocupação %"] - a["Ocupação %"]);
-  }, [filteredData, selectedMes]);
+  }, [filteredData, selectedMes, ocupacao]);
+
+  // Ticket médio geral do salão (faturamento / itens vendidos no período selecionado)
+  const ticketMedioGeral = filteredData.length > 0 ? totalFaturado / filteredData.length : 0;
+
+  // Ticket médio por profissional, pra comparar com a média do salão
+  const ticketMedioPorProfissional = useMemo(() => {
+    const profs = getProfissionaisUnicos(filteredData, ocupacao);
+    return profs.map(p => {
+      const docs = filteredData.filter(d => d.profissional === p);
+      const faturado = docs.reduce((acc, curr) => acc + curr.valorBruto, 0);
+      return {
+        name: p.split(" ")[0],
+        Ticket: docs.length > 0 ? Number((faturado / docs.length).toFixed(2)) : 0
+      };
+    }).sort((a, b) => b.Ticket - a.Ticket);
+  }, [filteredData, ocupacao]);
+
+  // Ocupação média do salão no período (com e sem o Tiago, que costuma puxar a média pra cima)
+  const { ocupacaoMediaSalao, ocupacaoMediaSemTiago } = useMemo(() => {
+    const relevantes = (selectedMes && selectedMes !== "Todos")
+      ? ocupacao.filter(t => t.mesAno === selectedMes)
+      : ocupacao;
+    const semTiago = relevantes.filter(t => normalizeProfName(t.profissional) !== "Tiago");
+    const media = (arr: TaxaOcupacaoImportada[]) => arr.length > 0 ? (arr.reduce((acc, t) => acc + t.taxaOcupacao, 0) / arr.length) * 100 : 0;
+    return {
+      ocupacaoMediaSalao: media(relevantes),
+      ocupacaoMediaSemTiago: media(semTiago),
+    };
+  }, [ocupacao, selectedMes]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -253,9 +288,11 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
         </div>
       </div>
 
+      <div className="divider-text">Indicadores do Período</div>
+
       {/* Indicadores Principais */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.5rem" }}>
-        
+
         {/* Faturamento */}
         <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
           <div style={{ background: "rgba(212,175,140,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-gold)" }}>
@@ -295,6 +332,45 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
           </div>
         </div>
 
+        {/* Ticket Médio Geral */}
+        <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+          <div style={{ background: "rgba(52,152,219,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-info)" }}>
+            <Ticket size={24} />
+          </div>
+          <div>
+            <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Ticket Médio Geral</p>
+            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "var(--color-info)", fontWeight: 800 }}>
+              {brl(ticketMedioGeral)}
+            </h3>
+          </div>
+        </div>
+
+        {/* Ocupação Total do Salão */}
+        <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+          <div style={{ background: "rgba(155,89,182,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "#9b59b6" }}>
+            <Percent size={24} />
+          </div>
+          <div>
+            <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Ocupação Total do Salão</p>
+            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "#9b59b6", fontWeight: 800 }}>
+              {ocupacaoMediaSalao.toFixed(1)}%
+            </h3>
+          </div>
+        </div>
+
+        {/* Ocupação sem Tiago */}
+        <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+          <div style={{ background: "rgba(155,89,182,0.08)", padding: "0.75rem", borderRadius: "0.75rem", color: "#c39bd3" }}>
+            <Percent size={24} />
+          </div>
+          <div>
+            <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Ocupação sem Tiago</p>
+            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "#c39bd3", fontWeight: 800 }}>
+              {ocupacaoMediaSemTiago.toFixed(1)}%
+            </h3>
+          </div>
+        </div>
+
         {/* Meta */}
         <div className="card-gold" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -327,15 +403,17 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
         </div>
       </div>
 
+      <div className="divider-text">Análise Gráfica</div>
+
       {/* Gráficos */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem" }}>
-        
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.5rem" }}>
+
         {/* Faturamento por Profissional */}
         <div className="card">
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Award size={18} color="var(--color-gold)" /> Faturamento x Comissão por Profissional
           </h3>
-          <div style={{ width: '100%', height: 300 }}>
+          <div style={{ width: '100%', height: 260 }}>
             <ResponsiveContainer>
               <BarChart data={faturamentoPorBarbeiro} margin={{ top: 25, right: 0, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
@@ -396,80 +474,98 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
           </div>
         </div>
 
+        {/* Ticket Médio por Profissional, comparado com a média do salão */}
+        <div className="card">
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Ticket size={18} color="var(--color-gold)" /> Ticket Médio por Profissional
+          </h3>
+          <p style={{ fontSize: "0.78rem", color: "var(--color-muted)", margin: "0 0 1rem 0" }}>Quem está vendendo bem acima ou abaixo da média do salão (linha tracejada)</p>
+          <div style={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer>
+              <BarChart data={ticketMedioPorProfissional} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
+                <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
+                <Tooltip contentStyle={{ background: "rgba(22,15,16,0.9)", border: "1px solid var(--color-border)", borderRadius: "8px" }} formatter={(value: any) => [brl(Number(value)), 'Ticket Médio']} />
+                <ReferenceLine y={ticketMedioGeral} stroke="var(--color-gold)" strokeDasharray="4 3" label={{ value: `Média: ${brl(ticketMedioGeral)}`, position: 'insideTopRight', fill: 'var(--color-gold)', fontSize: 11 }} />
+                <Bar dataKey="Ticket" radius={[4, 4, 0, 0]} maxBarSize={45}>
+                  {ticketMedioPorProfissional.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.Ticket >= ticketMedioGeral ? "#2ecc71" : "#e74c3c"} />
+                  ))}
+                  <LabelList dataKey="Ticket" position="top" fontSize={10} fill="var(--color-cream-dim)" formatter={(v: any) => brl(Number(v))} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
       </div>
 
       {/* Gráfico de Ocupação Geral */}
       <div className="card">
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <Users size={18} color="var(--color-gold)" /> Comparativo de Ocupação (Equipe)
         </h3>
-        <div style={{ width: '100%', height: 250 }}>
+        <div style={{ width: '100%', height: Math.max(150, ocupacaoGeral.length * 36 + 30) }}>
           <ResponsiveContainer>
-            <BarChart data={ocupacaoGeral} margin={{ top: 5, right: 0, left: -20, bottom: 5 }} layout="vertical">
+            <BarChart data={ocupacaoGeral} margin={{ top: 5, right: 35, left: 0, bottom: 5 }} layout="vertical" barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" horizontal={false} />
-              <XAxis type="number" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
-              <YAxis dataKey="name" type="category" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
+              <XAxis type="number" stroke="#7a6060" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} domain={[0, 100]} />
+              <YAxis dataKey="name" type="category" width={72} stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip contentStyle={{ background: "rgba(22,15,16,0.9)", border: "1px solid var(--color-border)", borderRadius: "8px" }} formatter={(value: any) => [`${value}%`, 'Ocupação']} />
-              <Bar dataKey="Ocupação %" fill="#9b59b6" radius={[0, 4, 4, 0]} maxBarSize={30} />
+              <Bar dataKey="Ocupação %" fill="#9b59b6" radius={[0, 4, 4, 0]} maxBarSize={22}>
+                <LabelList dataKey="Ocupação %" position="right" formatter={(v: any) => `${v}%`} fill="#c39bd3" fontSize={12} fontWeight={600} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* NOVO: Gráfico Retroativo de Serviços vs Produtos vs Comissão */}
-      <div className="card" style={{ marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-          <div>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <TrendingUp size={18} color="var(--color-gold)" /> Evolução Mensal Retroativa: Serviços, Produtos e Comissões
-            </h3>
-            <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "4px 0 0 0" }}>Acompanhamento retroativo mês a mês do volume faturado em serviços, vendas de produtos e comissões da equipe</p>
-          </div>
+      {/* Evolução Mensal: Serviços + Produtos empilhados (soma = faturamento) com a Comissão sobreposta como linha */}
+      <div className="card">
+        <div style={{ marginBottom: "1.25rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <TrendingUp size={18} color="var(--color-gold)" /> Evolução Mensal: Composição do Faturamento
+          </h3>
+          <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "4px 0 0 0" }}>Uma coluna por mês (Serviços + Produtos empilhados = faturamento total), com a comissão paga sobreposta em linha</p>
         </div>
-        <div style={{ width: '100%', height: 300 }}>
+        <div style={{ width: '100%', height: 260 }}>
           <ResponsiveContainer>
-            <BarChart data={evolucaoServicosProdutosMensal} margin={{ top: 25, right: 20, left: 10, bottom: 5 }}>
+            <ComposedChart data={evolucaoServicosProdutosMensal} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
               <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: "10px" }} />
-              <Bar dataKey="Serviços (R$)" fill="#d4af8c" radius={[4, 4, 0, 0]} maxBarSize={45}
-                label={{ position: 'top', fontSize: 10, fill: '#d4af8c', formatter: (v: any) => v > 0 ? `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '' }}
-              />
-              <Bar dataKey="Produtos (R$)" fill="#3498db" radius={[4, 4, 0, 0]} maxBarSize={45}
-                label={{ position: 'top', fontSize: 10, fill: '#3498db', formatter: (v: any) => v > 0 ? `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '' }}
-              />
-              <Bar dataKey="Comissão (R$)" fill="#2ecc71" radius={[4, 4, 0, 0]} maxBarSize={45}
-                label={{ position: 'top', fontSize: 10, fill: '#2ecc71', formatter: (v: any) => v > 0 ? `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '' }}
-              />
-            </BarChart>
+              <Bar dataKey="Serviços (R$)" stackId="fat" fill="#d4af8c" maxBarSize={55} />
+              <Bar dataKey="Produtos (R$)" stackId="fat" fill="#3498db" radius={[4, 4, 0, 0]} maxBarSize={55} />
+              <Line type="monotone" dataKey="Comissão (R$)" stroke="#2ecc71" strokeWidth={3} dot={{ fill: '#2ecc71', r: 4 }} activeDot={{ r: 6 }} />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* NOVO: Gráficos Históricos e de Produtos */}
+      <div className="divider-text">Histórico e Ranking</div>
+
+      {/* Gráficos Históricos e de Produtos */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1.5rem" }}>
-        
-        {/* Faturamento x Comissão Mensal */}
+
+        {/* Retenção do Salão x Comissão Mensal (empilhado — a soma das duas é o faturamento total) */}
         <div className="card">
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <TrendingUp size={18} color="var(--color-gold)" /> Histórico Mensal (Financeiro)
           </h3>
-          <div style={{ width: '100%', height: 250 }}>
+          <p style={{ fontSize: "0.78rem", color: "var(--color-muted)", margin: "0 0 1rem 0" }}>Como o faturamento de cada mês se divide entre o que fica com o salão e o que vai de comissão</p>
+          <div style={{ width: '100%', height: 230 }}>
             <ResponsiveContainer>
-              <BarChart data={faturamentoMensal} margin={{ top: 25, right: 0, left: 0, bottom: 5 }}>
+              <BarChart data={faturamentoMensal} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
                 <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                <Bar dataKey="Faturamento" fill="#d4af8c" radius={[4, 4, 0, 0]} maxBarSize={40}
-                  label={{ position: 'top', fontSize: 10, fill: '#d4af8c', formatter: (v: any) => `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` }}
-                />
-                <Bar dataKey="Comissão" fill="#e74c3c" radius={[4, 4, 0, 0]} maxBarSize={40}
-                  label={{ position: 'top', fontSize: 10, fill: '#e74c3c', formatter: (v: any) => `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` }}
-                />
+                <Bar dataKey="Retenção do Salão" stackId="fin" fill="#2ecc71" maxBarSize={45} />
+                <Bar dataKey="Comissão" stackId="fin" fill="#e74c3c" radius={[4, 4, 0, 0]} maxBarSize={45} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -477,10 +573,10 @@ export default function DashboardBI({ data, metas }: DashboardBIProps) {
 
         {/* Taxa de Ocupação Mensal */}
         <div className="card">
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Users size={18} color="var(--color-blue)" /> Evolução da Taxa de Ocupação
           </h3>
-          <div style={{ width: '100%', height: 250 }}>
+          <div style={{ width: '100%', height: 230 }}>
             <ResponsiveContainer>
               <LineChart data={ocupacaoMensal} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
