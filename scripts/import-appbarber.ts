@@ -1,10 +1,12 @@
 /**
- * Importa automaticamente os relatórios do AppBarber salvos em Downloads/AppBarber.
+ * Importa automaticamente os relatórios do AppBarber salvos em Downloads/AppBarber
+ * e Downloads/AppBarber Financeiro.
  *
  * Convenção de pastas:
  *   Downloads/AppBarber/*.xlsx                        -> planilhas de COMISSÕES (têm a coluna "Profissional")
  *   Downloads/AppBarber/Ocupacao/<Nome>/*.xlsx         -> planilhas de TAXA DE OCUPAÇÃO (uma subpasta por profissional,
  *                                                         pois essa planilha não tem coluna de profissional)
+ *   Downloads/AppBarber Financeiro/*.xlsx              -> planilha "Realizado" do DRE (sistema contábil)
  *
  * Uso:
  *   npm run import:appbarber          (roda uma vez e sai — use isso no Agendador de Tarefas do Windows)
@@ -28,6 +30,7 @@ import {
   buildTaxaOcupacaoPayload,
   DesempenhoProfissional,
 } from "../src/lib/performance-data";
+import { parseDreExcelRows } from "../src/lib/dre-data";
 
 // Carrega o .env da raiz do projeto manualmente (este script roda fora do Next.js, que faz isso sozinho)
 function loadEnvFile() {
@@ -52,6 +55,7 @@ loadEnvFile();
 const HOME = os.homedir();
 const BASE_DIR = process.env.APPBARBER_WATCH_DIR || path.join(HOME, "Downloads", "AppBarber");
 const OCUPACAO_DIR = path.join(BASE_DIR, "Ocupacao");
+const FINANCEIRO_DIR = process.env.APPBARBER_FINANCEIRO_DIR || path.join(HOME, "Downloads", "AppBarber Financeiro");
 const WATCH_INTERVAL_MS = 30_000;
 const LOCK_PATH = path.join(BASE_DIR, ".import-lock");
 const LOCK_STALE_MS = 5 * 60 * 1000; // se um lock ficar parado por mais que isso, é lixo de uma execução anterior que travou
@@ -144,6 +148,30 @@ async function ensureTables(sql: Sql) {
       UNIQUE(profissional, "mesAno")
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS "DreLinha" (
+      id TEXT PRIMARY KEY,
+      ano INTEGER NOT NULL,
+      ordem INTEGER NOT NULL,
+      resultado TEXT NOT NULL,
+      "totalAno" FLOAT NOT NULL,
+      jan FLOAT NOT NULL DEFAULT 0,
+      fev FLOAT NOT NULL DEFAULT 0,
+      mar FLOAT NOT NULL DEFAULT 0,
+      abr FLOAT NOT NULL DEFAULT 0,
+      mai FLOAT NOT NULL DEFAULT 0,
+      jun FLOAT NOT NULL DEFAULT 0,
+      jul FLOAT NOT NULL DEFAULT 0,
+      ago FLOAT NOT NULL DEFAULT 0,
+      "set" FLOAT NOT NULL DEFAULT 0,
+      out FLOAT NOT NULL DEFAULT 0,
+      nov FLOAT NOT NULL DEFAULT 0,
+      dez FLOAT NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE(ano, ordem)
+    )
+  `;
 }
 
 // Mesma lógica de upsert do POST /api/performance/comissoes (apaga o mês do profissional e reinsere)
@@ -194,6 +222,21 @@ async function upsertOcupacao(sql: Sql, payload: ReturnType<typeof buildTaxaOcup
       "tempoJornadaStr" = EXCLUDED."tempoJornadaStr",
       "updatedAt" = NOW()
   `;
+}
+
+// Mesma lógica de upsert do POST /api/financeiro/dre — substitui o ano inteiro
+// (o relatório "Realizado" é sempre um snapshot completo do ano até a data da exportação)
+async function upsertDreAno(sql: Sql, ano: number, linhas: Omit<import("../src/lib/dre-data").DreLinhaImportada, "ordem">[]) {
+  await sql`DELETE FROM "DreLinha" WHERE ano = ${ano}`;
+
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    await sql`
+      INSERT INTO "DreLinha" (id, ano, ordem, resultado, "totalAno", jan, fev, mar, abr, mai, jun, jul, ago, "set", out, nov, dez, "updatedAt")
+      VALUES (${`${ano}-${i}`}, ${ano}, ${i}, ${l.resultado}, ${l.totalAno},
+        ${l.jan}, ${l.fev}, ${l.mar}, ${l.abr}, ${l.mai}, ${l.jun}, ${l.jul}, ${l.ago}, ${l.set}, ${l.out}, ${l.nov}, ${l.dez}, NOW())
+    `;
+  }
 }
 
 function listPlanilhas(dir: string): string[] {
@@ -253,6 +296,19 @@ async function processOcupacaoFile(sql: Sql, filePath: string, profissionalPasta
   }
 }
 
+async function processFinanceiroFile(sql: Sql, filePath: string) {
+  const wb = xlsx.readFile(filePath);
+  const sheetName = wb.SheetNames.includes("Realizado") ? "Realizado" : wb.SheetNames[0];
+  const jsonData = xlsx.utils.sheet_to_json(wb.Sheets[sheetName]);
+  if (jsonData.length === 0) throw new Error("planilha vazia");
+
+  const { ano, linhas } = parseDreExcelRows(jsonData);
+  if (linhas.length === 0) throw new Error("nenhuma linha de DRE reconhecida (colunas da planilha não batem com o esperado)");
+
+  await upsertDreAno(sql, ano, linhas);
+  log(`   -> DRE ${ano}: ${linhas.length} linhas gravadas`);
+}
+
 async function runOnce(): Promise<{ processados: number; falhas: number; skipped?: boolean }> {
   if (!acquireLock()) {
     log("Outra execucao do importador ja esta rodando agora (lock ativo) - pulando esta rodada.");
@@ -301,6 +357,21 @@ async function runOnce(): Promise<{ processados: number; falhas: number; skipped
         }
       }
     }
+
+    // 3. Financeiro (DRE) — Downloads/AppBarber Financeiro/*.xlsx
+    for (const file of listPlanilhas(FINANCEIRO_DIR)) {
+      const nome = path.basename(file);
+      try {
+        log(`\n[financeiro] ${nome}`);
+        await processFinanceiroFile(sql, file);
+        await unlinkWithRetry(file);
+        log(`   arquivo removido apos importacao`);
+        processados++;
+      } catch (err: any) {
+        logError(`   ERRO: ${err.message} - arquivo mantido para revisao`);
+        falhas++;
+      }
+    }
   } finally {
     await sql.end();
     releaseLock();
@@ -315,6 +386,7 @@ async function main() {
   log(`\n=== ${new Date().toLocaleString("pt-BR")} ===`);
   log(`Monitorando: ${BASE_DIR}`);
   log(`Ocupacao (por profissional): ${OCUPACAO_DIR}`);
+  log(`Financeiro (DRE): ${FINANCEIRO_DIR}`);
 
   if (!watchMode) {
     const { processados, falhas } = await runOnce();

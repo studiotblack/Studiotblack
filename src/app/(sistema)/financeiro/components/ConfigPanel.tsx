@@ -1,176 +1,72 @@
 "use client";
 
-import { useState } from "react";
-import { Settings, Plus, Trash2, Edit2, Save, X } from "lucide-react";
-import type { DREGrupo, CategoriasConfig } from "@/lib/dre-data";
-import { CATEGORIAS_DEFAULT, GRUPO_LABELS } from "@/lib/dre-data";
+import { Settings, FolderTree, ListTree, Info } from "lucide-react";
+import type { DreLinhaImportada } from "@/lib/dre-data";
+import { isDreLinhaDetalhe } from "@/lib/dre-data";
 
-export default function ConfigPanel() {
-  // Inicializamos com o default. Na vida real, isso viria de uma API/BD.
-  const [config, setConfig] = useState<CategoriasConfig>(CATEGORIAS_DEFAULT);
-  
-  const [activeGroup, setActiveGroup] = useState<DREGrupo>("receita");
-  const [editingSub, setEditingSub] = useState<string | null>(null);
-  const [newSubName, setNewSubName] = useState("");
-  
-  const [newSubSubName, setNewSubSubName] = useState("");
-  const [addingToSub, setAddingToSub] = useState<string | null>(null);
+interface ConfigPanelProps {
+  linhas: DreLinhaImportada[];
+  ano: number;
+}
 
-  const addSubcategoria = () => {
-    if (!newSubName.trim()) return;
-    setConfig(prev => ({
-      ...prev,
-      [activeGroup]: {
-        ...prev[activeGroup],
-        [newSubName.trim()]: []
-      }
-    }));
-    setNewSubName("");
-  };
-
-  const removeSubcategoria = (sub: string) => {
-    if (!confirm(`Remover categoria "${sub}" e todas as suas subcategorias?`)) return;
-    setConfig(prev => {
-      const copy = { ...prev };
-      const groupCopy = { ...copy[activeGroup] };
-      delete groupCopy[sub];
-      copy[activeGroup] = groupCopy;
-      return copy;
-    });
-  };
-
-  const addSubSubcategoria = (sub: string) => {
-    if (!newSubSubName.trim()) return;
-    setConfig(prev => {
-      const copy = { ...prev };
-      copy[activeGroup] = {
-        ...copy[activeGroup],
-        [sub]: [...(copy[activeGroup][sub] || []), newSubSubName.trim()]
-      };
-      return copy;
-    });
-    setNewSubSubName("");
-    setAddingToSub(null);
-  };
-
-  const removeSubSubcategoria = (sub: string, subsub: string) => {
-    setConfig(prev => {
-      const copy = { ...prev };
-      copy[activeGroup] = {
-        ...copy[activeGroup],
-        [sub]: copy[activeGroup][sub].filter(s => s !== subsub)
-      };
-      return copy;
-    });
-  };
+export default function ConfigPanel({ linhas, ano }: ConfigPanelProps) {
+  const grupos = linhas.filter(l => !isDreLinhaDetalhe(l.resultado) && l.resultado.trim() !== "%");
+  const contas = linhas.filter(l => isDreLinhaDetalhe(l.resultado));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <div>
         <h2 style={{ fontSize: "1.5rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <Settings color="var(--color-gold)" size={24} />
-          Configuração da DRE
+          Estrutura do DRE
         </h2>
         <p style={{ color: "var(--color-muted)", fontSize: "0.9rem", marginTop: "0.25rem" }}>
-          Gerencie as categorias e subcategorias (3 níveis) da sua Demonstração de Resultado.
+          A estrutura vem direto do relatório &quot;Realizado&quot; do seu sistema contábil — não há categorias pra configurar manualmente aqui.
         </p>
       </div>
 
-      <div style={{ display: "flex", gap: "2rem", alignItems: "flex-start", flexWrap: "wrap" }}>
-        
-        {/* Menu Lateral de Grupos */}
-        <div style={{ width: "250px", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {(["receita", "custo", "despesa", "investimento", "financiamento"] as DREGrupo[]).map(g => (
-            <button
-              key={g}
-              onClick={() => setActiveGroup(g)}
-              style={{
-                padding: "1rem", borderRadius: "0.75rem", textAlign: "left",
-                fontWeight: 700, fontSize: "0.9rem", cursor: "pointer", transition: "all 0.2s",
-                background: activeGroup === g ? "var(--color-gold)" : "var(--color-surface-2)",
-                color: activeGroup === g ? "var(--color-bg)" : "var(--color-cream)",
-                border: "none"
-              }}
-            >
-              {GRUPO_LABELS[g]}
-            </button>
-          ))}
-        </div>
-
-        {/* Área Principal de Edição */}
-        <div style={{ flex: 1, minWidth: "300px", background: "var(--color-surface)", padding: "2rem", borderRadius: "1rem", border: "1px solid var(--color-border)" }}>
-          <h3 style={{ fontSize: "1.25rem", fontWeight: 800, marginBottom: "1.5rem", color: "var(--color-gold)" }}>
-            Categorias de {GRUPO_LABELS[activeGroup]}
-          </h3>
-
-          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem" }}>
-            <input 
-              type="text" 
-              placeholder="Nova Categoria..."
-              value={newSubName}
-              onChange={e => setNewSubName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && addSubcategoria()}
-              style={{ flex: 1, padding: "0.75rem 1rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "white" }}
-            />
-            <button className="btn btn-gold" onClick={addSubcategoria} style={{ padding: "0 1rem" }}>
-              <Plus size={18} /> Adicionar
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {Object.keys(config[activeGroup]).map(sub => (
-              <div key={sub} style={{ background: "var(--color-surface-2)", borderRadius: "0.75rem", border: "1px solid var(--color-border)", overflow: "hidden" }}>
-                
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem", background: "rgba(0,0,0,0.2)" }}>
-                  <span style={{ fontWeight: 800, fontSize: "1rem" }}>{sub}</span>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <button onClick={() => setAddingToSub(addingToSub === sub ? null : sub)} style={{ background: "none", border: "none", color: "var(--color-success)", cursor: "pointer", padding: "0.25rem" }} title="Adicionar Detalhe">
-                      <Plus size={16} />
-                    </button>
-                    <button onClick={() => removeSubcategoria(sub)} style={{ background: "none", border: "none", color: "var(--color-danger)", cursor: "pointer", padding: "0.25rem" }}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ padding: "1rem" }}>
-                  {config[activeGroup][sub].length === 0 ? (
-                    <p style={{ color: "var(--color-muted)", fontSize: "0.85rem", fontStyle: "italic" }}>Sem detalhes adicionais</p>
-                  ) : (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                      {config[activeGroup][sub].map(subsub => (
-                        <div key={subsub} style={{ background: "var(--color-bg)", padding: "0.25rem 0.75rem", borderRadius: "1rem", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.5rem", border: "1px solid var(--color-border)" }}>
-                          {subsub}
-                          <button onClick={() => removeSubSubcategoria(sub, subsub)} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer", padding: 0, display: "flex" }}>
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {addingToSub === sub && (
-                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-                      <input 
-                        type="text" 
-                        placeholder="Novo Detalhe..."
-                        value={newSubSubName}
-                        onChange={e => setNewSubSubName(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && addSubSubcategoria(sub)}
-                        style={{ flex: 1, padding: "0.5rem 0.75rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px dashed var(--color-border)", color: "white", fontSize: "0.85rem" }}
-                        autoFocus
-                      />
-                      <button className="btn btn-ghost" onClick={() => addSubSubcategoria(sub)} style={{ padding: "0.5rem" }}>Salvar</button>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            ))}
-          </div>
-
-        </div>
+      <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", background: "rgba(52,152,219,0.06)", borderColor: "rgba(52,152,219,0.25)" }}>
+        <Info size={18} color="var(--color-info)" style={{ flexShrink: 0, marginTop: 2 }} />
+        <p style={{ fontSize: "0.85rem", color: "var(--color-cream-dim)", margin: 0, lineHeight: 1.6 }}>
+          Toda vez que você exporta o &quot;Realizado&quot; do seu sistema contábil e salva em <strong>Downloads/AppBarber Financeiro</strong>,
+          o sistema recarrega o ano inteiro automaticamente — na mesma ordem e com os mesmos nomes de conta do Excel.
+          Não existe edição manual de categoria: se uma conta nova aparecer no seu contador, ela aparece aqui na próxima importação.
+        </p>
       </div>
+
+      {linhas.length === 0 ? (
+        <div className="card" style={{ textAlign: "center", padding: "3rem 2rem", color: "var(--color-muted)" }}>
+          Nenhum DRE importado ainda para {ano}.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
+          <div className="card">
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--color-gold)" }}>
+              <FolderTree size={16} /> Grupos e Totais ({grupos.length})
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: 360, overflowY: "auto" }}>
+              {grupos.map((g, i) => (
+                <div key={i} style={{ fontSize: "0.8rem", color: "var(--color-cream-dim)", padding: "0.35rem 0.5rem", borderRadius: "0.375rem", background: "var(--color-surface-2)" }}>
+                  {g.resultado}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--color-gold)" }}>
+              <ListTree size={16} /> Contas de Detalhe ({contas.length})
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: 360, overflowY: "auto" }}>
+              {contas.map((c, i) => (
+                <div key={i} style={{ fontSize: "0.78rem", color: "var(--color-muted)", padding: "0.3rem 0.5rem" }}>
+                  {c.resultado}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

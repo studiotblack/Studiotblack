@@ -250,3 +250,30 @@ model TaxaOcupacao {
   @@unique([profissional, mesAno])
 }
 
+// DRE importado do relatório "Realizado" do sistema contábil — uma linha por conta,
+// na ordem exata do arquivo (o mesmo rótulo pode se repetir em posições diferentes
+// com totais diferentes, então a chave de identidade é (ano, ordem), não o rótulo).
+model DreLinha {
+  id        String   @id @default(uuid())
+  ano       Int
+  ordem     Int      // posição da linha no arquivo original
+  resultado String   // nome da linha: cabeçalho de grupo ou conta com código contábil
+  totalAno  Float
+  jan       Float    @default(0)
+  fev       Float    @default(0)
+  mar       Float    @default(0)
+  abr       Float    @default(0)
+  mai       Float    @default(0)
+  jun       Float    @default(0)
+  jul       Float    @default(0)
+  ago       Float    @default(0)
+  set       Float    @default(0)
+  out       Float    @default(0)
+  nov       Float    @default(0)
+  dez       Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ano, ordem])
+}
+

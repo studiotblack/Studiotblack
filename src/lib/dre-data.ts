@@ -215,3 +215,79 @@ export function getVariacaoCaixa(lancamentos: DRELancamento[], mes: number) {
 export const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 export const MESES_FULL  = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 export const MESES = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+// ── DRE Real (importado do Excel "Realizado" do sistema contábil) ──────────
+// Diferente do DRELancamento (lançamento por lançamento numa taxonomia inventada),
+// isto é o DRE JÁ PRONTO como vem do relatório contábil: uma linha por conta,
+// na ordem exata do arquivo, com o valor mensal já calculado. Fielmente reproduzido,
+// sem reclassificar nada — é assim que o contador já entrega.
+
+export interface DreLinhaImportada {
+  ordem: number;         // posição da linha no arquivo original — preserva a ordem exata do DRE
+  resultado: string;     // nome da linha: cabeçalho de grupo ("RECEITAS OPERACIONAIS") ou conta com código ("1.1.1.01.001-Venda de Serviços")
+  totalAno: number;
+  jan: number; fev: number; mar: number; abr: number; mai: number; jun: number;
+  jul: number; ago: number; set: number; out: number; nov: number; dez: number;
+}
+
+// Linhas com código contábil (ex: "1.1.1.01.001-...") são contas de detalhe (indentadas);
+// as demais são cabeçalhos de grupo ou totais calculados (em negrito, como no Excel).
+export const isDreLinhaDetalhe = (resultado: string): boolean => /^\d/.test(resultado.trim());
+
+const DRE_MESES_KEYS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"] as const;
+
+// Converte as linhas cruas da planilha "Realizado" (xlsx.utils.sheet_to_json) pro formato acima.
+// Filtra a linha de cabeçalho repetida no meio/fim do arquivo (ex: "Indicadores" com "Jan","Fev"... como texto em vez de número).
+export function parseDreExcelRows(jsonData: any[]): { ano: number; linhas: Omit<DreLinhaImportada, "ordem">[] } {
+  if (jsonData.length === 0) return { ano: new Date().getFullYear(), linhas: [] };
+  const keys = Object.keys(jsonData[0]);
+  const anoKey = keys.find(k => k !== "Resultado" && !(DRE_MESES_KEYS as readonly string[]).includes(k));
+  const ano = anoKey ? (parseInt(anoKey, 10) || new Date().getFullYear()) : new Date().getFullYear();
+
+  const linhas = jsonData
+    .filter(row => row["Resultado"] && typeof row["Jan"] === "number")
+    .map(row => ({
+      resultado: String(row["Resultado"]).trim(),
+      totalAno: anoKey ? Number(row[anoKey]) || 0 : 0,
+      jan: Number(row["Jan"]) || 0,
+      fev: Number(row["Fev"]) || 0,
+      mar: Number(row["Mar"]) || 0,
+      abr: Number(row["Abr"]) || 0,
+      mai: Number(row["Mai"]) || 0,
+      jun: Number(row["Jun"]) || 0,
+      jul: Number(row["Jul"]) || 0,
+      ago: Number(row["Ago"]) || 0,
+      set: Number(row["Set"]) || 0,
+      out: Number(row["Out"]) || 0,
+      nov: Number(row["Nov"]) || 0,
+      dez: Number(row["Dez"]) || 0,
+    }));
+
+  return { ano, linhas };
+}
+
+// Deriva os indicadores de gestão direto das linhas já calculadas pelo contador —
+// sem reinventar nenhuma conta, só localiza e lê os totais que o próprio DRE já traz.
+export function computeIndicadoresDre(linhas: DreLinhaImportada[]) {
+  const acharTotal = (nomeExato: string) => linhas.find(l => l.resultado === nomeExato)?.totalAno ?? 0;
+  const somarQueContem = (trecho: string) => linhas
+    .filter(l => isDreLinhaDetalhe(l.resultado) && l.resultado.toLowerCase().includes(trecho.toLowerCase()))
+    .reduce((acc, l) => acc + l.totalAno, 0);
+
+  const receitaTotal = acharTotal("RECEITAS OPERACIONAIS");
+  const resultadoOperacional = acharTotal("RESULTADO OPERACIONAL");
+  const margemContribuicao = acharTotal("Margem de contribuição");
+  const aluguelTotal = Math.abs(somarQueContem("aluguel"));
+  const comissoesTotal = Math.abs(somarQueContem("comiss"));
+
+  return {
+    receitaTotal,
+    resultadoOperacional,
+    margemContribuicao,
+    aluguelTotal,
+    comissoesTotal,
+    pctAluguel: receitaTotal > 0 ? (aluguelTotal / receitaTotal) * 100 : 0,
+    pctComissoes: receitaTotal > 0 ? (comissoesTotal / receitaTotal) * 100 : 0,
+    margemOperacional: receitaTotal > 0 ? (resultadoOperacional / receitaTotal) * 100 : 0,
+  };
+}

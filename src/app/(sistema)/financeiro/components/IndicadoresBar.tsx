@@ -1,37 +1,21 @@
 "use client";
 
 import { TrendingUp, TrendingDown, AlertTriangle, BarChart2, Percent } from "lucide-react";
-import type { DRELancamento } from "@/lib/dre-data";
-import {
-  getTotalByGroupAndSubcat, getTotalByGroup,
-  getResultadoOperacional, MESES,
-} from "@/lib/dre-data";
+import type { DreLinhaImportada } from "@/lib/dre-data";
+import { computeIndicadoresDre } from "@/lib/dre-data";
 
 interface IndicadoresBarProps {
-  lancamentos: DRELancamento[];
+  linhas: DreLinhaImportada[];
 }
 
 const fmt = (v: number, decimals = 1) => `${v.toFixed(decimals)}%`;
 const fmtR = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-export default function IndicadoresBar({ lancamentos }: IndicadoresBarProps) {
-  // Totais anuais
-  const receitaTotal = [1,2,3,4,5,6,7,8,9,10,11,12].reduce(
-    (acc, mes) => acc + getTotalByGroup(lancamentos, "receita", mes), 0
-  );
-  const aluguelTotal = [1,2,3,4,5,6,7,8,9,10,11,12].reduce(
-    (acc, mes) => acc + getTotalByGroupAndSubcat(lancamentos, "despesa", "Aluguel", mes), 0
-  );
-  const comissoesTotal = [1,2,3,4,5,6,7,8,9,10,11,12].reduce(
-    (acc, mes) => acc + getTotalByGroupAndSubcat(lancamentos, "custo", "Comissões", mes), 0
-  );
-  const resultadoOpTotal = [1,2,3,4,5,6,7,8,9,10,11,12].reduce(
-    (acc, mes) => acc + getResultadoOperacional(lancamentos, mes), 0
-  );
-
-  const pctAluguel     = receitaTotal > 0 ? (aluguelTotal / receitaTotal) * 100 : 0;
-  const pctComissoes   = receitaTotal > 0 ? (comissoesTotal / receitaTotal) * 100 : 0;
-  const margemOp       = receitaTotal > 0 ? (resultadoOpTotal / receitaTotal) * 100 : 0;
+export default function IndicadoresBar({ linhas }: IndicadoresBarProps) {
+  const {
+    receitaTotal, resultadoOperacional, aluguelTotal, comissoesTotal,
+    pctAluguel, pctComissoes, margemOperacional,
+  } = computeIndicadoresDre(linhas);
 
   const aluguelAlert = pctAluguel > 10;
 
@@ -40,7 +24,7 @@ export default function IndicadoresBar({ lancamentos }: IndicadoresBarProps) {
       id: "aluguel",
       label: "Aluguel / Receita",
       value: fmt(pctAluguel),
-      sub: `R$ ${fmtR(aluguelTotal)} do total`,
+      sub: `${fmtR(aluguelTotal)} do total`,
       alert: aluguelAlert,
       alertMsg: "Acima de 10% da receita",
       icon: aluguelAlert ? AlertTriangle : BarChart2,
@@ -52,7 +36,7 @@ export default function IndicadoresBar({ lancamentos }: IndicadoresBarProps) {
       id: "comissoes",
       label: "Comissões / Receita",
       value: fmt(pctComissoes),
-      sub: `R$ ${fmtR(comissoesTotal)} do total`,
+      sub: `${fmtR(comissoesTotal)} do total`,
       alert: false,
       alertMsg: "",
       icon: Percent,
@@ -63,20 +47,20 @@ export default function IndicadoresBar({ lancamentos }: IndicadoresBarProps) {
     {
       id: "margem",
       label: "Margem Operacional",
-      value: fmt(margemOp),
-      sub: `R$ ${fmtR(resultadoOpTotal)} resultado`,
-      alert: margemOp < 0,
+      value: fmt(margemOperacional),
+      sub: `${fmtR(resultadoOperacional)} resultado`,
+      alert: margemOperacional < 0,
       alertMsg: "Resultado operacional negativo",
-      icon: margemOp >= 0 ? TrendingUp : TrendingDown,
-      color: margemOp >= 0 ? "var(--color-success)" : "var(--color-danger)",
-      bg: margemOp >= 0 ? "rgba(46,204,113,0.08)" : "rgba(231,76,60,0.08)",
+      icon: margemOperacional >= 0 ? TrendingUp : TrendingDown,
+      color: margemOperacional >= 0 ? "var(--color-success)" : "var(--color-danger)",
+      bg: margemOperacional >= 0 ? "rgba(46,204,113,0.08)" : "rgba(231,76,60,0.08)",
       border: "var(--color-border-light)",
     },
     {
       id: "receita",
       label: "Receita Total (Ano)",
       value: fmtR(receitaTotal),
-      sub: "Serviços + Produtos − Descontos",
+      sub: "Receitas Operacionais",
       alert: false,
       alertMsg: "",
       icon: TrendingUp,
@@ -104,7 +88,6 @@ export default function IndicadoresBar({ lancamentos }: IndicadoresBarProps) {
             display: "flex", flexDirection: "column", gap: "0.5rem",
             position: "relative", overflow: "hidden",
           }}>
-            {/* Alert band */}
             {ind.alert && (
               <div style={{
                 position: "absolute", top: 0, left: 0, right: 0, height: 3,

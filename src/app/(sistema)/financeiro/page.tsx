@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Plus, X, Upload, Check, Landmark, ArrowUpRight, ArrowDownRight,
   Shield, RefreshCw, BarChart3, FileText, List, Search, Trash2,
@@ -9,7 +9,7 @@ import { movimentosFinanceiros } from "@/lib/mock-data";
 
 // DRE imports
 import { dreLancamentosIniciais, SUBCATEGORIAS, GRUPO_LABELS, MESES_ABREV, MESES_FULL } from "@/lib/dre-data";
-import type { DRELancamento, DREGrupo } from "@/lib/dre-data";
+import type { DRELancamento, DREGrupo, DreLinhaImportada } from "@/lib/dre-data";
 import DRETable       from "./components/DRETable";
 import LancamentosPanel from "./components/LancamentosPanel";
 import IndicadoresBar from "./components/IndicadoresBar";
@@ -54,6 +54,28 @@ export default function FinanceiroPage() {
   // ── DRE State ─────────────────────────────────────────────────────────────
   const [dreLancamentos, setDreLancamentos] = useState<DRELancamento[]>(dreLancamentosIniciais);
   const [anoFiltro] = useState(2026);
+
+  // ── DRE Real (importado do Excel "Realizado") ────────────────────────────
+  const [dreLinhas, setDreLinhas] = useState<DreLinhaImportada[]>([]);
+  const [dreLoading, setDreLoading] = useState(true);
+
+  useEffect(() => {
+    const loadDre = async () => {
+      setDreLoading(true);
+      try {
+        const res = await fetch(`/api/financeiro/dre?ano=${anoFiltro}`);
+        if (res.ok) {
+          const rows = await res.json();
+          setDreLinhas(rows.map((r: any, i: number) => ({ ...r, ordem: r.ordem ?? i })));
+        }
+      } catch (err) {
+        console.error("Erro ao carregar DRE:", err);
+      } finally {
+        setDreLoading(false);
+      }
+    };
+    loadDre();
+  }, [anoFiltro]);
 
   // Panel state (drawer lateral)
   const [panelGrupo, setPanelGrupo]     = useState<DREGrupo | null>(null);
@@ -163,7 +185,7 @@ export default function FinanceiroPage() {
               <Plus size={16} /> <span>Lançamento</span>
             </button>
           )}
-          {(activeTab === "dre" || activeTab === "lancamentos") && (
+          {activeTab === "lancamentos" && (
             <button className="btn btn-gold" onClick={() => { setFormPrefillGrupo(undefined); setFormPrefillSub(undefined); setFormPrefillMes(undefined); setShowForm(true); }}>
               <Plus size={16} /> <span>Novo Lançamento DRE</span>
             </button>
@@ -253,7 +275,7 @@ export default function FinanceiroPage() {
                 DRE — Demonstração do Resultado do Exercício
               </h2>
               <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: "2px 0 0 0" }}>
-                Clique em qualquer valor para ver os lançamentos detalhados
+                Importado direto do &quot;Realizado&quot; do seu sistema contábil
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -264,22 +286,16 @@ export default function FinanceiroPage() {
             </div>
           </div>
 
-          <DRETable
-            lancamentos={dreLancamentos}
-            anoFiltro={anoFiltro}
-            onCellClick={handleCellClick}
-          />
-
-          <IndicadoresBar lancamentos={dreLancamentos} />
-
-          <LancamentosPanel
-            lancamentos={dreLancamentos}
-            grupo={panelGrupo}
-            subcategoria={panelSub}
-            mes={panelMes}
-            onClose={handlePanelClose}
-            onAddClick={handleOpenFormFromPanel}
-          />
+          {dreLoading ? (
+            <div className="card" style={{ textAlign: "center", padding: "3rem", color: "var(--color-muted)" }}>
+              Carregando DRE...
+            </div>
+          ) : (
+            <>
+              <DRETable linhas={dreLinhas} ano={anoFiltro} />
+              <IndicadoresBar linhas={dreLinhas} />
+            </>
+          )}
         </>
       )}
 
@@ -390,7 +406,7 @@ export default function FinanceiroPage() {
 
       {/* ── TAB: CONFIGURAÇÃO ───────────────────────────────────────── */}
       {activeTab === "configuracao" && (
-        <ConfigPanel />
+        <ConfigPanel linhas={dreLinhas} ano={anoFiltro} />
       )}
 
       {/* ── MODAL: Fluxo de Caixa ─────────────────────────────────────────── */}
