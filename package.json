@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "import:appbarber": "tsx scripts/import-appbarber.ts",
+    "import:appbarber:watch": "tsx scripts/import-appbarber.ts --watch"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",
@@ -36,6 +38,7 @@
     "eslint-config-next": "16.2.2",
     "prisma": "^7.6.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5"
   }
 }
