@@ -277,7 +277,7 @@ export function computeIndicadoresDre(linhas: DreLinhaImportada[]) {
   const receitaTotal = acharTotal("RECEITAS OPERACIONAIS");
   const resultadoOperacional = acharTotal("RESULTADO OPERACIONAL");
   const margemContribuicao = acharTotal("Margem de contribuição");
-  const aluguelTotal = Math.abs(somarQueContem("aluguel"));
+  const aluguelTotal = Math.abs(somarQueContem("alugue")); // cobre "Aluguel" e "Alugueis" (singular/plural)
   const comissoesTotal = Math.abs(somarQueContem("comiss"));
 
   return {
