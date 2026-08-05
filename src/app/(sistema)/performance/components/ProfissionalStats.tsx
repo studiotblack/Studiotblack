@@ -66,47 +66,40 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
 
   const nomeProdutos = useMemo(() => new Set(catalogoProdutos.map(p => p.nome.toLowerCase())), []);
 
-  // Encontra o mês mais recente disponível para este profissional
-  const latestMesAno = useMemo(() => {
-    let latest = "";
-    let maxTime = 0;
+  // Todos os meses com dados (comissão ou ocupação) para este profissional, do mais recente ao mais antigo
+  const mesesDisponiveis = useMemo(() => {
     const normalizedProf = normalizeProfName(selectedProf);
-    
+    const setMeses = new Set<string>();
+
     profData.forEach(d => {
       const mesAno = parseMesAno(d.data);
-      if (mesAno) {
-        const [mStr, yStr] = mesAno.split("/");
-        const time = parseInt(yStr, 10) * 12 + parseInt(mStr, 10);
-        if (time > maxTime) {
-          maxTime = time;
-          latest = mesAno;
-        }
-      }
+      if (mesAno) setMeses.add(mesAno);
     });
 
     ocupacao.forEach(t => {
-      if (normalizeProfName(t.profissional) === normalizedProf && t.mesAno) {
-        const parts = t.mesAno.split("/");
-        if (parts.length === 2) {
-          const m = parseInt(parts[0], 10);
-          const y = parseInt(parts[1], 10);
-          const time = y * 12 + m;
-          if (time > maxTime) {
-            maxTime = time;
-            latest = t.mesAno;
-          }
-        }
-      }
+      if (normalizeProfName(t.profissional) === normalizedProf && t.mesAno) setMeses.add(t.mesAno);
     });
 
-    return latest;
+    return Array.from(setMeses).sort((a, b) => {
+      const [m1, y1] = a.split("/");
+      const [m2, y2] = b.split("/");
+      return (parseInt(y2, 10) * 12 + parseInt(m2, 10)) - (parseInt(y1, 10) * 12 + parseInt(m1, 10));
+    });
   }, [profData, selectedProf, ocupacao]);
 
-  // Filtra dados do profissional para usar apenas os do mês atual (mais recente) nos cartões principais
+  // Mês selecionado pra exibição — começa no mais recente, mas o usuário pode trocar
+  const [selectedMesAno, setSelectedMesAno] = useState<string>(() => mesesDisponiveis[0] || "");
+
+  // Se o profissional mudar (ou a lista de meses mudar) e o mês selecionado não existir mais pra ele, volta pro mais recente
+  if (mesesDisponiveis.length > 0 && !mesesDisponiveis.includes(selectedMesAno)) {
+    setSelectedMesAno(mesesDisponiveis[0]);
+  }
+
+  // Filtra dados do profissional para usar apenas os do mês selecionado nos cartões principais
   const currentMonthData = useMemo(() => {
-    if (!latestMesAno) return profData;
-    return profData.filter(d => parseMesAno(d.data) === latestMesAno);
-  }, [profData, latestMesAno]);
+    if (!selectedMesAno) return profData;
+    return profData.filter(d => parseMesAno(d.data) === selectedMesAno);
+  }, [profData, selectedMesAno]);
 
   // Classificação simples: produto = item cujo nome consta no catálogo de produtos; todo o resto é serviço
   const isProduto = (item: string) => nomeProdutos.has(item.toLowerCase().trim());
@@ -147,7 +140,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
   const faltaServicosCard = metaServicosVal > 0 ? metaServicosVal - faturadoServicos : 0;
   const faltaProdutosCard = metaProdutosVal > 0 ? metaProdutosVal - faturadoProdutos : 0;
 
-  const importedOcupacao = ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf && t.mesAno === latestMesAno) || ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf);
+  const importedOcupacao = ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf && t.mesAno === selectedMesAno) || ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf);
   const taxaOcupacao = importedOcupacao ? importedOcupacao.taxaOcupacao : 0;
   const taxaOcupacaoComBloqueios = importedOcupacao ? importedOcupacao.taxaOcupacaoComBloqueios : 0;
   
@@ -343,10 +336,28 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
-        {latestMesAno && (
-          <span style={{ marginLeft: "auto", fontSize: "0.85rem", color: "var(--color-gold)", background: "rgba(212, 175, 140, 0.1)", padding: "0.25rem 0.75rem", borderRadius: "20px" }}>
-            Exibindo dados de: <strong>{latestMesAno}</strong>
-          </span>
+        {mesesDisponiveis.length > 0 && (
+          <div style={{
+            marginLeft: "auto", display: "flex", flexDirection: "column", gap: "0.2rem",
+            background: "rgba(212, 175, 140, 0.1)", border: "1px solid rgba(212,175,140,0.25)",
+            padding: "0.4rem 0.75rem", borderRadius: "10px",
+          }}>
+            <span style={{ fontSize: "0.7rem", color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Exibindo dados de:
+            </span>
+            <select
+              value={selectedMesAno}
+              onChange={e => setSelectedMesAno(e.target.value)}
+              style={{
+                background: "transparent", border: "none", color: "var(--color-gold)",
+                fontWeight: 700, fontSize: "0.9rem", outline: "none", cursor: "pointer", padding: 0,
+              }}
+            >
+              {mesesDisponiveis.map(m => (
+                <option key={m} value={m} style={{ background: "#160f10", color: "#fff" }}>{m}</option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 
@@ -474,7 +485,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
         return (
           <div style={{ marginBottom: "1.5rem" }}>
             <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <Target size={18} color="var(--color-gold)" /> Acompanhamento de Metas ({latestMesAno})
+              <Target size={18} color="var(--color-gold)" /> Acompanhamento de Metas ({selectedMesAno})
             </h3>
             
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
@@ -629,7 +640,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
       <div className="card" style={{ marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
           <div>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0 }}>Faturamento Semanal: Serviços x Produtos ({latestMesAno})</h3>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0 }}>Faturamento Semanal: Serviços x Produtos ({selectedMesAno})</h3>
             <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "4px 0 0 0" }}>Comparativo do faturamento gerado por semana do mês</p>
           </div>
         </div>
