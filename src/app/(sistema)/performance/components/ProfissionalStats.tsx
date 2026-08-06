@@ -140,6 +140,27 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
   const faltaServicosCard = metaServicosVal > 0 ? metaServicosVal - faturadoServicos : 0;
   const faltaProdutosCard = metaProdutosVal > 0 ? metaProdutosVal - faturadoProdutos : 0;
 
+  // Ritmo diário necessário pra bater a meta — só faz sentido calcular pro mês corrente (o que já passou não tem "dias restantes")
+  const hoje = new Date();
+  const mesAtualStr = `${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+  const isMesAtual = selectedMesAno === mesAtualStr;
+
+  const diasUteisRestantes = useMemo(() => {
+    if (!isMesAtual) return 0;
+    const ano = hoje.getFullYear();
+    const mes = hoje.getMonth();
+    const ultimoDia = new Date(ano, mes + 1, 0).getDate();
+    let count = 0;
+    for (let d = hoje.getDate(); d <= ultimoDia; d++) {
+      const diaSemana = new Date(ano, mes, d).getDay(); // 0 = domingo, 6 = sábado
+      if (diaSemana !== 0 && diaSemana !== 6) count++;
+    }
+    return count;
+  }, [isMesAtual, selectedMesAno]);
+
+  const ritmoServicosPorDia = isMesAtual && diasUteisRestantes > 0 && faltaServicosCard > 0 ? faltaServicosCard / diasUteisRestantes : 0;
+  const ritmoProdutosPorDia = isMesAtual && diasUteisRestantes > 0 && faltaProdutosCard > 0 ? faltaProdutosCard / diasUteisRestantes : 0;
+
   const importedOcupacao = ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf && t.mesAno === selectedMesAno) || ocupacao.find(t => normalizeProfName(t.profissional) === normalizedProf);
   const taxaOcupacao = importedOcupacao ? importedOcupacao.taxaOcupacao : 0;
   const taxaOcupacaoComBloqueios = importedOcupacao ? importedOcupacao.taxaOcupacaoComBloqueios : 0;
@@ -402,6 +423,32 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Ticket Médio (Serviço)</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-info)" }}>{brl(ticketMedio)}</div>
+        </div>
+        <div className="card-gold" style={{ textAlign: "center" }}>
+          <div style={{ color: "var(--color-gold)", fontSize: "0.85rem", marginBottom: "0.5rem", fontWeight: 600 }}>Ritmo Necessário / Dia Útil</div>
+          {!isMesAtual ? (
+            <div style={{ fontSize: "0.85rem", color: "var(--color-muted)", padding: "0.5rem 0" }}>Disponível só para o mês corrente</div>
+          ) : (
+            <>
+              <div style={{ display: "flex", justifyContent: "center", gap: "1.25rem", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>Serviços</div>
+                  <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: ritmoServicosPorDia > 0 ? "var(--color-gold-bright)" : "var(--color-success)" }}>
+                    {ritmoServicosPorDia > 0 ? brl(ritmoServicosPorDia) : "Batida! 🎉"}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>Produtos</div>
+                  <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: ritmoProdutosPorDia > 0 ? "var(--color-gold-bright)" : "var(--color-success)" }}>
+                    {ritmoProdutosPorDia > 0 ? brl(ritmoProdutosPorDia) : "Batida! 🎉"}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: "0.7rem", color: "var(--color-muted)", marginTop: "0.5rem" }}>
+                {diasUteisRestantes} {diasUteisRestantes === 1 ? "dia útil restante" : "dias úteis restantes"} no mês
+              </div>
+            </>
+          )}
         </div>
       </div>
 
