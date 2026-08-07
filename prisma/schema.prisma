@@ -277,3 +277,102 @@ model DreLinha {
   @@unique([ano, ordem])
 }
 
+// ─── Financeiro Essencial (contas a pagar/receber, substitui o Nibo) ─────────
+// Nomeado "LancamentoFinanceiro" (não "Agendamento") para não colidir com o
+// model Agendamento acima, que é o agendamento de horário do salão.
+
+model ContaBancaria {
+  id               String   @id @default(uuid())
+  nome             String
+  banco            String
+  tipoConta        String   @default("Conta corrente")
+  agencia          String?
+  conta            String?
+  saldoInicial     Float    @default(0)
+  dataSaldoInicial String
+  ativa            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Contato {
+  id           String   @id @default(uuid())
+  nome         String
+  cpfCnpj      String?
+  tipos        String[] // cliente | fornecedor | funcionario | socio — pode ter mais de um
+  email        String?
+  telefone     String?
+  observacoes  String?
+  ativo        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CategoriaFinanceira {
+  id            String   @id @default(uuid())
+  codigo        String?
+  grupo         String
+  categoriaPai  String?
+  nome          String
+  tipo          String   @default("saida") // entrada | saida
+  createdAt     DateTime @default(now())
+}
+
+model CentroCusto {
+  id        String   @id @default(uuid())
+  nome      String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model LancamentoFinanceiro {
+  id               String   @id @default(uuid())
+  tipo             String   // pagar | receber
+  contatoId        String
+  valor            Float
+  valorPago        Float    @default(0)
+  dataVencimento   String
+  dataCompetencia  String
+  dataPrevisao     String?
+  descricao        String
+  referencia       String?
+  detalhamento     String?
+  contaBancariaId  String?
+  reembolsavel     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model LancamentoFinanceiroCategoria {
+  id            String @id @default(uuid())
+  lancamentoId  String
+  categoriaId   String
+  valor         Float
+}
+
+model LancamentoFinanceiroCentroCusto {
+  id            String @id @default(uuid())
+  lancamentoId  String
+  centroCustoId String
+  valor         Float
+}
+
+model Baixa {
+  id               String   @id @default(uuid())
+  lancamentoId     String
+  valor            Float
+  data             String
+  contaBancariaId  String
+  observacao       String?
+  createdAt        DateTime @default(now())
+}
+
+model Transferencia {
+  id             String   @id @default(uuid())
+  contaOrigemId  String
+  contaDestinoId String
+  valor          Float
+  data           String
+  descricao      String?
+  createdAt      DateTime @default(now())
+}
