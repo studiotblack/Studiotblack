@@ -41,6 +41,37 @@
   --color-status-falta:      #f39c12;
 }
 
+/* ── Light theme — tela branca, linhas e ícones em tons de marrom ──────────── */
+:root[data-theme="light"] {
+  --color-bg:               #faf7f3;
+  --color-surface:          #ffffff;
+  --color-surface-2:        #f6f0e8;
+  --color-surface-3:        #efe4d5;
+  --color-border:           #e2d4c0;
+  --color-border-light:     #cbb595;
+
+  --color-gold:             #8b5a2b;
+  --color-gold-bright:      #a56f38;
+  --color-gold-dim:         #6e4520;
+  --color-gold-dark:        #4d2f14;
+  --color-gold-glow:        rgba(139, 90, 43, 0.18);
+  --color-gold-glow-sm:     rgba(139, 90, 43, 0.08);
+
+  --color-cream:            #2a1d12;
+  --color-cream-dim:        #55402c;
+  --color-muted:            #8a7458;
+  --color-muted-2:          #a4906f;
+
+  --color-success:          #218c4a;
+  --color-success-dim:      rgba(33, 140, 74, 0.12);
+  --color-danger:           #c0392b;
+  --color-danger-dim:       rgba(192, 57, 43, 0.12);
+  --color-warning:          #b9770e;
+  --color-warning-dim:      rgba(185, 119, 14, 0.12);
+  --color-info:             #2874a6;
+  --color-info-dim:         rgba(40, 116, 166, 0.12);
+}
+
 /* ── Base ─────────────────────────────────────────────────────────────────── */
 @layer base {
   *, *::before, *::after {

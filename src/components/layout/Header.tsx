@@ -1,7 +1,8 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { Bell, Search, CalendarDays, Clock, Menu } from "lucide-react";
+import { Bell, Search, CalendarDays, Clock, Menu, Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTheme } from "@/lib/theme-context";
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":     { title: "Dashboard",       subtitle: "Visão geral do negócio"               },
@@ -20,6 +21,7 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
   const page = pageTitles[pathname] ?? { title: "Black Gestão", subtitle: "" };
   const [now, setNow] = useState(new Date());
   const [showNotif, setShowNotif] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -111,6 +113,24 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
             {timeStr}
           </span>
         </div>
+
+        {/* Alternar tema claro/escuro */}
+        <button
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Mudar para tela clara" : "Mudar para tela escura"}
+          style={{
+            background: "var(--color-surface-2)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.5rem",
+            padding: "0.5rem",
+            cursor: "pointer",
+            color: "var(--color-gold)",
+            display: "flex", alignItems: "center",
+            transition: "border-color 0.2s",
+          }}
+        >
+          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
 
         {/* Notifications */}
         <div style={{ position: "relative" }}>
