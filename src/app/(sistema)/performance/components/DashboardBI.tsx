@@ -309,12 +309,12 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
         {/* Faturamento */}
         <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ background: "rgba(212,175,140,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-gold)" }}>
+          <div style={{ background: "rgba(212,175,140,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-gold)", flexShrink: 0 }}>
             <TrendingUp size={24} />
           </div>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Faturamento Total</p>
-            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "var(--color-cream)", fontWeight: 800 }}>
+            <h3 style={{ fontSize: "clamp(1.1rem, 1.5vw, 1.75rem)", margin: 0, color: "var(--color-cream)", fontWeight: 800, whiteSpace: "nowrap" }}>
               {brl(totalFaturado)}
             </h3>
           </div>
@@ -322,12 +322,12 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
         {/* Comissões */}
         <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ background: "rgba(231,76,60,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-danger)" }}>
+          <div style={{ background: "rgba(231,76,60,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-danger)", flexShrink: 0 }}>
             <Users size={24} />
           </div>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Comissões Pagas</p>
-            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "var(--color-danger)", fontWeight: 800 }}>
+            <h3 style={{ fontSize: "clamp(1.1rem, 1.5vw, 1.75rem)", margin: 0, color: "var(--color-danger)", fontWeight: 800, whiteSpace: "nowrap" }}>
               {brl(totalComissao)}
             </h3>
           </div>
@@ -335,12 +335,12 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
         {/* Lucro Estimado (Fat - Comissao) */}
         <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ background: "rgba(46,204,113,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-success)" }}>
+          <div style={{ background: "rgba(46,204,113,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-success)", flexShrink: 0 }}>
             <DollarSign size={24} />
           </div>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Retenção Bruta (Salão)</p>
-            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "var(--color-success)", fontWeight: 800 }}>
+            <h3 style={{ fontSize: "clamp(1.1rem, 1.5vw, 1.75rem)", margin: 0, color: "var(--color-success)", fontWeight: 800, whiteSpace: "nowrap" }}>
               {brl(lucroEstimado)}
             </h3>
           </div>
@@ -348,12 +348,12 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
         {/* Ticket Médio Geral */}
         <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ background: "rgba(52,152,219,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-info)" }}>
+          <div style={{ background: "rgba(52,152,219,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "var(--color-info)", flexShrink: 0 }}>
             <Ticket size={24} />
           </div>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Ticket Médio Geral</p>
-            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "var(--color-info)", fontWeight: 800 }}>
+            <h3 style={{ fontSize: "clamp(1.1rem, 1.5vw, 1.75rem)", margin: 0, color: "var(--color-info)", fontWeight: 800, whiteSpace: "nowrap" }}>
               {brl(ticketMedioGeral)}
             </h3>
           </div>
@@ -361,12 +361,12 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
         {/* Ocupação Total do Salão */}
         <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ background: "rgba(155,89,182,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "#9b59b6" }}>
+          <div style={{ background: "rgba(155,89,182,0.15)", padding: "0.75rem", borderRadius: "0.75rem", color: "#9b59b6", flexShrink: 0 }}>
             <Percent size={24} />
           </div>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Ocupação Total do Salão</p>
-            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "#9b59b6", fontWeight: 800 }}>
+            <h3 style={{ fontSize: "clamp(1.1rem, 1.5vw, 1.75rem)", margin: 0, color: "#9b59b6", fontWeight: 800, whiteSpace: "nowrap" }}>
               {ocupacaoMediaSalao.toFixed(1)}%
             </h3>
           </div>
@@ -374,12 +374,12 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
         {/* Ocupação sem Tiago */}
         <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ background: "rgba(155,89,182,0.08)", padding: "0.75rem", borderRadius: "0.75rem", color: "#c39bd3" }}>
+          <div style={{ background: "rgba(155,89,182,0.08)", padding: "0.75rem", borderRadius: "0.75rem", color: "#c39bd3", flexShrink: 0 }}>
             <Percent size={24} />
           </div>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)", margin: "0 0 4px 0" }}>Ocupação sem Tiago</p>
-            <h3 style={{ fontSize: "1.75rem", margin: 0, color: "#c39bd3", fontWeight: 800 }}>
+            <h3 style={{ fontSize: "clamp(1.1rem, 1.5vw, 1.75rem)", margin: 0, color: "#c39bd3", fontWeight: 800, whiteSpace: "nowrap" }}>
               {ocupacaoMediaSemTiago.toFixed(1)}%
             </h3>
           </div>
