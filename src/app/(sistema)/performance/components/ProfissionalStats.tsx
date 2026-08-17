@@ -43,6 +43,19 @@ interface ProfissionalStatsProps {
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+const renderPieSliceLabel = (props: any) => {
+  const { cx, cy, midAngle, outerRadius, percent } = props;
+  const RADIAN = Math.PI / 180;
+  const radius = outerRadius + 18;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="var(--color-cream-dim)" fontSize={11} fontWeight={600} textAnchor={x > cx ? "start" : "end"} dominantBaseline="central">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
+};
+
 export default function ProfissionalStats({ data, ocupacao, metas, initialSelectedProf, onProfChange }: ProfissionalStatsProps) {
   const profissionais = getProfissionaisUnicos(data, ocupacao);
   const [selectedProf, setSelectedProf] = useState<string>(initialSelectedProf || profissionais[0] || "");
@@ -795,9 +808,9 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
         {topProdutosProf.length > 0 && (
           <div className="card">
             <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem" }}>Top Produtos Vendidos</h3>
-            <div style={{ width: '100%', height: 220 }}>
+            <div style={{ width: '100%', height: 250 }}>
               <ResponsiveContainer>
-                <PieChart>
+                <PieChart margin={{ top: 15, right: 15, bottom: 15, left: 15 }}>
                   <Pie
                     data={topProdutosProf}
                     cx="50%" cy="50%"
@@ -805,6 +818,8 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
                     paddingAngle={4}
                     dataKey="Faturado"
                     stroke="none"
+                    label={renderPieSliceLabel}
+                    labelLine={false}
                   >
                     {topProdutosProf.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={['#d4af8c','#3498db','#2ecc71','#e74c3c','#9b59b6'][index % 5]} />
