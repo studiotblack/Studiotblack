@@ -71,6 +71,19 @@ export async function ensureFinanceiroTables(sql: Sql) {
     )
   `;
 
+  // Credenciais Sicoob (mTLS) e regra de classificação automática de entrada — por conta,
+  // porque a regra é vinculada à conta bancária de origem (Studio T'Black x Maria Justa),
+  // não ao fato de ser entrada. "regraEntradaAtiva" começa desligada: só passa a classificar
+  // sozinho quando o usuário ligar a configuração pra aquela conta.
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "sicoobClientId" TEXT`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "sicoobCertificado" TEXT`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "sicoobChavePrivada" TEXT`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "sicoobNumeroConta" TEXT`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaAtiva" BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaContatoId" TEXT REFERENCES "Contato"(id)`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaCategoriaId" TEXT REFERENCES "CategoriaFinanceira"(id)`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaCentroCustoId" TEXT REFERENCES "CentroCusto"(id)`;
+
   // Chamado "LancamentoFinanceiro" (não "Agendamento") porque esse nome já existe no schema
   // pra outra coisa — o agendamento de horário de atendimento do salão (model Agendamento
   // em prisma/schema.prisma: cliente/colaborador/data/hora). São entidades completamente
@@ -122,6 +135,56 @@ export async function ensureFinanceiroTables(sql: Sql) {
       data TEXT NOT NULL,
       "contaBancariaId" TEXT NOT NULL REFERENCES "ContaBancaria"(id),
       observacao TEXT,
+      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // Cache do extrato puxado do Sicoob — uma linha por transação bancária real, independente
+  // de já ter sido conciliada ou não. "idTransacaoSicoob" é o identificador que o próprio banco
+  // manda, usado pra não reimportar a mesma transação numa sincronização seguinte.
+  await sql`
+    CREATE TABLE IF NOT EXISTS "TransacaoBancariaImportada" (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      "contaBancariaId" TEXT NOT NULL REFERENCES "ContaBancaria"(id),
+      "idTransacaoSicoob" TEXT,
+      data TEXT NOT NULL,
+      hora TEXT,
+      valor FLOAT NOT NULL,
+      tipo TEXT NOT NULL,
+      descricao TEXT,
+      "descricaoComplementar" TEXT,
+      status TEXT NOT NULL DEFAULT 'pendente',
+      "lancamentoId" TEXT REFERENCES "LancamentoFinanceiro"(id),
+      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // Comprovantes capturados do grupo do WhatsApp (imagem + legenda). "mensagemWhatsappId" evita
+  // processar a mesma mensagem duas vezes entre sincronizações.
+  await sql`
+    CREATE TABLE IF NOT EXISTS "WhatsappComprovante" (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      "mensagemWhatsappId" TEXT UNIQUE,
+      "grupoId" TEXT,
+      remetente TEXT,
+      "dataHoraEnvio" TIMESTAMP,
+      "imagemPath" TEXT,
+      "textoLegenda" TEXT,
+      "valorOcr" FLOAT,
+      "dataHoraOcr" TIMESTAMP,
+      status TEXT NOT NULL DEFAULT 'pendente',
+      "transacaoBancariaId" TEXT REFERENCES "TransacaoBancariaImportada"(id),
+      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // Dicionário de palavras-chave pra categoria de saída — usado no match automático e
+  // realimentado sempre que o usuário resolve manualmente um caso que o dicionário não cobria.
+  await sql`
+    CREATE TABLE IF NOT EXISTS "CategoriaPalavraChave" (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      "palavraChave" TEXT NOT NULL UNIQUE,
+      "categoriaId" TEXT NOT NULL REFERENCES "CategoriaFinanceira"(id),
       "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `;

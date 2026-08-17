@@ -293,6 +293,19 @@ model ContaBancaria {
   ativa            Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  // Credenciais Sicoob (mTLS) — usadas pra puxar o extrato via API na conciliação bancária
+  sicoobClientId     String?
+  sicoobCertificado  String?
+  sicoobChavePrivada String?
+  sicoobNumeroConta  String?
+
+  // Regra de classificação automática de entrada, vinculada à conta de origem
+  // (ex: Studio T'Black -> Vendas de serviços; Maria Justa -> Venda de produtos)
+  regraEntradaAtiva        Boolean @default(false)
+  regraEntradaContatoId    String?
+  regraEntradaCategoriaId  String?
+  regraEntradaCentroCustoId String?
 }
 
 model Contato {
@@ -375,4 +388,50 @@ model Transferencia {
   data           String
   descricao      String?
   createdAt      DateTime @default(now())
+}
+
+// ─── Conciliação Bancária Automática (Sicoob + WhatsApp) ─────────────────────
+
+// Cache do extrato puxado do Sicoob — uma linha por transação bancária real,
+// conciliada ou não. idTransacaoSicoob evita reimportar a mesma transação numa
+// sincronização seguinte.
+model TransacaoBancariaImportada {
+  id                    String   @id @default(uuid())
+  contaBancariaId       String
+  idTransacaoSicoob     String?
+  data                  String
+  hora                  String?
+  valor                 Float
+  tipo                  String   // entrada | saida
+  descricao             String?
+  descricaoComplementar String?
+  status                String   @default("pendente") // pendente | conciliado | ignorado
+  lancamentoId          String?
+  createdAt             DateTime @default(now())
+}
+
+// Comprovantes capturados do grupo do WhatsApp (imagem + legenda enviados junto).
+// mensagemWhatsappId evita processar a mesma mensagem duas vezes.
+model WhatsappComprovante {
+  id                  String    @id @default(uuid())
+  mensagemWhatsappId  String?   @unique
+  grupoId             String?
+  remetente           String?
+  dataHoraEnvio       DateTime?
+  imagemPath          String?
+  textoLegenda        String?
+  valorOcr            Float?
+  dataHoraOcr         DateTime?
+  status              String    @default("pendente") // pendente | vinculado | ignorado
+  transacaoBancariaId String?
+  createdAt           DateTime  @default(now())
+}
+
+// Dicionário de palavras-chave -> categoria de saída, usado no match automático
+// e realimentado quando o usuário resolve manualmente um caso não coberto.
+model CategoriaPalavraChave {
+  id           String   @id @default(uuid())
+  palavraChave String   @unique
+  categoriaId  String
+  createdAt    DateTime @default(now())
 }

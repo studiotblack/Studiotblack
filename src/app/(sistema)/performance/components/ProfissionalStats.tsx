@@ -433,14 +433,14 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
               <div style={{ display: "flex", justifyContent: "center", gap: "1.25rem", flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>Serviços</div>
-                  <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: ritmoServicosPorDia > 0 ? "var(--color-gold-bright)" : "var(--color-success)" }}>
-                    {ritmoServicosPorDia > 0 ? brl(ritmoServicosPorDia) : "Batida! 🎉"}
+                  <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: metaServicosVal <= 0 ? "var(--color-muted)" : ritmoServicosPorDia > 0 ? "var(--color-gold-bright)" : "var(--color-success)" }}>
+                    {metaServicosVal <= 0 ? "Sem meta definida" : ritmoServicosPorDia > 0 ? brl(ritmoServicosPorDia) : "Batida! 🎉"}
                   </div>
                 </div>
                 <div>
                   <div style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>Produtos</div>
-                  <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: ritmoProdutosPorDia > 0 ? "var(--color-gold-bright)" : "var(--color-success)" }}>
-                    {ritmoProdutosPorDia > 0 ? brl(ritmoProdutosPorDia) : "Batida! 🎉"}
+                  <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: metaProdutosVal <= 0 ? "var(--color-muted)" : ritmoProdutosPorDia > 0 ? "var(--color-gold-bright)" : "var(--color-success)" }}>
+                    {metaProdutosVal <= 0 ? "Sem meta definida" : ritmoProdutosPorDia > 0 ? brl(ritmoProdutosPorDia) : "Batida! 🎉"}
                   </div>
                 </div>
               </div>
