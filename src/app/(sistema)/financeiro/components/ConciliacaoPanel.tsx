@@ -204,7 +204,7 @@ export default function ConciliacaoPanel({ onSync, isSyncing, lancamentos, onCon
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                 <div>
                   <label className="form-label">Grupo DRE</label>
-                  <select value={grupo} onChange={e => handleGrupoChange(e.target.value as DREGrupo)} style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "white" }}>
+                  <select value={grupo} onChange={e => handleGrupoChange(e.target.value as DREGrupo)} style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-cream)" }}>
                     <option value="receita">Receita</option>
                     <option value="custo">Custo Operacional</option>
                     <option value="despesa">Despesa Operacional</option>
@@ -215,7 +215,7 @@ export default function ConciliacaoPanel({ onSync, isSyncing, lancamentos, onCon
                 
                 <div>
                   <label className="form-label">Subcategoria</label>
-                  <select value={subcategoria} onChange={e => handleSubChange(e.target.value)} style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "white" }}>
+                  <select value={subcategoria} onChange={e => handleSubChange(e.target.value)} style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-cream)" }}>
                     {Object.keys(CATEGORIAS_DEFAULT[grupo]).map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -223,7 +223,7 @@ export default function ConciliacaoPanel({ onSync, isSyncing, lancamentos, onCon
                 {CATEGORIAS_DEFAULT[grupo][subcategoria]?.length > 0 && (
                   <div>
                     <label className="form-label">Detalhe (Sub-subcategoria)</label>
-                    <select value={subsubcategoria} onChange={e => setSubsubcategoria(e.target.value)} style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "white" }}>
+                    <select value={subsubcategoria} onChange={e => setSubsubcategoria(e.target.value)} style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-cream)" }}>
                       {CATEGORIAS_DEFAULT[grupo][subcategoria].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
