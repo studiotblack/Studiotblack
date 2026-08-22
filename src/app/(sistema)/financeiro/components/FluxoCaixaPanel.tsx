@@ -106,12 +106,17 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
 
   const saldoPorConta = useMemo(() => {
     return contas.map(conta => {
+      // Conta conectada ao Sicoob: confia no saldo real puxado do banco em vez de calcular
+      // localmente (evita divergência se alguma baixa não foi lançada no sistema).
+      if (conta.sicoobClientId && conta.saldoSicoob !== undefined && conta.saldoSicoob !== null) {
+        return { ...conta, saldoAtual: conta.saldoSicoob, saldoReal: true as const };
+      }
       const entradas = baixas.filter(b => b.contaBancariaId === conta.id && b.agendamentoTipo === "receber").reduce((a, b) => a + b.valor, 0);
       const saidas = baixas.filter(b => b.contaBancariaId === conta.id && b.agendamentoTipo === "pagar").reduce((a, b) => a + b.valor, 0);
       const transfRecebidas = transferencias.filter(t => t.contaDestinoId === conta.id).reduce((a, t) => a + t.valor, 0);
       const transfEnviadas = transferencias.filter(t => t.contaOrigemId === conta.id).reduce((a, t) => a + t.valor, 0);
       const saldoAtual = conta.saldoInicial + entradas - saidas + transfRecebidas - transfEnviadas;
-      return { ...conta, saldoAtual };
+      return { ...conta, saldoAtual, saldoReal: false as const };
     });
   }, [contas, baixas, transferencias]);
 
@@ -294,6 +299,7 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "4px 0 0 0", color: c.saldoAtual >= 0 ? "var(--color-cream)" : "var(--color-danger)" }}>
               {brl(c.saldoAtual)}
             </h2>
+            {c.saldoReal && <span style={{ fontSize: "0.65rem", color: "var(--color-success)" }}>● Saldo real (Sicoob)</span>}
           </div>
         ))}
         {contas.length === 0 && (

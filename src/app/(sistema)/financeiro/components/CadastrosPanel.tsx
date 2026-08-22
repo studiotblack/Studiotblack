@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Landmark, Users, FolderTree, Target } from "lucide-react";
+import { Plus, Trash2, Landmark, Users, FolderTree, Target, Link2 } from "lucide-react";
 import type { ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, TipoContato } from "@/lib/financeiro-data";
 import { TIPOS_CONTATO_LABELS } from "@/lib/financeiro-data";
+import SicoobConfigModal from "./SicoobConfigModal";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 type SubTab = "contas" | "contatos" | "categorias" | "centros";
@@ -64,7 +65,15 @@ export default function CadastrosPanel() {
         <div className="card" style={{ textAlign: "center", padding: "2rem", color: "var(--color-muted)" }}>Carregando...</div>
       ) : (
         <>
-          {subTab === "contas" && <ContasBancariasSection contas={contas} onChange={carregarTudo} />}
+          {subTab === "contas" && (
+            <ContasBancariasSection
+              contas={contas}
+              contatos={contatos}
+              categorias={categorias}
+              centros={centros}
+              onChange={carregarTudo}
+            />
+          )}
           {subTab === "contatos" && <ContatosSection contatos={contatos} onChange={carregarTudo} />}
           {subTab === "categorias" && <CategoriasSection categorias={categorias} onChange={carregarTudo} />}
           {subTab === "centros" && <CentrosCustoSection centros={centros} onChange={carregarTudo} />}
@@ -75,7 +84,14 @@ export default function CadastrosPanel() {
 }
 
 // ── Contas Bancárias ─────────────────────────────────────────────────────────
-function ContasBancariasSection({ contas, onChange }: { contas: ContaBancaria[]; onChange: () => void }) {
+function ContasBancariasSection({ contas, contatos, categorias, centros, onChange }: {
+  contas: ContaBancaria[];
+  contatos: Contato[];
+  categorias: CategoriaFinanceira[];
+  centros: CentroCusto[];
+  onChange: () => void;
+}) {
+  const [contaSicoob, setContaSicoob] = useState<ContaBancaria | null>(null);
   const [nome, setNome] = useState("");
   const [banco, setBanco] = useState("");
   const [tipoConta, setTipoConta] = useState("Conta corrente");
@@ -135,9 +151,9 @@ function ContasBancariasSection({ contas, onChange }: { contas: ContaBancaria[];
 
       <div className="card" style={{ padding: 0, overflowX: "auto" }}>
         <table className="data-table">
-          <thead><tr><th>Nome</th><th>Banco</th><th>Tipo</th><th>Agência/Conta</th><th style={{ textAlign: "right" }}>Saldo Inicial</th><th></th></tr></thead>
+          <thead><tr><th>Nome</th><th>Banco</th><th>Tipo</th><th>Agência/Conta</th><th style={{ textAlign: "right" }}>Saldo Inicial</th><th>Sicoob</th><th></th></tr></thead>
           <tbody>
-            {contas.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: "2rem", color: "var(--color-muted)" }}>Nenhuma conta cadastrada.</td></tr>}
+            {contas.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: "2rem", color: "var(--color-muted)" }}>Nenhuma conta cadastrada.</td></tr>}
             {contas.map(c => (
               <tr key={c.id} style={{ opacity: c.ativa ? 1 : 0.4 }}>
                 <td style={{ fontWeight: 600 }}>{c.nome}</td>
@@ -145,7 +161,15 @@ function ContasBancariasSection({ contas, onChange }: { contas: ContaBancaria[];
                 <td><span className="badge badge-muted">{c.tipoConta}</span></td>
                 <td style={{ fontSize: "0.8rem" }}>{c.agencia || "—"} / {c.conta || "—"}</td>
                 <td style={{ textAlign: "right" }}>{brl(c.saldoInicial)}</td>
-                <td style={{ textAlign: "center" }}>
+                <td>
+                  {c.sicoobClientId ? (
+                    <span className="badge badge-success" style={{ fontSize: "0.65rem" }}>Conectada</span>
+                  ) : (
+                    <span className="badge badge-muted" style={{ fontSize: "0.65rem" }}>Não conectada</span>
+                  )}
+                </td>
+                <td style={{ textAlign: "center", display: "flex", gap: "0.5rem", justifyContent: "center" }}>
+                  <button onClick={() => setContaSicoob(c)} title="Configurar Sicoob" style={{ background: "none", border: "none", color: "var(--color-gold)", cursor: "pointer" }}><Link2 size={14} /></button>
                   {c.ativa && <button onClick={() => excluir(c.id)} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer" }}><Trash2 size={14} /></button>}
                 </td>
               </tr>
@@ -153,6 +177,15 @@ function ContasBancariasSection({ contas, onChange }: { contas: ContaBancaria[];
           </tbody>
         </table>
       </div>
+
+      <SicoobConfigModal
+        conta={contaSicoob}
+        contatos={contatos}
+        categorias={categorias}
+        centros={centros}
+        onClose={() => setContaSicoob(null)}
+        onSaved={onChange}
+      />
     </div>
   );
 }

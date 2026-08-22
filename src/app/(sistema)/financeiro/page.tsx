@@ -6,8 +6,7 @@ import {
 } from "lucide-react";
 
 // DRE imports
-import { dreLancamentosIniciais } from "@/lib/dre-data";
-import type { DRELancamento, DreLinhaImportada } from "@/lib/dre-data";
+import type { DreLinhaImportada } from "@/lib/dre-data";
 import DRETable from "./components/DRETable";
 import IndicadoresBar from "./components/IndicadoresBar";
 import ConciliacaoPanel from "./components/ConciliacaoPanel";
@@ -21,9 +20,6 @@ type Tab = "fluxo" | "dre" | "lancamentos" | "cadastros" | "conciliacao" | "conf
 
 export default function FinanceiroPage() {
   const [activeTab, setActiveTab] = useState<Tab>("fluxo");
-
-  // ── DRE (lançamentos antigos, usados só pela Conciliação nesta entrega) ────
-  const [dreLancamentos, setDreLancamentos] = useState<DRELancamento[]>(dreLancamentosIniciais);
   const [anoFiltro] = useState(2026);
 
   // ── DRE Real (importado do Excel "Realizado") ────────────────────────────
@@ -47,34 +43,6 @@ export default function FinanceiroPage() {
     };
     loadDre();
   }, [anoFiltro]);
-
-  // ── Integração Sicoob / Conciliação (inalterado nesta entrega) ───────────
-  const [syncing, setSyncing] = useState(false);
-
-  const handleSyncSicoob = async (mes: number, ano: number) => {
-    setSyncing(true);
-    try {
-      await new Promise(r => setTimeout(r, 1500));
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleConciliar = (bankTx: any, novoLancamento: Partial<DRELancamento>) => {
-    const l: DRELancamento = {
-      id: `conciliado-${bankTx.id}`,
-      data: novoLancamento.data || bankTx.data,
-      descricao: novoLancamento.descricao || bankTx.descricao,
-      valor: novoLancamento.valor || bankTx.valor,
-      tipo: novoLancamento.tipo || "SAIDA",
-      grupo: novoLancamento.grupo || "despesa",
-      subcategoria: novoLancamento.subcategoria || "Outros",
-      subsubcategoria: novoLancamento.subsubcategoria,
-      origem: novoLancamento.origem || "banco",
-      importadoSicoob: novoLancamento.importadoSicoob || true,
-    };
-    setDreLancamentos(prev => [...prev, l]);
-  };
 
   // ── Tabs Config ───────────────────────────────────────────────────────────
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -154,14 +122,7 @@ export default function FinanceiroPage() {
       {activeTab === "cadastros" && <CadastrosPanel />}
 
       {/* ── TAB: CONCILIAÇÃO BANCÁRIA ───────────────────────────────────────── */}
-      {activeTab === "conciliacao" && (
-        <ConciliacaoPanel
-          onSync={handleSyncSicoob}
-          isSyncing={syncing}
-          lancamentos={dreLancamentos}
-          onConciliar={handleConciliar}
-        />
-      )}
+      {activeTab === "conciliacao" && <ConciliacaoPanel />}
 
       {/* ── TAB: CONFIGURAÇÃO ───────────────────────────────────────── */}
       {activeTab === "configuracao" && (

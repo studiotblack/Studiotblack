@@ -84,6 +84,11 @@ export async function ensureFinanceiroTables(sql: Sql) {
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaCategoriaId" TEXT REFERENCES "CategoriaFinanceira"(id)`;
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaCentroCustoId" TEXT REFERENCES "CentroCusto"(id)`;
 
+  // Cache do saldo real puxado do Sicoob na última sincronização — usado no Fluxo de Caixa
+  // pra mostrar o saldo de verdade da conta em vez do calculado localmente, quando disponível.
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "saldoSicoob" FLOAT`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "saldoSicoobAtualizadoEm" TIMESTAMP`;
+
   // Chamado "LancamentoFinanceiro" (não "Agendamento") porque esse nome já existe no schema
   // pra outra coisa — o agendamento de horário de atendimento do salão (model Agendamento
   // em prisma/schema.prisma: cliente/colaborador/data/hora). São entidades completamente
@@ -157,6 +162,13 @@ export async function ensureFinanceiroTables(sql: Sql) {
       "lancamentoId" TEXT REFERENCES "LancamentoFinanceiro"(id),
       "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
+  `;
+  // Evita reimportar a mesma transação do banco quando o usuário sincroniza de novo o mesmo período
+  // (parcial: idTransacaoSicoob nulo não conflita, só bloqueia duplicata de um id real repetido).
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_transacao_sicoob_unica
+    ON "TransacaoBancariaImportada" ("contaBancariaId", "idTransacaoSicoob")
+    WHERE "idTransacaoSicoob" IS NOT NULL
   `;
 
   // Comprovantes capturados do grupo do WhatsApp (imagem + legenda). "mensagemWhatsappId" evita

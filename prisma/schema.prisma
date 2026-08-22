@@ -306,6 +306,10 @@ model ContaBancaria {
   regraEntradaContatoId    String?
   regraEntradaCategoriaId  String?
   regraEntradaCentroCustoId String?
+
+  // Cache do saldo real puxado do Sicoob na última sincronização
+  saldoSicoob             Float?
+  saldoSicoobAtualizadoEm DateTime?
 }
 
 model Contato {
@@ -416,6 +420,8 @@ model TransacaoBancariaImportada {
   status                String   @default("pendente") // pendente | conciliado | ignorado
   lancamentoId          String?
   createdAt             DateTime @default(now())
+
+  @@unique([contaBancariaId, idTransacaoSicoob])
 }
 
 // Comprovantes capturados do grupo do WhatsApp (imagem + legenda enviados junto).

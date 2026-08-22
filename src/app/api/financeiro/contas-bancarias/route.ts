@@ -44,6 +44,46 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT /api/financeiro/contas-bancarias — edita uma conta existente (inclui config Sicoob)
+export async function PUT(request: NextRequest) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: "Variável DATABASE_URL não configurada." }, { status: 500 });
+  }
+  const sql = getDb();
+  try {
+    await ensureFinanceiroTables(sql);
+    const b = await request.json();
+    if (!b.id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 });
+
+    const [row] = await sql`
+      UPDATE "ContaBancaria" SET
+        nome = COALESCE(${b.nome ?? null}, nome),
+        banco = COALESCE(${b.banco ?? null}, banco),
+        "tipoConta" = COALESCE(${b.tipoConta ?? null}, "tipoConta"),
+        agencia = COALESCE(${b.agencia ?? null}, agencia),
+        conta = COALESCE(${b.conta ?? null}, conta),
+        "sicoobClientId" = COALESCE(${b.sicoobClientId ?? null}, "sicoobClientId"),
+        "sicoobCertificado" = COALESCE(${b.sicoobCertificado ?? null}, "sicoobCertificado"),
+        "sicoobChavePrivada" = COALESCE(${b.sicoobChavePrivada ?? null}, "sicoobChavePrivada"),
+        "sicoobNumeroConta" = COALESCE(${b.sicoobNumeroConta ?? null}, "sicoobNumeroConta"),
+        "regraEntradaAtiva" = COALESCE(${typeof b.regraEntradaAtiva === "boolean" ? b.regraEntradaAtiva : null}, "regraEntradaAtiva"),
+        "regraEntradaContatoId" = COALESCE(${b.regraEntradaContatoId ?? null}, "regraEntradaContatoId"),
+        "regraEntradaCategoriaId" = COALESCE(${b.regraEntradaCategoriaId ?? null}, "regraEntradaCategoriaId"),
+        "regraEntradaCentroCustoId" = COALESCE(${b.regraEntradaCentroCustoId ?? null}, "regraEntradaCentroCustoId"),
+        "updatedAt" = NOW()
+      WHERE id = ${b.id}
+      RETURNING *
+    `;
+    if (!row) return NextResponse.json({ error: "Conta bancária não encontrada" }, { status: 404 });
+    return NextResponse.json(row);
+  } catch (error: any) {
+    console.error("[PUT /api/financeiro/contas-bancarias]", error);
+    return NextResponse.json({ error: error?.message || "Erro ao atualizar conta bancária" }, { status: 500 });
+  } finally {
+    await sql.end();
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   if (!isAdminRequest(request)) {
     return NextResponse.json({ error: "Apenas administradores podem excluir registros." }, { status: 403 });

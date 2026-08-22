@@ -15,6 +15,40 @@ export interface ContaBancaria {
   saldoInicial: number;
   dataSaldoInicial: string; // YYYY-MM-DD
   ativa: boolean;
+
+  // Credenciais Sicoob (mTLS) — presença de sicoobClientId indica que a conta está conectada
+  sicoobClientId?: string;
+  sicoobCertificado?: string;
+  sicoobChavePrivada?: string;
+  sicoobNumeroConta?: string;
+
+  // Regra de classificação automática de créditos sem baixa correspondente
+  regraEntradaAtiva?: boolean;
+  regraEntradaContatoId?: string;
+  regraEntradaCategoriaId?: string;
+  regraEntradaCentroCustoId?: string;
+
+  // Cache do saldo real puxado do Sicoob na última sincronização
+  saldoSicoob?: number;
+  saldoSicoobAtualizadoEm?: string;
+}
+
+export type StatusTransacaoBancaria = "pendente" | "conciliado" | "ignorado";
+
+export interface TransacaoBancariaImportada {
+  id: string;
+  contaBancariaId: string;
+  idTransacaoSicoob?: string;
+  data: string; // YYYY-MM-DD
+  hora?: string;
+  valor: number;
+  tipo: "entrada" | "saida";
+  descricao?: string;
+  descricaoComplementar?: string;
+  status: StatusTransacaoBancaria;
+  lancamentoId?: string;
+  lancamentoDescricao?: string; // preenchido via join, só quando conciliado
+  createdAt?: string;
 }
 
 export type TipoContato = "cliente" | "fornecedor" | "funcionario" | "socio";
