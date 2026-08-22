@@ -27,6 +27,11 @@ export default function FinanceiroPage() {
   const [dreLinhas, setDreLinhas] = useState<DreLinhaImportada[]>([]);
   const [dreLoading, setDreLoading] = useState(true);
 
+  // ── DRE calculado a partir do nosso próprio ledger (Contas a Pagar/Receber) ──
+  const [dreFonte, setDreFonte] = useState<"nibo" | "sistema">("nibo");
+  const [dreLinhasSistema, setDreLinhasSistema] = useState<DreLinhaImportada[]>([]);
+  const [dreSistemaLoading, setDreSistemaLoading] = useState(true);
+
   useEffect(() => {
     const loadDre = async () => {
       setDreLoading(true);
@@ -43,6 +48,21 @@ export default function FinanceiroPage() {
       }
     };
     loadDre();
+  }, [anoFiltro]);
+
+  useEffect(() => {
+    const loadDreSistema = async () => {
+      setDreSistemaLoading(true);
+      try {
+        const res = await fetch(`/api/financeiro/dre-sistema?ano=${anoFiltro}`);
+        if (res.ok) setDreLinhasSistema(await res.json());
+      } catch (err) {
+        console.error("Erro ao calcular DRE do sistema:", err);
+      } finally {
+        setDreSistemaLoading(false);
+      }
+    };
+    loadDreSistema();
   }, [anoFiltro]);
 
   // ── Tabs Config ───────────────────────────────────────────────────────────
@@ -87,16 +107,22 @@ export default function FinanceiroPage() {
       {/* ── TAB: DRE ─────────────────────────────────────────────────────── */}
       {activeTab === "dre" && (
         <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
             <div>
               <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>
                 DRE — Demonstração do Resultado do Exercício
               </h2>
               <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: "2px 0 0 0" }}>
-                Importado direto do &quot;Realizado&quot; do seu sistema contábil
+                {dreFonte === "nibo"
+                  ? "Importado direto do \"Realizado\" do seu sistema contábil"
+                  : "Calculado a partir dos lançamentos já categorizados no sistema (Sicoob + manual)"}
               </p>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <div style={{ display: "flex", gap: "0.25rem", background: "var(--color-surface-2)", borderRadius: "0.5rem", padding: "0.2rem" }}>
+                <button onClick={() => setDreFonte("nibo")} className={dreFonte === "nibo" ? "btn btn-gold btn-sm" : "btn btn-ghost btn-sm"}>Nibo (Excel)</button>
+                <button onClick={() => setDreFonte("sistema")} className={dreFonte === "sistema" ? "btn btn-gold btn-sm" : "btn btn-ghost btn-sm"}>Sistema</button>
+              </div>
               <span style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>Exercício:</span>
               <span className="badge badge-gold" style={{ fontSize: "0.875rem", padding: "0.375rem 0.75rem" }}>
                 {anoFiltro}
@@ -104,14 +130,14 @@ export default function FinanceiroPage() {
             </div>
           </div>
 
-          {dreLoading ? (
+          {(dreFonte === "nibo" ? dreLoading : dreSistemaLoading) ? (
             <div className="card" style={{ textAlign: "center", padding: "3rem", color: "var(--color-muted)" }}>
               Carregando DRE...
             </div>
           ) : (
             <>
-              <DRETable linhas={dreLinhas} ano={anoFiltro} />
-              <IndicadoresBar linhas={dreLinhas} />
+              <DRETable linhas={dreFonte === "nibo" ? dreLinhas : dreLinhasSistema} ano={anoFiltro} />
+              <IndicadoresBar linhas={dreFonte === "nibo" ? dreLinhas : dreLinhasSistema} />
             </>
           )}
         </>
