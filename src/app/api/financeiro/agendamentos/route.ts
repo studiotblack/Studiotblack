@@ -3,7 +3,9 @@ import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/financeiro/agendamentos?tipo=pagar|receber
+// GET /api/financeiro/agendamentos?tipo=&categoriaId=&centroCustoId=&contaBancariaId=&contatoId=&dataInicio=&dataFim=
+// Todos os filtros são opcionais e combinam com AND — usado tanto na tela de Contas a
+// Pagar/Receber (só tipo) quanto no Relatório Financeiro (todos os filtros disponíveis).
 export async function GET(request: NextRequest) {
   if (!process.env.DATABASE_URL) return NextResponse.json([], { status: 200 });
   const sql = getDb();
@@ -11,6 +13,12 @@ export async function GET(request: NextRequest) {
     await ensureFinanceiroTables(sql);
     const { searchParams } = new URL(request.url);
     const tipo = searchParams.get("tipo");
+    const categoriaId = searchParams.get("categoriaId");
+    const centroCustoId = searchParams.get("centroCustoId");
+    const contaBancariaId = searchParams.get("contaBancariaId");
+    const contatoId = searchParams.get("contatoId");
+    const dataInicio = searchParams.get("dataInicio");
+    const dataFim = searchParams.get("dataFim");
 
     const rows = await sql`
       SELECT
@@ -28,7 +36,14 @@ export async function GET(request: NextRequest) {
       LEFT JOIN "CategoriaFinanceira" cat ON cat.id = ac."categoriaId"
       LEFT JOIN "LancamentoFinanceiroCentroCusto" acc ON acc."lancamentoId" = a.id
       LEFT JOIN "CentroCusto" cc ON cc.id = acc."centroCustoId"
-      ${tipo ? sql`WHERE a.tipo = ${tipo}` : sql``}
+      WHERE 1=1
+        ${tipo ? sql`AND a.tipo = ${tipo}` : sql``}
+        ${categoriaId ? sql`AND cat.id = ${categoriaId}` : sql``}
+        ${centroCustoId ? sql`AND cc.id = ${centroCustoId}` : sql``}
+        ${contaBancariaId ? sql`AND a."contaBancariaId" = ${contaBancariaId}` : sql``}
+        ${contatoId ? sql`AND a."contatoId" = ${contatoId}` : sql``}
+        ${dataInicio ? sql`AND a."dataVencimento" >= ${dataInicio}` : sql``}
+        ${dataFim ? sql`AND a."dataVencimento" <= ${dataFim}` : sql``}
       ORDER BY a."dataVencimento" ASC
     `;
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  Landmark, ArrowUpRight, Shield, BarChart3, List, FolderKanban,
+  Landmark, ArrowUpRight, Shield, BarChart3, List, FolderKanban, SlidersHorizontal,
 } from "lucide-react";
 
 // DRE imports
@@ -14,9 +14,10 @@ import ConfigPanel from "./components/ConfigPanel";
 import FluxoCaixaPanel from "./components/FluxoCaixaPanel";
 import AgendamentosTable from "./components/AgendamentosTable";
 import CadastrosPanel from "./components/CadastrosPanel";
+import RelatorioFinanceiroPanel from "./components/RelatorioFinanceiroPanel";
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type Tab = "fluxo" | "dre" | "lancamentos" | "cadastros" | "conciliacao" | "configuracao";
+type Tab = "fluxo" | "dre" | "lancamentos" | "relatorio" | "cadastros" | "conciliacao" | "configuracao";
 
 export default function FinanceiroPage() {
   const [activeTab, setActiveTab] = useState<Tab>("fluxo");
@@ -49,6 +50,7 @@ export default function FinanceiroPage() {
     { id: "fluxo",        label: "Fluxo de Caixa",       icon: <ArrowUpRight size={14} /> },
     { id: "dre",          label: "DRE",                  icon: <BarChart3 size={14} />    },
     { id: "lancamentos",  label: "Contas a Pagar/Receber", icon: <List size={14} />       },
+    { id: "relatorio",    label: "Relatório",            icon: <SlidersHorizontal size={14} /> },
     { id: "cadastros",    label: "Cadastros",            icon: <FolderKanban size={14} /> },
     { id: "conciliacao",  label: "Conciliação Bancária", icon: <Landmark size={14} />     },
     { id: "configuracao", label: "Configuração DRE",     icon: <Shield size={14} />       },
@@ -117,6 +119,9 @@ export default function FinanceiroPage() {
 
       {/* ── TAB: CONTAS A PAGAR/RECEBER ──────────────────────────────────── */}
       {activeTab === "lancamentos" && <AgendamentosTable />}
+
+      {/* ── TAB: RELATÓRIO ────────────────────────────────────────────────── */}
+      {activeTab === "relatorio" && <RelatorioFinanceiroPanel />}
 
       {/* ── TAB: CADASTROS ───────────────────────────────────────────────── */}
       {activeTab === "cadastros" && <CadastrosPanel />}

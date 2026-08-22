@@ -3,7 +3,14 @@
 import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import type { DreLinhaImportada } from "@/lib/dre-data";
-import { MESES_ABREV, isDreLinhaDetalhe } from "@/lib/dre-data";
+import { MESES_ABREV, MESES_FULL, isDreLinhaDetalhe } from "@/lib/dre-data";
+import DreDetalheModal from "./DreDetalheModal";
+
+// Extrai o código contábil do início do nome da linha (ex: "1.1.1.01.001-Venda de Serviços" -> "1.1.1.01.001")
+const extrairCodigo = (resultado: string): string | null => {
+  const m = resultado.match(/^(\d[\d.]*\d|\d)-/);
+  return m ? m[1] : null;
+};
 
 interface DRETableProps {
   linhas: DreLinhaImportada[];
@@ -56,6 +63,14 @@ export default function DRETable({ linhas, ano }: DRETableProps) {
   const expandirTudo = () => setExpandidos(new Set(blocos.filter(b => b.detalhes.length > 0).map(b => b.header.ordem)));
   const recolherTudo = () => setExpandidos(new Set());
 
+  const [detalheAlvo, setDetalheAlvo] = useState<{ codigo: string; nome: string; mes: number; ano: number; mesLabel: string; valorDre: number } | null>(null);
+
+  const abrirDetalhe = (linha: DreLinhaImportada, mesIndex: number, valor: number) => {
+    const codigo = extrairCodigo(linha.resultado);
+    if (!codigo) return;
+    setDetalheAlvo({ codigo, nome: linha.resultado, mes: mesIndex + 1, ano, mesLabel: MESES_FULL[mesIndex], valorDre: valor });
+  };
+
   const thStyle: React.CSSProperties = {
     padding: "0.5rem 0.625rem", fontSize: "0.7rem", fontWeight: 600,
     textTransform: "uppercase", letterSpacing: "0.05em",
@@ -106,11 +121,17 @@ export default function DRETable({ linhas, ano }: DRETableProps) {
   const renderValueCells = (l: DreLinhaImportada, isPct: boolean, isDestaque: boolean, rowBg?: string) => {
     const valores = [l.jan, l.fev, l.mar, l.abr, l.mai, l.jun, l.jul, l.ago, l.set, l.out, l.nov, l.dez];
     const format = isPct ? fmtPct : fmt;
+    const clicavel = !isPct && !!extrairCodigo(l.resultado);
     return (
       <>
         {valores.map((v, i) => (
-          <td key={i} style={{ ...cellStyle, background: rowBg }}>
-            <span style={{ color: isPct ? "var(--color-info)" : cellColor(v), fontWeight: isDestaque ? 700 : undefined }}>
+          <td
+            key={i}
+            style={{ ...cellStyle, background: rowBg, cursor: clicavel ? "pointer" : undefined }}
+            onClick={clicavel ? () => abrirDetalhe(l, i, v) : undefined}
+            title={clicavel ? "Ver lançamentos que compõem esse valor" : undefined}
+          >
+            <span style={{ color: isPct ? "var(--color-info)" : cellColor(v), fontWeight: isDestaque ? 700 : undefined, textDecoration: clicavel ? "underline dotted" : undefined, textDecorationColor: clicavel ? "var(--color-border-light)" : undefined }}>
               {(v !== 0 || isPct) ? format(v) : "—"}
             </span>
           </td>
@@ -210,6 +231,8 @@ export default function DRETable({ linhas, ano }: DRETableProps) {
           </tbody>
         </table>
       </div>
+
+      <DreDetalheModal alvo={detalheAlvo} onClose={() => setDetalheAlvo(null)} />
     </div>
   );
 }
