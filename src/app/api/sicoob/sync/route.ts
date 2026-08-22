@@ -96,15 +96,16 @@ export async function GET(request: NextRequest) {
     const client = new SicoobClient(clientId, cert, key);
     const extrato = await client.getExtrato(conta, mes, ano);
 
-    // A API Sicoob v4 retorna: { resultado: { lancamentos: [...] } }
+    // A API Sicoob v4 (conta-corrente/v4/extrato) retorna: { resultado: { transacoes: [...] } },
+    // cada transação com tipo: "CREDITO" | "DEBITO" (confirmado direto contra a API real).
     const rawLancamentos: any[] =
-      extrato?.resultado?.lancamentos ?? extrato?.lancamentos ?? [];
+      extrato?.resultado?.transacoes ?? extrato?.resultado?.lancamentos ?? extrato?.lancamentos ?? [];
 
     const lancamentos: DRELancamento[] = rawLancamentos.map((l: any, i: number) => {
       const valor   = Math.abs(Number(l.valor ?? l.vlrLancamento ?? 0));
-      const tipoOFX: "C" | "D" = l.tipoLancamento === "C" || (l.valor ?? 0) > 0 ? "C" : "D";
+      const tipoOFX: "C" | "D" = l.tipo === "CREDITO" || l.tipoLancamento === "C" ? "C" : "D";
       const descricao = l.descricao ?? l.historico ?? l.memo ?? "Lançamento bancário";
-      const data = l.dataLancamento ?? l.data ?? `2026-${String(mes).padStart(2,"0")}-01`;
+      const data = l.dataLote ?? l.dataLancamento ?? l.data ?? `2026-${String(mes).padStart(2,"0")}-01`;
 
       const { grupo, subcategoria, tipoLancamento } = inferirCategoria(descricao, valor, tipoOFX);
 
