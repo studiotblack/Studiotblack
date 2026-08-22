@@ -112,7 +112,7 @@ export default function FinanceiroPage() {
       </div>
 
       {/* ── TAB: FLUXO DE CAIXA ───────────────────────────────────────────── */}
-      {activeTab === "fluxo" && <FluxoCaixaPanel />}
+      {activeTab === "fluxo" && <FluxoCaixaPanel dreLinhas={dreLinhas} anoDre={anoFiltro} />}
 
       {/* ── TAB: DRE ─────────────────────────────────────────────────────── */}
       {activeTab === "dre" && (

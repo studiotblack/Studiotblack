@@ -338,6 +338,14 @@ model CentroCusto {
   createdAt DateTime @default(now())
 }
 
+// Linha única (id fixo "default") — meta de faturamento mensal do negócio,
+// usada no card "Receita do Mês (real x meta)" do Fluxo de Caixa.
+model MetaFinanceira {
+  id                String   @id @default("default")
+  metaReceitaMensal Float    @default(0)
+  updatedAt         DateTime @updatedAt
+}
+
 model LancamentoFinanceiro {
   id               String   @id @default(uuid())
   tipo             String   // pagar | receber

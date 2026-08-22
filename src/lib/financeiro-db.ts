@@ -189,6 +189,17 @@ export async function ensureFinanceiroTables(sql: Sql) {
     )
   `;
 
+  // Meta de faturamento mensal do negócio (linha única, id fixo "default") — usada no card
+  // "Receita do Mês (real x meta)" do Fluxo de Caixa. Não confundir com as metas de
+  // serviço/produto por profissional (essas ficam em ConfigMetas, no módulo Performance).
+  await sql`
+    CREATE TABLE IF NOT EXISTS "MetaFinanceira" (
+      id TEXT PRIMARY KEY DEFAULT 'default',
+      "metaReceitaMensal" FLOAT NOT NULL DEFAULT 0,
+      "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS "Transferencia" (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

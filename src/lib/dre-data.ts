@@ -291,3 +291,24 @@ export function computeIndicadoresDre(linhas: DreLinhaImportada[]) {
     margemOperacional: receitaTotal > 0 ? (resultadoOperacional / receitaTotal) * 100 : 0,
   };
 }
+
+const DRE_MES_CAMPOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"] as const;
+
+// Mesma ideia do computeIndicadoresDre, mas lendo só a coluna de um mês específico
+// (0 = Janeiro, ..., 11 = Dezembro) em vez do totalAno — usado no card "Receita/Lucro do Mês".
+export function computeIndicadoresDreMes(linhas: DreLinhaImportada[], mesIndex: number) {
+  const campo = DRE_MES_CAMPOS[mesIndex];
+  const acharValorMes = (nomeExato: string) => {
+    const linha = linhas.find(l => l.resultado === nomeExato);
+    return linha ? (linha[campo] as number) : 0;
+  };
+
+  const receitaMes = acharValorMes("RECEITAS OPERACIONAIS");
+  const resultadoOperacionalMes = acharValorMes("RESULTADO OPERACIONAL");
+
+  return {
+    receitaMes,
+    resultadoOperacionalMes,
+    margemOperacionalMes: receitaMes > 0 ? (resultadoOperacionalMes / receitaMes) * 100 : 0,
+  };
+}
