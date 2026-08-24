@@ -15,7 +15,7 @@ export async function ensureWhatsappAuthTable(sql: Sql) {
   `;
 }
 
-export async function usePostgresAuthState(sql: Sql) {
+export async function carregarAuthStatePostgres(sql: Sql) {
   await ensureWhatsappAuthTable(sql);
 
   const readData = async (key: string) => {

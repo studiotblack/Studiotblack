@@ -12,12 +12,12 @@ import path from "node:path";
 import QRCode from "qrcode";
 import makeWASocket, { fetchLatestBaileysVersion, Browsers, DisconnectReason } from "@whiskeysockets/baileys";
 import { getDb } from "../src/lib/financeiro-db";
-import { usePostgresAuthState } from "../src/lib/whatsapp/auth-state";
+import { carregarAuthStatePostgres } from "../src/lib/whatsapp/auth-state";
 
 const QR_PATH = path.join(__dirname, "whatsapp-qr.png");
 
 async function conectar(sql: ReturnType<typeof getDb>): Promise<void> {
-  const { state, saveCreds } = await usePostgresAuthState(sql);
+  const { state, saveCreds } = await carregarAuthStatePostgres(sql);
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
