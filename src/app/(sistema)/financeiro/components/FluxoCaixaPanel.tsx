@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { ArrowUpRight, ArrowDownRight, Landmark, Calendar, Pencil, AlertTriangle } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Landmark, Calendar, Pencil, AlertTriangle, Home, Percent, TrendingUp, TrendingDown, Wallet, BatteryWarning } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import type { ContaBancaria, Agendamento } from "@/lib/financeiro-data";
 import { statusAgendamento } from "@/lib/financeiro-data";
 import type { DreLinhaImportada } from "@/lib/dre-data";
-import { computeIndicadoresDreMes, MESES_ABREV } from "@/lib/dre-data";
+import { computeIndicadoresDre, computeIndicadoresDreMes, MESES_ABREV } from "@/lib/dre-data";
 
 interface BaixaComTipo {
   id: string;
@@ -155,6 +155,32 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
 
   const caixaLivre = saldoConsolidado - compromissos60Dias;
 
+  // ── Indicadores de saúde financeira (ano) — mesma leitura da aba DRE, só que aqui
+  // no Fluxo de Caixa pra dar a visão de "painel" completa numa tela só ──────────
+  const indicadoresAno = useMemo(() => computeIndicadoresDre(dreLinhas), [dreLinhas]);
+  const despesasTotal = indicadoresAno.margemContribuicao - indicadoresAno.resultadoOperacional;
+  const pctDespesas = indicadoresAno.receitaTotal > 0 ? (despesasTotal / indicadoresAno.receitaTotal) * 100 : 0;
+
+  // Contas a receber vencidas — sinal de inadimplência, ajuda a explicar por que o
+  // caixa não bate com o que "deveria" ter entrado.
+  const { vencidosReceber, qtdVencidosReceber } = useMemo(() => {
+    const vencidos = agendamentos.filter(a => a.tipo === "receber" && statusAgendamento(a) === "vencido");
+    return {
+      vencidosReceber: vencidos.reduce((acc, a) => acc + (a.valor - a.valorPago), 0),
+      qtdVencidosReceber: vencidos.length,
+    };
+  }, [agendamentos]);
+
+  // Dias de Caixa (runway): quantos dias o Caixa Livre atual sustenta, no ritmo médio
+  // de despesa observado neste ano até hoje — mesma lógica de reserva de segurança.
+  const diasDeCaixa = useMemo(() => {
+    const hoje = new Date();
+    const inicioAno = new Date(hoje.getFullYear(), 0, 1);
+    const diasDecorridos = Math.max(1, Math.round((hoje.getTime() - inicioAno.getTime()) / 86400000) + 1);
+    const despesaMediaDiaria = despesasTotal / diasDecorridos;
+    return despesaMediaDiaria > 0 ? caixaLivre / despesaMediaDiaria : 0;
+  }, [despesasTotal, caixaLivre]);
+
   const proximosVencimentos = useMemo(() => {
     return agendamentos
       .map(a => ({ ...a, status: statusAgendamento(a) }))
@@ -287,6 +313,71 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Indicadores de Saúde Financeira (Ano) ────────────────────────────── */}
+      <div className="divider-text">Indicadores do Ano</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+        {[
+          {
+            id: "aluguel", label: "Aluguel / Receita", value: `${indicadoresAno.pctAluguel.toFixed(1)}%`,
+            sub: `${brl(indicadoresAno.aluguelTotal)} do total`, alert: indicadoresAno.pctAluguel > 10,
+            alertMsg: "Acima de 10% da receita", Icon: indicadoresAno.pctAluguel > 10 ? AlertTriangle : Home,
+            color: indicadoresAno.pctAluguel > 10 ? "var(--color-danger)" : "var(--color-gold)",
+          },
+          {
+            id: "comissoes", label: "Comissões / Receita", value: `${indicadoresAno.pctComissoes.toFixed(1)}%`,
+            sub: `${brl(indicadoresAno.comissoesTotal)} do total`, alert: false, alertMsg: "", Icon: Percent, color: "var(--color-info)",
+          },
+          {
+            id: "despesas", label: "Despesas Op. / Receita", value: `${pctDespesas.toFixed(1)}%`,
+            sub: `${brl(despesasTotal)} do total`, alert: pctDespesas > 40,
+            alertMsg: "Acima de 40% da receita", Icon: pctDespesas > 40 ? AlertTriangle : TrendingDown,
+            color: pctDespesas > 40 ? "var(--color-danger)" : "#9b59b6",
+          },
+          {
+            id: "margem", label: "Margem Operacional", value: `${indicadoresAno.margemOperacional.toFixed(1)}%`,
+            sub: `${brl(indicadoresAno.resultadoOperacional)} resultado`, alert: indicadoresAno.margemOperacional < 0,
+            alertMsg: "Resultado operacional negativo", Icon: indicadoresAno.margemOperacional >= 0 ? TrendingUp : TrendingDown,
+            color: indicadoresAno.margemOperacional >= 0 ? "var(--color-success)" : "var(--color-danger)",
+          },
+          {
+            id: "receita-total", label: "Receita Total (Ano)", value: brl(indicadoresAno.receitaTotal),
+            sub: "Receitas Operacionais", alert: false, alertMsg: "", Icon: TrendingUp, color: "var(--color-gold-bright)",
+          },
+          {
+            id: "vencidos", label: "Vencidos a Receber", value: brl(vencidosReceber),
+            sub: `${qtdVencidosReceber} conta${qtdVencidosReceber !== 1 ? "s" : ""} vencida${qtdVencidosReceber !== 1 ? "s" : ""}`,
+            alert: vencidosReceber > 0, alertMsg: "Cliente devendo — vale cobrar", Icon: AlertTriangle,
+            color: vencidosReceber > 0 ? "var(--color-danger)" : "var(--color-success)",
+          },
+          {
+            id: "runway", label: "Dias de Caixa", value: diasDeCaixa > 0 ? `${Math.floor(diasDeCaixa)} dias` : "—",
+            sub: "No ritmo de despesa deste ano", alert: diasDeCaixa > 0 && diasDeCaixa < 15,
+            alertMsg: "Menos de 15 dias de fôlego", Icon: diasDeCaixa < 15 ? BatteryWarning : Wallet,
+            color: diasDeCaixa < 0 ? "var(--color-danger)" : diasDeCaixa < 15 ? "var(--color-warning)" : "var(--color-success)",
+          },
+        ].map(ind => (
+          <div key={ind.id} style={{
+            background: ind.alert ? "rgba(231,76,60,0.06)" : "var(--color-surface)",
+            border: `1px solid ${ind.alert ? ind.color : "var(--color-border)"}`,
+            borderRadius: "0.875rem", padding: "1rem 1.25rem",
+            display: "flex", flexDirection: "column", gap: "0.5rem", position: "relative", overflow: "hidden",
+          }}>
+            {ind.alert && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: ind.color }} />}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-muted)", fontWeight: 600 }}>{ind.label}</span>
+              <ind.Icon size={16} color={ind.color} />
+            </div>
+            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: ind.color, lineHeight: 1 }}>{ind.value}</div>
+            <div style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>{ind.sub}</div>
+            {ind.alert && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.7rem", color: ind.color, fontWeight: 600, marginTop: 2 }}>
+                <AlertTriangle size={11} /> {ind.alertMsg}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* ── Saldo por conta bancária ─────────────────────────────────────────── */}
