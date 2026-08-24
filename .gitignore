@@ -44,3 +44,6 @@ next-env.d.ts
 
 # import-appbarber log (dados de negocio, nao deve ir pro git)
 /scripts/import-log.txt
+
+# QR code gerado no pareamento do WhatsApp (regenerado a cada pareamento, nunca commitar)
+/scripts/whatsapp-qr.png

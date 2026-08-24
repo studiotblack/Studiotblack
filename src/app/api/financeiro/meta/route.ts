@@ -9,8 +9,8 @@ export async function GET() {
   const sql = getDb();
   try {
     await ensureFinanceiroTables(sql);
-    const [row] = await sql`SELECT "metaReceitaMensal" FROM "MetaFinanceira" WHERE id = 'default'`;
-    return NextResponse.json({ metaReceitaMensal: row?.metaReceitaMensal ?? 0 });
+    const [row] = await sql`SELECT "metaReceitaMensal", "whatsappGrupoJid" FROM "MetaFinanceira" WHERE id = 'default'`;
+    return NextResponse.json({ metaReceitaMensal: row?.metaReceitaMensal ?? 0, whatsappGrupoJid: row?.whatsappGrupoJid ?? null });
   } catch (error: any) {
     console.error("[GET /api/financeiro/meta]", error);
     return NextResponse.json({ error: error?.message || "Erro ao buscar meta" }, { status: 500 });
@@ -27,17 +27,21 @@ export async function PUT(request: NextRequest) {
   const sql = getDb();
   try {
     await ensureFinanceiroTables(sql);
-    const { metaReceitaMensal } = await request.json();
-    if (typeof metaReceitaMensal !== "number" || metaReceitaMensal < 0) {
+    const body = await request.json();
+    const { metaReceitaMensal, whatsappGrupoJid } = body;
+    if (metaReceitaMensal !== undefined && (typeof metaReceitaMensal !== "number" || metaReceitaMensal < 0)) {
       return NextResponse.json({ error: "metaReceitaMensal precisa ser um número válido" }, { status: 400 });
     }
+    const [existente] = await sql`SELECT "metaReceitaMensal", "whatsappGrupoJid" FROM "MetaFinanceira" WHERE id = 'default'`;
+    const novaMeta = metaReceitaMensal ?? existente?.metaReceitaMensal ?? 0;
+    const novoJid = whatsappGrupoJid !== undefined ? whatsappGrupoJid : (existente?.whatsappGrupoJid ?? null);
     const [row] = await sql`
-      INSERT INTO "MetaFinanceira" (id, "metaReceitaMensal", "updatedAt")
-      VALUES ('default', ${metaReceitaMensal}, NOW())
-      ON CONFLICT (id) DO UPDATE SET "metaReceitaMensal" = EXCLUDED."metaReceitaMensal", "updatedAt" = NOW()
-      RETURNING "metaReceitaMensal"
+      INSERT INTO "MetaFinanceira" (id, "metaReceitaMensal", "whatsappGrupoJid", "updatedAt")
+      VALUES ('default', ${novaMeta}, ${novoJid}, NOW())
+      ON CONFLICT (id) DO UPDATE SET "metaReceitaMensal" = EXCLUDED."metaReceitaMensal", "whatsappGrupoJid" = EXCLUDED."whatsappGrupoJid", "updatedAt" = NOW()
+      RETURNING "metaReceitaMensal", "whatsappGrupoJid"
     `;
-    return NextResponse.json({ metaReceitaMensal: row.metaReceitaMensal });
+    return NextResponse.json({ metaReceitaMensal: row.metaReceitaMensal, whatsappGrupoJid: row.whatsappGrupoJid });
   } catch (error: any) {
     console.error("[PUT /api/financeiro/meta]", error);
     return NextResponse.json({ error: error?.message || "Erro ao salvar meta" }, { status: 500 });

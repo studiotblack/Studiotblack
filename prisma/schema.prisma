@@ -347,7 +347,17 @@ model CentroCusto {
 model MetaFinanceira {
   id                String   @id @default("default")
   metaReceitaMensal Float    @default(0)
+  whatsappGrupoJid  String?
   updatedAt         DateTime @updatedAt
+}
+
+// Sessão do WhatsApp Web (Baileys) pareada uma única vez via QR — guarda as credenciais
+// e chaves de sessão pra reconectar sozinho sem precisar escanear de novo. Uma linha
+// por "chave" do protocolo (creds, pre-keys, sender-keys, etc).
+model WhatsappAuthState {
+  chave     String   @id
+  valor     String
+  updatedAt DateTime @default(now())
 }
 
 model LancamentoFinanceiro {
