@@ -143,6 +143,7 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
     const pendentes = agendamentos.filter(a => {
       if (a.tipo !== "pagar") return false;
       if (statusAgendamento(a) === "pago") return false;
+      if (!a.dataVencimento) return false; // sem data ainda — não dá pra saber se cai nos próximos 60 dias
       const venc = new Date(a.dataVencimento + "T00:00:00");
       return venc >= hoje && venc <= limite;
     });
@@ -184,8 +185,8 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
   const proximosVencimentos = useMemo(() => {
     return agendamentos
       .map(a => ({ ...a, status: statusAgendamento(a) }))
-      .filter(a => a.status !== "pago")
-      .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
+      .filter(a => a.status !== "pago" && a.dataVencimento) // sem data ainda não é "próximo vencimento"
+      .sort((a, b) => a.dataVencimento!.localeCompare(b.dataVencimento!))
       .slice(0, 8);
   }, [agendamentos]);
 

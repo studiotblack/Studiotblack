@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Check, Search, Trash2 } from "lucide-react";
+import { Plus, Check, Search, Trash2, Pencil } from "lucide-react";
 import type { Agendamento, TipoAgendamento, StatusAgendamento } from "@/lib/financeiro-data";
-import { statusAgendamento, STATUS_LABELS, STATUS_COLORS } from "@/lib/financeiro-data";
+import { statusAgendamento, estaNestaSemana, STATUS_LABELS, STATUS_COLORS } from "@/lib/financeiro-data";
 import AgendamentoForm from "./AgendamentoForm";
 import BaixaModal from "./BaixaModal";
 
@@ -14,9 +14,11 @@ export default function AgendamentosTable() {
   const [tipo, setTipo] = useState<TipoAgendamento>("pagar");
   const [statusFiltro, setStatusFiltro] = useState<StatusAgendamento | "todos">("todos");
   const [busca, setBusca] = useState("");
+  const [apenasSemana, setApenasSemana] = useState(true);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editando, setEditando] = useState<Agendamento | null>(null);
   const [baixaAlvo, setBaixaAlvo] = useState<Agendamento | null>(null);
 
   const carregar = useCallback(async () => {
@@ -40,12 +42,17 @@ export default function AgendamentosTable() {
     carregar();
   };
 
+  const abrirNovo = () => { setEditando(null); setShowForm(true); };
+  const abrirEdicao = (a: Agendamento) => { setEditando(a); setShowForm(true); };
+  const fecharForm = () => { setShowForm(false); setEditando(null); };
+
   const filtrados = useMemo(() => {
     return agendamentos
       .map(a => ({ ...a, status: statusAgendamento(a) }))
       .filter(a => statusFiltro === "todos" || a.status === statusFiltro)
+      .filter(a => !apenasSemana || estaNestaSemana(a))
       .filter(a => !busca || a.descricao.toLowerCase().includes(busca.toLowerCase()) || a.contatoNome?.toLowerCase().includes(busca.toLowerCase()));
-  }, [agendamentos, statusFiltro, busca]);
+  }, [agendamentos, statusFiltro, apenasSemana, busca]);
 
   const totalAberto = filtrados.filter(a => a.status !== "pago").reduce((acc, a) => acc + (a.valor - a.valorPago), 0);
 
@@ -59,7 +66,7 @@ export default function AgendamentosTable() {
             </button>
           ))}
         </div>
-        <button className="btn btn-gold" onClick={() => setShowForm(true)}><Plus size={16} /> Novo Agendamento</button>
+        <button className="btn btn-gold" onClick={abrirNovo}><Plus size={16} /> Novo Agendamento</button>
       </div>
 
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -67,6 +74,13 @@ export default function AgendamentosTable() {
           <Search size={14} color="var(--color-muted)" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)" }} />
           <input placeholder="Buscar descrição ou contato..." value={busca} onChange={e => setBusca(e.target.value)} style={{ paddingLeft: "2.25rem" }} />
         </div>
+        <button
+          onClick={() => setApenasSemana(v => !v)}
+          className={apenasSemana ? "btn btn-gold btn-sm" : "btn btn-ghost btn-sm"}
+          title="Mostrar só o que vence até este sábado (mais o que já venceu e ainda está em aberto)"
+        >
+          Esta semana
+        </button>
         <select value={statusFiltro} onChange={e => setStatusFiltro(e.target.value as any)} style={{ width: "auto" }}>
           <option value="todos">Todos os status</option>
           <option value="aberto">Em aberto</option>
@@ -112,6 +126,9 @@ export default function AgendamentosTable() {
                       <Check size={16} />
                     </button>
                   )}
+                  <button onClick={() => abrirEdicao(a)} title="Editar" style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer", marginRight: "0.5rem" }}>
+                    <Pencil size={14} />
+                  </button>
                   {a.valorPago === 0 && (
                     <button onClick={() => excluir(a.id)} title="Excluir" style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer" }}>
                       <Trash2 size={14} />
@@ -124,7 +141,7 @@ export default function AgendamentosTable() {
         </table>
       </div>
 
-      <AgendamentoForm isOpen={showForm} onClose={() => setShowForm(false)} onSaved={carregar} tipoInicial={tipo} />
+      <AgendamentoForm isOpen={showForm} onClose={fecharForm} onSaved={carregar} tipoInicial={tipo} editando={editando} />
       <BaixaModal agendamento={baixaAlvo} onClose={() => setBaixaAlvo(null)} onSaved={carregar} />
     </div>
   );

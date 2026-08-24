@@ -112,6 +112,50 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         continue;
       }
 
+      // Sem match — se for saída e a descrição do banco bater com uma regra já aprendida
+      // (ex: usuário conciliou "Sabesp" manualmente uma vez e marcou "lembrar esse padrão"),
+      // cria e já baixa o lançamento sozinho, sem precisar repetir a conciliação manual.
+      if (tipo === "saida") {
+        const [regra] = await sql`
+          SELECT * FROM "RegraConciliacaoBancaria"
+          WHERE ${descricao.toLowerCase()} LIKE '%' || "padraoDescricao" || '%'
+          ORDER BY LENGTH("padraoDescricao") DESC
+          LIMIT 1
+        `;
+        if (regra) {
+          await sql.begin(async (sql) => {
+            const [novoLancamento] = await sql`
+              INSERT INTO "LancamentoFinanceiro"
+                (tipo, "contatoId", valor, "valorPago", "dataVencimento", "dataCompetencia", descricao, "contaBancariaId")
+              VALUES
+                ('pagar', ${regra.contatoId}, ${valor}, ${valor}, ${data}, ${data}, ${regra.descricao || descricao}, ${id})
+              RETURNING *
+            `;
+            if (regra.categoriaId) {
+              await sql`
+                INSERT INTO "LancamentoFinanceiroCategoria" ("lancamentoId", "categoriaId", valor)
+                VALUES (${novoLancamento.id}, ${regra.categoriaId}, ${valor})
+              `;
+            }
+            if (regra.centroCustoId) {
+              await sql`
+                INSERT INTO "LancamentoFinanceiroCentroCusto" ("lancamentoId", "centroCustoId", valor)
+                VALUES (${novoLancamento.id}, ${regra.centroCustoId}, ${valor})
+              `;
+            }
+            await sql`
+              INSERT INTO "Baixa" ("lancamentoId", valor, data, "contaBancariaId", observacao)
+              VALUES (${novoLancamento.id}, ${valor}, ${data}, ${id}, ${"Criado e conciliado automaticamente via regra de conciliação aprendida"})
+            `;
+            await sql`
+              UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${novoLancamento.id} WHERE id = ${reservada.id}
+            `;
+          });
+          autoConciliados++;
+          continue;
+        }
+      }
+
       // Sem match — se for entrada e a conta tiver regra automática configurada, cria e já baixa
       // o lançamento sozinho (ex: vendas avulsas de produto que não passam por "conta a receber").
       if (tipo === "entrada" && conta.regraEntradaAtiva && conta.regraEntradaContatoId) {

@@ -2,18 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import type { Contato, ContaBancaria, CategoriaFinanceira, CentroCusto, TipoAgendamento } from "@/lib/financeiro-data";
+import type { Agendamento, Contato, ContaBancaria, CategoriaFinanceira, CentroCusto, TipoAgendamento } from "@/lib/financeiro-data";
 
 interface AgendamentoFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
   tipoInicial?: TipoAgendamento;
+  editando?: Agendamento | null;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial = "pagar" }: AgendamentoFormProps) {
+export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial = "pagar", editando = null }: AgendamentoFormProps) {
   const [contatos, setContatos] = useState<Contato[]>([]);
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
@@ -22,7 +23,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
   const [tipo, setTipo] = useState<TipoAgendamento>(tipoInicial);
   const [contatoId, setContatoId] = useState("");
   const [valor, setValor] = useState<number>(0);
-  const [dataVencimento, setDataVencimento] = useState(today());
+  const [dataVencimento, setDataVencimento] = useState("");
   const [dataCompetencia, setDataCompetencia] = useState(today());
   const [dataPrevisao, setDataPrevisao] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -37,7 +38,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
 
   useEffect(() => {
     if (!isOpen) return;
-    setTipo(tipoInicial);
+    setTipo(editando?.tipo ?? tipoInicial);
     Promise.all([
       fetch("/api/financeiro/contatos").then(r => r.ok ? r.json() : []),
       fetch("/api/financeiro/contas-bancarias").then(r => r.ok ? r.json() : []),
@@ -46,7 +47,27 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
     ]).then(([c, b, cat, cc]) => {
       setContatos(c); setContas(b); setCategorias(cat); setCentros(cc);
     });
-  }, [isOpen, tipoInicial]);
+
+    if (editando) {
+      setContatoId(editando.contatoId);
+      setValor(editando.valor);
+      setDataVencimento(editando.dataVencimento || "");
+      setDataCompetencia(editando.dataCompetencia || today());
+      setDataPrevisao(editando.dataPrevisao || "");
+      setDescricao(editando.descricao);
+      setReferencia(editando.referencia || "");
+      setDetalhamento(editando.detalhamento || "");
+      setContaBancariaId(editando.contaBancariaId || "");
+      setCategoriaId(editando.categoriaId || "");
+      setCentroCustoId(editando.centroCustoId || "");
+      setReembolsavel(editando.reembolsavel);
+    } else {
+      setContatoId(""); setValor(0); setDataVencimento(""); setDataCompetencia(today());
+      setDataPrevisao(""); setDescricao(""); setReferencia(""); setDetalhamento("");
+      setContaBancariaId(""); setCategoriaId(""); setCentroCustoId(""); setReembolsavel(false);
+    }
+    setErro("");
+  }, [isOpen, tipoInicial, editando]);
 
   if (!isOpen) return null;
 
@@ -58,17 +79,18 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro("");
-    if (!contatoId || valor <= 0 || !descricao) {
-      setErro("Contato, valor e descrição são obrigatórios.");
+    if (!contatoId || valor < 0 || !descricao) {
+      setErro("Contato e descrição são obrigatórios.");
       return;
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/financeiro/agendamentos", {
-        method: "POST",
+      const url = editando ? `/api/financeiro/agendamentos/${editando.id}` : "/api/financeiro/agendamentos";
+      const res = await fetch(url, {
+        method: editando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tipo, contatoId, valor, dataVencimento, dataCompetencia,
+          tipo, contatoId, valor, dataVencimento: dataVencimento || undefined, dataCompetencia,
           dataPrevisao: dataPrevisao || undefined, descricao, referencia, detalhamento,
           contaBancariaId: contaBancariaId || undefined, categoriaId: categoriaId || undefined,
           centroCustoId: centroCustoId || undefined, reembolsavel,
@@ -77,8 +99,6 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
       if (!res.ok) throw new Error((await res.json()).error);
       onSaved();
       onClose();
-      // reset
-      setValor(0); setDescricao(""); setReferencia(""); setDetalhamento(""); setContatoId("");
     } catch (err: any) {
       setErro(err.message || "Erro ao salvar agendamento");
     } finally {
@@ -90,7 +110,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
     <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 560 }}>
         <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>Novo Agendamento</h2>
+          <h2 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>{editando ? "Editar Agendamento" : "Novo Agendamento"}</h2>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer" }}><X size={20} /></button>
         </div>
 
@@ -136,7 +156,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
             <div>
               <label className="form-label">Valor (R$)</label>
-              <input type="number" step="0.01" min={0.01} value={valor || ""} onChange={e => setValor(Number(e.target.value))} required />
+              <input type="number" step="0.01" min={0} value={valor || ""} onChange={e => setValor(Number(e.target.value))} placeholder="Deixe 0 se ainda não souber" />
             </div>
             <div>
               <label className="form-label">Conta Bancária</label>
@@ -149,8 +169,8 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
             <div>
-              <label className="form-label">Vencimento</label>
-              <input type="date" value={dataVencimento} onChange={e => setDataVencimento(e.target.value)} required />
+              <label className="form-label">Vencimento (opcional)</label>
+              <input type="date" value={dataVencimento} onChange={e => setDataVencimento(e.target.value)} />
             </div>
             <div>
               <label className="form-label">Competência</label>

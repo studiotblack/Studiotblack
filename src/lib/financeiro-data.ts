@@ -105,7 +105,7 @@ export interface Agendamento {
   contatoNome?: string;
   valor: number;
   valorPago: number;
-  dataVencimento: string;
+  dataVencimento: string | null;
   dataCompetencia: string;
   dataPrevisao?: string;
   descricao: string;
@@ -143,13 +143,34 @@ export interface Transferencia {
 // Status é sempre calculado a partir de valor/valorPago/dataVencimento — nunca armazenado,
 // pra não ficar desatualizado (ex: "vencido" tem que reagir à passagem do tempo sozinho).
 export function statusAgendamento(a: Pick<Agendamento, "valor" | "valorPago" | "dataVencimento">): StatusAgendamento {
+  // Contas com valor 0 são placeholders (valor ainda não conhecido) — nunca "quitadas" sozinhas.
+  if (a.valor <= 0) return "aberto";
   const quitado = a.valorPago >= a.valor;
   if (quitado) return "pago";
+  // Sem data de vencimento definida ainda: fica em aberto, nunca "vencido" (não tem como
+  // vencer um prazo que não existe) — o usuário vai preenchendo a data aos poucos.
+  if (!a.dataVencimento) return a.valorPago > 0 ? "parcial" : "aberto";
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   const vencimento = new Date(a.dataVencimento + "T00:00:00");
   if (vencimento < hoje) return "vencido";
   return a.valorPago > 0 ? "parcial" : "aberto";
+}
+
+// Uma conta cai "nesta semana" se o vencimento estiver entre hoje e domingo (ou já vencida
+// e ainda em aberto — não queremos que ela suma da lista da semana só porque passou do prazo).
+export function estaNestaSemana(a: Pick<Agendamento, "valor" | "valorPago" | "dataVencimento">): boolean {
+  if (statusAgendamento(a) === "pago") return false;
+  if (!a.dataVencimento) return false;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const vencimento = new Date(a.dataVencimento + "T00:00:00");
+  if (vencimento < hoje) return true; // vencida e ainda em aberto — precisa aparecer
+  const diaSemana = hoje.getDay(); // 0=domingo
+  const fimSemana = new Date(hoje);
+  fimSemana.setDate(hoje.getDate() + (6 - diaSemana)); // próximo sábado (ou hoje, se já for sábado)
+  fimSemana.setHours(23, 59, 59, 999);
+  return vencimento <= fimSemana;
 }
 
 export const STATUS_LABELS: Record<StatusAgendamento, string> = {

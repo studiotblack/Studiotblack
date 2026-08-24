@@ -21,7 +21,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
           tipo = ${b.tipo},
           "contatoId" = ${b.contatoId},
           valor = ${b.valor},
-          "dataVencimento" = ${b.dataVencimento},
+          "dataVencimento" = ${b.dataVencimento || null},
           "dataCompetencia" = ${b.dataCompetencia},
           "dataPrevisao" = ${b.dataPrevisao ?? null},
           descricao = ${b.descricao},

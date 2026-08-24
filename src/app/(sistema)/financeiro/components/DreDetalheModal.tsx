@@ -18,7 +18,7 @@ interface LancamentoDetalhe {
   valor: number;
   valorPago: number;
   dataCompetencia: string;
-  dataVencimento: string;
+  dataVencimento: string | null;
   descricao: string;
   contatoNome: string;
   categoriaNome: string;

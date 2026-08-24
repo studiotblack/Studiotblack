@@ -1,8 +1,12 @@
 "use client";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, Search, CalendarDays, Clock, Menu, Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTheme } from "@/lib/theme-context";
+import type { Agendamento } from "@/lib/financeiro-data";
+import { estaNestaSemana } from "@/lib/financeiro-data";
+
+const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":     { title: "Dashboard",       subtitle: "Visão geral do negócio"               },
@@ -18,9 +22,11 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
 
 export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
   const page = pageTitles[pathname] ?? { title: "Black Gestão", subtitle: "" };
   const [now, setNow] = useState(new Date());
   const [showNotif, setShowNotif] = useState(false);
+  const [contasSemana, setContasSemana] = useState<Agendamento[]>([]);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -28,10 +34,29 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
     return () => clearInterval(t);
   }, []);
 
+  // Lembrete semanal de Contas a Pagar — recalcula sempre que o header monta (troca de
+  // página) ou o sino é aberto, e reflete a semana atual sozinho, sem precisar de um job
+  // agendado rodando.
+  useEffect(() => {
+    fetch("/api/financeiro/agendamentos?tipo=pagar")
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: Agendamento[]) => setContasSemana(rows.filter(estaNestaSemana)))
+      .catch(() => {});
+  }, [pathname, showNotif]);
+
   const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const dateStr = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
 
+  const totalContasSemana = contasSemana.reduce((acc, a) => acc + (a.valor - a.valorPago), 0);
+
   const notificacoes = [
+    ...(contasSemana.length > 0 ? [{
+      id: "contas-semana",
+      tipo: "financeiro" as const,
+      msg: `${contasSemana.length} conta${contasSemana.length !== 1 ? "s" : ""} a pagar esta semana — total ${brl(totalContasSemana)}`,
+      tempo: "Esta semana",
+      onClick: () => router.push("/financeiro"),
+    }] : []),
     { id: 1, tipo: "agenda",  msg: "Eduardo Pereira em 15 min — Corte + Barba",  tempo: "15 min" },
     { id: 2, tipo: "estoque", msg: "Estoque baixo: Shampoo Anti-Resíduo (8 un)", tempo: "Agora"  },
     { id: 3, tipo: "estoque", msg: "Estoque baixo: Talco Antisséptico (4 un)",   tempo: "Agora"  },
@@ -187,11 +212,12 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
                     cursor: "pointer",
                     transition: "background 0.15s",
                   }}
+                    onClick={"onClick" in n ? n.onClick : undefined}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
                     <span style={{ fontSize: "1rem", flexShrink: 0 }}>
-                      {n.tipo === "agenda" ? "📅" : "📦"}
+                      {n.tipo === "agenda" ? "📅" : n.tipo === "financeiro" ? "💰" : "📦"}
                     </span>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: "0.8125rem", color: "var(--color-cream-dim)", lineHeight: 1.4 }}>

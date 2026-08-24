@@ -238,5 +238,27 @@ export async function ensureFinanceiroTables(sql: Sql) {
     )
   `;
 
+  // Contas fixas/recorrentes sem uma data de vencimento definida ainda (o usuário vai
+  // preenchendo aos poucos) precisam poder ficar em aberto — sem isso não dava pra
+  // cadastrar a conta como lembrete antes de saber o dia exato de cobrança.
+  await sql`ALTER TABLE "LancamentoFinanceiro" ALTER COLUMN "dataVencimento" DROP NOT NULL`;
+
+  // Regra aprendida de conciliação bancária: na primeira vez que o usuário concilia
+  // manualmente uma transação e marca "lembrar esse padrão", grava aqui um trecho da
+  // descrição do banco (ex: "sabesp") -> contato/categoria/centro de custo. Da próxima
+  // vez que uma transação com essa descrição aparecer, já casa sozinha sem precisar
+  // repetir a conciliação manual (ex: toda conta de água da Sabesp cai na Água e Esgoto).
+  await sql`
+    CREATE TABLE IF NOT EXISTS "RegraConciliacaoBancaria" (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      "padraoDescricao" TEXT NOT NULL UNIQUE,
+      "contatoId" TEXT NOT NULL REFERENCES "Contato"(id),
+      "categoriaId" TEXT REFERENCES "CategoriaFinanceira"(id),
+      "centroCustoId" TEXT REFERENCES "CentroCusto"(id),
+      descricao TEXT,
+      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `;
+
   tablesEnsured = true;
 }

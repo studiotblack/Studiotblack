@@ -66,14 +66,14 @@ export async function POST(request: NextRequest) {
     await ensureFinanceiroTables(sql);
     const b = await request.json();
 
-    if (!b.tipo || !b.contatoId || !b.valor || !b.dataVencimento || !b.dataCompetencia || !b.descricao) {
-      return NextResponse.json({ error: "tipo, contatoId, valor, dataVencimento, dataCompetencia e descricao são obrigatórios" }, { status: 400 });
+    if (!b.tipo || !b.contatoId || b.valor === undefined || b.valor === null || b.valor < 0 || !b.dataCompetencia || !b.descricao) {
+      return NextResponse.json({ error: "tipo, contatoId, valor, dataCompetencia e descricao são obrigatórios" }, { status: 400 });
     }
 
     const agendamento = await sql.begin(async (sql) => {
       const [row] = await sql`
         INSERT INTO "LancamentoFinanceiro" (tipo, "contatoId", valor, "dataVencimento", "dataCompetencia", "dataPrevisao", descricao, referencia, detalhamento, "contaBancariaId", reembolsavel)
-        VALUES (${b.tipo}, ${b.contatoId}, ${b.valor}, ${b.dataVencimento}, ${b.dataCompetencia}, ${b.dataPrevisao ?? null}, ${b.descricao}, ${b.referencia ?? null}, ${b.detalhamento ?? null}, ${b.contaBancariaId ?? null}, ${b.reembolsavel ?? false})
+        VALUES (${b.tipo}, ${b.contatoId}, ${b.valor}, ${b.dataVencimento || null}, ${b.dataCompetencia}, ${b.dataPrevisao ?? null}, ${b.descricao}, ${b.referencia ?? null}, ${b.detalhamento ?? null}, ${b.contaBancariaId ?? null}, ${b.reembolsavel ?? false})
         RETURNING *
       `;
 

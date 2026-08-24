@@ -9,7 +9,7 @@ import { statusAgendamento } from "@/lib/financeiro-data";
 import type { TransacaoBancariaImportada } from "@/lib/financeiro-data";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtData = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
+const fmtData = (d?: string | null) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "sem vencimento";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
@@ -146,7 +146,7 @@ export default function ConciliacaoPanel() {
     return agendamentos
       .filter(a => a.tipo === tipoAlvo)
       .filter(a => statusAgendamento(a) !== "pago")
-      .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento));
+      .sort((a, b) => (a.dataVencimento || "9999-99-99").localeCompare(b.dataVencimento || "9999-99-99"));
   };
 
   if (loading) {
@@ -324,6 +324,8 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
   const [categoriaId, setCategoriaId] = useState(tx.categoriaSugeridaId || "");
   const [centroCustoId, setCentroCustoId] = useState("");
   const [descricao, setDescricao] = useState(tx.descricao || "");
+  const [lembrarPadrao, setLembrarPadrao] = useState(false);
+  const [padraoDescricao, setPadraoDescricao] = useState((tx.descricao || "").toLowerCase().trim());
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -344,6 +346,15 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).error);
+
+      if (modo === "novo" && lembrarPadrao && padraoDescricao.trim()) {
+        await fetch("/api/financeiro/regras-conciliacao", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ padraoDescricao: padraoDescricao.trim(), contatoId, categoriaId: categoriaId || undefined, centroCustoId: centroCustoId || undefined, descricao }),
+        }).catch(() => {});
+      }
+
       onSaved();
     } catch (err: any) {
       setErro(err.message || "Erro ao conciliar");
@@ -449,6 +460,20 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
                 <label className="form-label">Descrição</label>
                 <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)} />
               </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "var(--color-cream-dim)", cursor: "pointer" }}>
+                <input type="checkbox" checked={lembrarPadrao} onChange={e => setLembrarPadrao(e.target.checked)} style={{ width: "auto" }} />
+                Lembrar esse padrão pra próxima vez
+              </label>
+              {lembrarPadrao && (
+                <div>
+                  <label className="form-label">Trecho da descrição do banco a reconhecer</label>
+                  <input type="text" value={padraoDescricao} onChange={e => setPadraoDescricao(e.target.value)} placeholder="ex: sabesp" />
+                  <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.3rem" }}>
+                    Toda transação futura cuja descrição do banco contiver esse trecho vai cair sozinha nesse contato/categoria, sem precisar conciliar manualmente de novo.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
