@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, ArrowRightLeft, Bot, X, Link2, Wand2 } from "lucide-react";
+import { CheckCircle2, ArrowRightLeft, Bot, X, Link2, Wand2, MessageCircle } from "lucide-react";
 import type {
   ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, Agendamento,
 } from "@/lib/financeiro-data";
@@ -31,6 +31,7 @@ export default function ConciliacaoPanel() {
   const [resumoSync, setResumoSync] = useState<string | null>(null);
   const [erroSync, setErroSync] = useState<string | null>(null);
   const [aplicandoRegra, setAplicandoRegra] = useState(false);
+  const [syncingWhatsapp, setSyncingWhatsapp] = useState(false);
 
   const [resolveTx, setResolveTx] = useState<TransacaoBancariaImportada | null>(null);
 
@@ -117,6 +118,25 @@ export default function ConciliacaoPanel() {
     }
   };
 
+  const handleSyncWhatsapp = async () => {
+    setSyncingWhatsapp(true);
+    setErroSync(null);
+    setResumoSync(null);
+    try {
+      const res = await fetch("/api/financeiro/whatsapp/sincronizar", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResumoSync(
+        `WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.semCorrespondencia} sem correspondência ainda.`
+      );
+      await carregarTransacoes();
+    } catch (err: any) {
+      setErroSync(err.message || "Erro ao sincronizar WhatsApp");
+    } finally {
+      setSyncingWhatsapp(false);
+    }
+  };
+
   const pendentes = transacoes.filter(t => t.status === "pendente");
   const conciliadas = transacoes.filter(t => t.status === "conciliado");
   const ignoradas = transacoes.filter(t => t.status === "ignorado");
@@ -176,6 +196,10 @@ export default function ConciliacaoPanel() {
             <Bot size={16} />
             {syncing ? "Sincronizando..." : "Sincronizar Extrato"}
           </button>
+          <button className="btn btn-ghost" onClick={handleSyncWhatsapp} disabled={syncingWhatsapp} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <MessageCircle size={16} />
+            {syncingWhatsapp ? "Lendo comprovantes..." : "Sincronizar WhatsApp"}
+          </button>
         </div>
       </div>
 
@@ -228,9 +252,14 @@ export default function ConciliacaoPanel() {
         ) : (
           pendentes.map(tx => (
             <div key={tx.id} style={{ display: "flex", alignItems: "center", padding: "0.85rem 1rem", borderBottom: "1px solid var(--color-border)", gap: "1rem" }}>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                 <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-cream)" }}>{tx.descricao}</span>
                 <span style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>{fmtData(tx.data)}{tx.descricaoComplementar ? ` — ${tx.descricaoComplementar}` : ""}</span>
+                {tx.categoriaSugeridaNome && (
+                  <span className="badge badge-gold" style={{ fontSize: "0.65rem", alignSelf: "flex-start", marginTop: "2px" }}>
+                    Sugestão: {tx.categoriaSugeridaNome}{tx.comprovanteLegenda ? ` ("${tx.comprovanteLegenda}")` : ""}
+                  </span>
+                )}
               </div>
               <div style={{ width: "130px", textAlign: "right", fontWeight: 800, color: tx.tipo === "entrada" ? "var(--color-success)" : "var(--color-danger)" }}>
                 {tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}
@@ -292,7 +321,7 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
   const [modo, setModo] = useState<"match" | "novo">(agendamentos.length > 0 ? "match" : "novo");
   const [lancamentoId, setLancamentoId] = useState(agendamentos[0]?.id || "");
   const [contatoId, setContatoId] = useState("");
-  const [categoriaId, setCategoriaId] = useState("");
+  const [categoriaId, setCategoriaId] = useState(tx.categoriaSugeridaId || "");
   const [centroCustoId, setCentroCustoId] = useState("");
   const [descricao, setDescricao] = useState(tx.descricao || "");
   const [saving, setSaving] = useState(false);
@@ -360,6 +389,12 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
           </div>
 
           {erro && <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.6rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>{erro}</div>}
+
+          {tx.categoriaSugeridaNome && (
+            <div style={{ background: "rgba(212,175,140,0.08)", border: "1px solid var(--color-gold)", color: "var(--color-gold)", padding: "0.6rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.8rem" }}>
+              Sugestão a partir do comprovante do WhatsApp{tx.comprovanteLegenda ? ` ("${tx.comprovanteLegenda}")` : ""}: categoria já pré-selecionada como <strong>{tx.categoriaSugeridaNome}</strong>.
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button type="button" onClick={() => setModo("match")} className={modo === "match" ? "btn btn-gold btn-sm" : "btn btn-ghost btn-sm"} disabled={agendamentos.length === 0}>

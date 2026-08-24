@@ -310,6 +310,13 @@ model ContaBancaria {
   // Cache do saldo real puxado do Sicoob na última sincronização
   saldoSicoob             Float?
   saldoSicoobAtualizadoEm DateTime?
+
+  // Regra de classificação automática de saída sem categoria (fallback quando o
+  // dicionário de palavras-chave não reconhece nada na legenda do comprovante)
+  regraSaidaAtiva         Boolean @default(false)
+  regraSaidaContatoId     String?
+  regraSaidaCategoriaId   String?
+  regraSaidaCentroCustoId String?
 }
 
 model Contato {
@@ -448,6 +455,7 @@ model WhatsappComprovante {
   dataHoraOcr         DateTime?
   status              String    @default("pendente") // pendente | vinculado | ignorado
   transacaoBancariaId String?
+  categoriaSugeridaId String?
   createdAt           DateTime  @default(now())
 }
 

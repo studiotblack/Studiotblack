@@ -1,13 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Landmark, Users, FolderTree, Target, Link2 } from "lucide-react";
+import { Plus, Trash2, Landmark, Users, FolderTree, Target, Link2, Tags } from "lucide-react";
 import type { ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, TipoContato } from "@/lib/financeiro-data";
 import { TIPOS_CONTATO_LABELS } from "@/lib/financeiro-data";
 import SicoobConfigModal from "./SicoobConfigModal";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-type SubTab = "contas" | "contatos" | "categorias" | "centros";
+type SubTab = "contas" | "contatos" | "categorias" | "centros" | "palavras";
+
+interface PalavraChave {
+  id: string;
+  palavraChave: string;
+  categoriaId: string;
+  categoriaNome: string;
+}
 
 export default function CadastrosPanel() {
   const [subTab, setSubTab] = useState<SubTab>("contas");
@@ -16,21 +23,24 @@ export default function CadastrosPanel() {
   const [contatos, setContatos] = useState<Contato[]>([]);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
   const [centros, setCentros] = useState<CentroCusto[]>([]);
+  const [palavrasChave, setPalavrasChave] = useState<PalavraChave[]>([]);
   const [loading, setLoading] = useState(true);
 
   const carregarTudo = async () => {
     setLoading(true);
     try {
-      const [rContas, rContatos, rCategorias, rCentros] = await Promise.all([
+      const [rContas, rContatos, rCategorias, rCentros, rPalavras] = await Promise.all([
         fetch("/api/financeiro/contas-bancarias"),
         fetch("/api/financeiro/contatos"),
         fetch("/api/financeiro/categorias"),
         fetch("/api/financeiro/centros-custo"),
+        fetch("/api/financeiro/palavras-chave"),
       ]);
       setContas(rContas.ok ? await rContas.json() : []);
       setContatos(rContatos.ok ? await rContatos.json() : []);
       setCategorias(rCategorias.ok ? await rCategorias.json() : []);
       setCentros(rCentros.ok ? await rCentros.json() : []);
+      setPalavrasChave(rPalavras.ok ? await rPalavras.json() : []);
     } catch (err) {
       console.error("Erro ao carregar cadastros:", err);
     } finally {
@@ -45,6 +55,7 @@ export default function CadastrosPanel() {
     { id: "contatos", label: "Contatos", icon: <Users size={14} /> },
     { id: "categorias", label: "Categorias", icon: <FolderTree size={14} /> },
     { id: "centros", label: "Centros de Custo", icon: <Target size={14} /> },
+    { id: "palavras", label: "Palavras-chave", icon: <Tags size={14} /> },
   ];
 
   return (
@@ -77,6 +88,7 @@ export default function CadastrosPanel() {
           {subTab === "contatos" && <ContatosSection contatos={contatos} onChange={carregarTudo} />}
           {subTab === "categorias" && <CategoriasSection categorias={categorias} onChange={carregarTudo} />}
           {subTab === "centros" && <CentrosCustoSection centros={centros} onChange={carregarTudo} />}
+          {subTab === "palavras" && <PalavrasChaveSection palavras={palavrasChave} categorias={categorias} onChange={carregarTudo} />}
         </>
       )}
     </div>
@@ -402,6 +414,80 @@ function CentrosCustoSection({ centros, onChange }: { centros: CentroCusto[]; on
                 <td style={{ fontWeight: 600 }}>{c.nome}</td>
                 <td style={{ textAlign: "center" }}>
                   {c.ativo && <button onClick={() => excluir(c.id)} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer" }}><Trash2 size={14} /></button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Palavras-chave (dicionário pra categorizar saídas dos comprovantes do WhatsApp) ──
+function PalavrasChaveSection({ palavras, categorias, onChange }: {
+  palavras: PalavraChave[];
+  categorias: CategoriaFinanceira[];
+  onChange: () => void;
+}) {
+  const [palavraChave, setPalavraChave] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const salvar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!palavraChave || !categoriaId) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/financeiro/palavras-chave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ palavraChave, categoriaId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setPalavraChave(""); setCategoriaId("");
+      onChange();
+    } catch (err: any) {
+      alert(err.message || "Erro ao salvar palavra-chave");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const excluir = async (id: string) => {
+    if (!confirm("Excluir esta palavra-chave?")) return;
+    const res = await fetch(`/api/financeiro/palavras-chave?id=${id}`, { method: "DELETE" });
+    if (!res.ok) alert((await res.json()).error || "Erro ao excluir");
+    onChange();
+  };
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1fr) 2fr", gap: "1.5rem" }}>
+      <form onSubmit={salvar} className="card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Nova Palavra-chave</h3>
+        <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0 }}>
+          Se a legenda de um comprovante do WhatsApp contiver essa palavra, a saída é
+          categorizada automaticamente. Ex: &quot;almoço&quot; → Alimentação.
+        </p>
+        <input placeholder="Ex: almoço, uber, gasolina..." value={palavraChave} onChange={e => setPalavraChave(e.target.value)} required />
+        <select value={categoriaId} onChange={e => setCategoriaId(e.target.value)} required>
+          <option value="">Categoria...</option>
+          {categorias.filter(c => c.tipo === "saida").map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+        <button type="submit" className="btn btn-gold" disabled={saving}><Plus size={14} /> {saving ? "Salvando..." : "Adicionar"}</button>
+      </form>
+
+      <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+        <table className="data-table">
+          <thead><tr><th>Palavra-chave</th><th>Categoria</th><th></th></tr></thead>
+          <tbody>
+            {palavras.length === 0 && <tr><td colSpan={3} style={{ textAlign: "center", padding: "2rem", color: "var(--color-muted)" }}>Nenhuma palavra-chave cadastrada ainda.</td></tr>}
+            {palavras.map(p => (
+              <tr key={p.id}>
+                <td style={{ fontWeight: 600 }}>{p.palavraChave}</td>
+                <td style={{ fontSize: "0.85rem", color: "var(--color-cream-dim)" }}>{p.categoriaNome}</td>
+                <td style={{ textAlign: "center" }}>
+                  <button onClick={() => excluir(p.id)} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer" }}><Trash2 size={14} /></button>
                 </td>
               </tr>
             ))}

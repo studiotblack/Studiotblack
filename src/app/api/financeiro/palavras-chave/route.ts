@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
-import { isAdminRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+// GET /api/financeiro/palavras-chave — dicionário palavra-chave -> categoria de saída,
+// usado pra decidir a categoria dos comprovantes do WhatsApp automaticamente.
+export async function GET() {
   if (!process.env.DATABASE_URL) return NextResponse.json([], { status: 200 });
   const sql = getDb();
   try {
     await ensureFinanceiroTables(sql);
-    const { searchParams } = new URL(request.url);
-    const tipo = searchParams.get("tipo");
-    const rows = tipo
-      ? await sql`SELECT * FROM "Contato" WHERE ${tipo} = ANY(tipos) ORDER BY ativo DESC, nome ASC`
-      : await sql`SELECT * FROM "Contato" ORDER BY ativo DESC, nome ASC`;
+    const rows = await sql`
+      SELECT pc.*, cat.nome AS "categoriaNome"
+      FROM "CategoriaPalavraChave" pc
+      JOIN "CategoriaFinanceira" cat ON cat.id = pc."categoriaId"
+      ORDER BY pc."palavraChave" ASC
+    `;
     return NextResponse.json(rows);
   } catch (error: any) {
-    console.error("[GET /api/financeiro/contatos]", error);
-    return NextResponse.json({ error: error?.message || "Erro ao buscar contatos" }, { status: 500 });
+    console.error("[GET /api/financeiro/palavras-chave]", error);
+    return NextResponse.json({ error: error?.message || "Erro ao buscar palavras-chave" }, { status: 500 });
   } finally {
     await sql.end();
   }
@@ -31,27 +33,25 @@ export async function POST(request: NextRequest) {
   try {
     await ensureFinanceiroTables(sql);
     const b = await request.json();
-    if (!b.nome || !Array.isArray(b.tipos) || b.tipos.length === 0) {
-      return NextResponse.json({ error: "nome e ao menos um tipo são obrigatórios" }, { status: 400 });
+    if (!b.palavraChave || !b.categoriaId) {
+      return NextResponse.json({ error: "palavraChave e categoriaId são obrigatórios" }, { status: 400 });
     }
     const [row] = await sql`
-      INSERT INTO "Contato" (nome, "cpfCnpj", tipos, email, telefone, observacoes, ativo)
-      VALUES (${b.nome}, ${b.cpfCnpj ?? null}, ${b.tipos}, ${b.email ?? null}, ${b.telefone ?? null}, ${b.observacoes ?? null}, ${b.ativo ?? true})
+      INSERT INTO "CategoriaPalavraChave" (id, "palavraChave", "categoriaId")
+      VALUES (gen_random_uuid()::text, ${b.palavraChave.toLowerCase().trim()}, ${b.categoriaId})
+      ON CONFLICT ("palavraChave") DO UPDATE SET "categoriaId" = EXCLUDED."categoriaId"
       RETURNING *
     `;
     return NextResponse.json(row);
   } catch (error: any) {
-    console.error("[POST /api/financeiro/contatos]", error);
-    return NextResponse.json({ error: error?.message || "Erro ao salvar contato" }, { status: 500 });
+    console.error("[POST /api/financeiro/palavras-chave]", error);
+    return NextResponse.json({ error: error?.message || "Erro ao salvar palavra-chave" }, { status: 500 });
   } finally {
     await sql.end();
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!isAdminRequest(request)) {
-    return NextResponse.json({ error: "Apenas administradores podem excluir registros." }, { status: 403 });
-  }
   if (!process.env.DATABASE_URL) return NextResponse.json({ sucesso: true });
   const sql = getDb();
   try {
@@ -59,7 +59,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id é obrigatório" }, { status: 400 });
-    await sql`UPDATE "Contato" SET ativo = false, "updatedAt" = NOW() WHERE id = ${id}`;
+    await sql`DELETE FROM "CategoriaPalavraChave" WHERE id = ${id}`;
     return NextResponse.json({ sucesso: true });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Erro ao excluir" }, { status: 500 });

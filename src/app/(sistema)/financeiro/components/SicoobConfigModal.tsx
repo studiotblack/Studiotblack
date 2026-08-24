@@ -22,6 +22,10 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
   const [regraContatoId, setRegraContatoId] = useState("");
   const [regraCategoriaId, setRegraCategoriaId] = useState("");
   const [regraCentroCustoId, setRegraCentroCustoId] = useState("");
+  const [regraSaidaAtiva, setRegraSaidaAtiva] = useState(false);
+  const [regraSaidaContatoId, setRegraSaidaContatoId] = useState("");
+  const [regraSaidaCategoriaId, setRegraSaidaCategoriaId] = useState("");
+  const [regraSaidaCentroCustoId, setRegraSaidaCentroCustoId] = useState("");
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -35,6 +39,10 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
     setRegraContatoId(conta.regraEntradaContatoId || "");
     setRegraCategoriaId(conta.regraEntradaCategoriaId || "");
     setRegraCentroCustoId(conta.regraEntradaCentroCustoId || "");
+    setRegraSaidaAtiva(conta.regraSaidaAtiva || false);
+    setRegraSaidaContatoId(conta.regraSaidaContatoId || "");
+    setRegraSaidaCategoriaId(conta.regraSaidaCategoriaId || "");
+    setRegraSaidaCentroCustoId(conta.regraSaidaCentroCustoId || "");
     setErro("");
   }, [conta]);
 
@@ -64,6 +72,10 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
           regraEntradaContatoId: regraAtiva ? (regraContatoId || null) : null,
           regraEntradaCategoriaId: regraAtiva ? (regraCategoriaId || null) : null,
           regraEntradaCentroCustoId: regraAtiva ? (regraCentroCustoId || null) : null,
+          regraSaidaAtiva: regraSaidaAtiva,
+          regraSaidaContatoId: regraSaidaAtiva ? (regraSaidaContatoId || null) : null,
+          regraSaidaCategoriaId: regraSaidaAtiva ? (regraSaidaCategoriaId || null) : null,
+          regraSaidaCentroCustoId: regraSaidaAtiva ? (regraSaidaCentroCustoId || null) : null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -147,6 +159,47 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
                     </select>
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+              <input type="checkbox" checked={regraSaidaAtiva} onChange={e => setRegraSaidaAtiva(e.target.checked)} />
+              <span style={{ fontSize: "0.85rem" }}>
+                Categorizar saídas automaticamente a partir dos comprovantes do grupo do WhatsApp
+              </span>
+            </label>
+
+            {regraSaidaAtiva && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", paddingLeft: "1.5rem" }}>
+                <div>
+                  <label className="form-label">Contato padrão (fornecedor genérico, obrigatório)</label>
+                  <select value={regraSaidaContatoId} onChange={e => setRegraSaidaContatoId(e.target.value)} required={regraSaidaAtiva}>
+                    <option value="">Selecione...</option>
+                    {contatos.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <div>
+                    <label className="form-label">Categoria padrão (se a legenda não bater com nenhuma palavra-chave)</label>
+                    <select value={regraSaidaCategoriaId} onChange={e => setRegraSaidaCategoriaId(e.target.value)}>
+                      <option value="">Sem categoria</option>
+                      {categorias.filter(c => c.tipo === "saida").map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Centro de custo (opcional)</label>
+                    <select value={regraSaidaCentroCustoId} onChange={e => setRegraSaidaCentroCustoId(e.target.value)}>
+                      <option value="">Sem centro de custo</option>
+                      {centros.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <p style={{ fontSize: "0.72rem", color: "var(--color-muted)", margin: 0 }}>
+                  A categoria de cada comprovante é decidida primeiro pelo dicionário de palavras-chave
+                  (Cadastros → Palavras-chave) — essa aqui só entra se nenhuma palavra bater.
+                </p>
               </div>
             )}
           </div>

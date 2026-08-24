@@ -28,6 +28,13 @@ export interface ContaBancaria {
   regraEntradaCategoriaId?: string;
   regraEntradaCentroCustoId?: string;
 
+  // Regra de classificação automática de saída (fallback quando o dicionário de
+  // palavras-chave do comprovante do WhatsApp não reconhece nada)
+  regraSaidaAtiva?: boolean;
+  regraSaidaContatoId?: string;
+  regraSaidaCategoriaId?: string;
+  regraSaidaCentroCustoId?: string;
+
   // Cache do saldo real puxado do Sicoob na última sincronização
   saldoSicoob?: number;
   saldoSicoobAtualizadoEm?: string;
@@ -49,6 +56,13 @@ export interface TransacaoBancariaImportada {
   lancamentoId?: string;
   lancamentoDescricao?: string; // preenchido via join, só quando conciliado
   createdAt?: string;
+
+  // Sugestão automática a partir de um comprovante do WhatsApp com valor/data compatível
+  // (mesmo sem ter sido conciliado automaticamente) — usada pra pré-preencher a
+  // conciliação manual, quando a saída não teve match perfeito.
+  comprovanteLegenda?: string;
+  categoriaSugeridaId?: string;
+  categoriaSugeridaNome?: string;
 }
 
 export type TipoContato = "cliente" | "fornecedor" | "funcionario" | "socio";

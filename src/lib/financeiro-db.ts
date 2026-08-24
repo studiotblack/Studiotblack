@@ -89,6 +89,14 @@ export async function ensureFinanceiroTables(sql: Sql) {
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "saldoSicoob" FLOAT`;
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "saldoSicoobAtualizadoEm" TIMESTAMP`;
 
+  // Regra de classificação automática de SAÍDA sem categoria vinda do dicionário de
+  // palavras-chave (ex: comprovante do WhatsApp sem nenhuma palavra reconhecida) — mesmo
+  // espírito da regra de entrada, mas o contato aqui é só um "fornecedor genérico" padrão.
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraSaidaAtiva" BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraSaidaContatoId" TEXT REFERENCES "Contato"(id)`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraSaidaCategoriaId" TEXT REFERENCES "CategoriaFinanceira"(id)`;
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraSaidaCentroCustoId" TEXT REFERENCES "CentroCusto"(id)`;
+
   // Chamado "LancamentoFinanceiro" (não "Agendamento") porque esse nome já existe no schema
   // pra outra coisa — o agendamento de horário de atendimento do salão (model Agendamento
   // em prisma/schema.prisma: cliente/colaborador/data/hora). São entidades completamente
@@ -189,6 +197,10 @@ export async function ensureFinanceiroTables(sql: Sql) {
       "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `;
+  // Categoria sugerida pelo dicionário de palavras-chave pra esse comprovante — preenchida
+  // mesmo quando não dá pra fazer o match automático com uma transação bancária, pra já
+  // vir pré-selecionada na hora da conciliação manual.
+  await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "categoriaSugeridaId" TEXT REFERENCES "CategoriaFinanceira"(id)`;
 
   // Dicionário de palavras-chave pra categoria de saída — usado no match automático e
   // realimentado sempre que o usuário resolve manualmente um caso que o dicionário não cobria.
