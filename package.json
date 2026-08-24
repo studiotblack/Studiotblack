@@ -17,6 +17,7 @@
     "@whiskeysockets/baileys": "^6.7.24",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
+    "jimp": "^1.6.1",
     "lucide-react": "^1.7.0",
     "next": "16.2.2",
     "pdf-parse": "^2.4.5",
