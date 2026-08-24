@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, ArrowRightLeft, Bot, X, Link2 } from "lucide-react";
+import { CheckCircle2, ArrowRightLeft, Bot, X, Link2, Wand2 } from "lucide-react";
 import type {
   ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, Agendamento,
 } from "@/lib/financeiro-data";
@@ -30,6 +30,7 @@ export default function ConciliacaoPanel() {
   const [syncing, setSyncing] = useState(false);
   const [resumoSync, setResumoSync] = useState<string | null>(null);
   const [erroSync, setErroSync] = useState<string | null>(null);
+  const [aplicandoRegra, setAplicandoRegra] = useState(false);
 
   const [resolveTx, setResolveTx] = useState<TransacaoBancariaImportada | null>(null);
 
@@ -95,6 +96,24 @@ export default function ConciliacaoPanel() {
       setErroSync(err.message || "Erro ao sincronizar");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleAplicarRegra = async () => {
+    if (!contaId) return;
+    setAplicandoRegra(true);
+    setErroSync(null);
+    setResumoSync(null);
+    try {
+      const res = await fetch(`/api/financeiro/contas-bancarias/${contaId}/aplicar-regra-entrada`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResumoSync(`${data.aplicados} entrada${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente pela regra.`);
+      await carregarTransacoes();
+    } catch (err: any) {
+      setErroSync(err.message || "Erro ao aplicar regra de entrada");
+    } finally {
+      setAplicandoRegra(false);
     }
   };
 
@@ -169,6 +188,17 @@ export default function ConciliacaoPanel() {
               Atualizado em {new Date(contaSelecionada.saldoSicoobAtualizadoEm).toLocaleString("pt-BR")}
             </span>
           )}
+        </div>
+      )}
+
+      {contaSelecionada?.regraEntradaAtiva && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleAplicarRegra} disabled={aplicandoRegra}>
+            <Wand2 size={13} /> {aplicandoRegra ? "Aplicando..." : "Aplicar regra de entrada às pendentes"}
+          </button>
+          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+            Concilia de uma vez todas as entradas pendentes desta conta (de qualquer mês) usando a regra automática configurada.
+          </span>
         </div>
       )}
 
