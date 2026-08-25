@@ -243,6 +243,11 @@ export async function ensureFinanceiroTables(sql: Sql) {
   // cadastrar a conta como lembrete antes de saber o dia exato de cobrança.
   await sql`ALTER TABLE "LancamentoFinanceiro" ALTER COLUMN "dataVencimento" DROP NOT NULL`;
 
+  // Recorrência simples (por enquanto só "mensal") — quando a conta é totalmente paga,
+  // a rota de baixas já cria sozinha a próxima ocorrência do mês seguinte, pra contas
+  // fixas (aluguel, água, comissões, etc.) não precisarem ser recadastradas todo mês.
+  await sql`ALTER TABLE "LancamentoFinanceiro" ADD COLUMN IF NOT EXISTS recorrencia TEXT`;
+
   // Regra aprendida de conciliação bancária: na primeira vez que o usuário concilia
   // manualmente uma transação e marca "lembrar esse padrão", grava aqui um trecho da
   // descrição do banco (ex: "sabesp") -> contato/categoria/centro de custo. Da próxima

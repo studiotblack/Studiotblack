@@ -72,8 +72,8 @@ export async function POST(request: NextRequest) {
 
     const agendamento = await sql.begin(async (sql) => {
       const [row] = await sql`
-        INSERT INTO "LancamentoFinanceiro" (tipo, "contatoId", valor, "dataVencimento", "dataCompetencia", "dataPrevisao", descricao, referencia, detalhamento, "contaBancariaId", reembolsavel)
-        VALUES (${b.tipo}, ${b.contatoId}, ${b.valor}, ${b.dataVencimento || null}, ${b.dataCompetencia}, ${b.dataPrevisao ?? null}, ${b.descricao}, ${b.referencia ?? null}, ${b.detalhamento ?? null}, ${b.contaBancariaId ?? null}, ${b.reembolsavel ?? false})
+        INSERT INTO "LancamentoFinanceiro" (tipo, "contatoId", valor, "dataVencimento", "dataCompetencia", "dataPrevisao", descricao, referencia, detalhamento, "contaBancariaId", reembolsavel, recorrencia)
+        VALUES (${b.tipo}, ${b.contatoId}, ${b.valor}, ${b.dataVencimento || null}, ${b.dataCompetencia}, ${b.dataPrevisao ?? null}, ${b.descricao}, ${b.referencia ?? null}, ${b.detalhamento ?? null}, ${b.contaBancariaId ?? null}, ${b.reembolsavel ?? false}, ${b.recorrencia ?? null})
         RETURNING *
       `;
 

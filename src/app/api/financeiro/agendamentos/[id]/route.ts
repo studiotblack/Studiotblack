@@ -29,6 +29,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
           detalhamento = ${b.detalhamento ?? null},
           "contaBancariaId" = ${b.contaBancariaId ?? null},
           reembolsavel = ${b.reembolsavel ?? false},
+          recorrencia = ${b.recorrencia ?? null},
           "updatedAt" = NOW()
         WHERE id = ${id}
         RETURNING *

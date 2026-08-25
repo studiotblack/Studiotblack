@@ -33,6 +33,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
   const [categoriaId, setCategoriaId] = useState("");
   const [centroCustoId, setCentroCustoId] = useState("");
   const [reembolsavel, setReembolsavel] = useState(false);
+  const [recorrencia, setRecorrencia] = useState<"" | "mensal">("");
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -61,10 +62,12 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
       setCategoriaId(editando.categoriaId || "");
       setCentroCustoId(editando.centroCustoId || "");
       setReembolsavel(editando.reembolsavel);
+      setRecorrencia(editando.recorrencia === "mensal" ? "mensal" : "");
     } else {
       setContatoId(""); setValor(0); setDataVencimento(""); setDataCompetencia(today());
       setDataPrevisao(""); setDescricao(""); setReferencia(""); setDetalhamento("");
       setContaBancariaId(""); setCategoriaId(""); setCentroCustoId(""); setReembolsavel(false);
+      setRecorrencia("");
     }
     setErro("");
   }, [isOpen, tipoInicial, editando]);
@@ -93,7 +96,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
           tipo, contatoId, valor, dataVencimento: dataVencimento || undefined, dataCompetencia,
           dataPrevisao: dataPrevisao || undefined, descricao, referencia, detalhamento,
           contaBancariaId: contaBancariaId || undefined, categoriaId: categoriaId || undefined,
-          centroCustoId: centroCustoId || undefined, reembolsavel,
+          centroCustoId: centroCustoId || undefined, reembolsavel, recorrencia: recorrencia || undefined,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -203,6 +206,14 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
             <label className="form-label">Referência / Detalhamento (opcional)</label>
             <input type="text" placeholder="Referência" value={referencia} onChange={e => setReferencia(e.target.value)} style={{ marginBottom: "0.5rem" }} />
             <textarea placeholder="Detalhamento" value={detalhamento} onChange={e => setDetalhamento(e.target.value)} rows={2} />
+          </div>
+
+          <div>
+            <label className="form-label">Recorrência</label>
+            <select value={recorrencia} onChange={e => setRecorrencia(e.target.value as "" | "mensal")}>
+              <option value="">Não se repete</option>
+              <option value="mensal">Mensal — gera a próxima ocorrência sozinho quando essa for quitada</option>
+            </select>
           </div>
 
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "var(--color-cream-dim)", cursor: "pointer" }}>

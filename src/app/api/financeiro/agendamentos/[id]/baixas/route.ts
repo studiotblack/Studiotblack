@@ -3,6 +3,18 @@ import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 
 export const dynamic = "force-dynamic";
 
+// Mesmo dia do mês seguinte, com o dia ajustado (clamp) se o mês seguinte for mais curto
+// (ex: 31/01 -> 28 ou 29/02) — evita datas inválidas tipo 31 de fevereiro.
+function proximoMes(dataStr: string): string {
+  const [y, m, d] = dataStr.split("-").map(Number);
+  const primeiroDiaProximoMes = new Date(y, m, 1); // mês m (0-indexado) já é o mês seguinte ao mês humano m
+  const ultimoDiaProximoMes = new Date(primeiroDiaProximoMes.getFullYear(), primeiroDiaProximoMes.getMonth() + 1, 0).getDate();
+  const dia = Math.min(d, ultimoDiaProximoMes);
+  const yy = primeiroDiaProximoMes.getFullYear();
+  const mm = primeiroDiaProximoMes.getMonth() + 1;
+  return `${yy}-${String(mm).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
 // POST /api/financeiro/agendamentos/[id]/baixas — registra pagamento/recebimento total ou parcial
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!process.env.DATABASE_URL) {
@@ -39,7 +51,34 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         RETURNING *
       `;
 
-      return { baixa, agendamento: agendamentoAtualizado };
+      // Conta recorrente totalmente quitada — gera sozinha a próxima ocorrência (mesmo
+      // contato/valor/categoria/centro de custo, um mês depois), pra não precisar
+      // recadastrar aluguel/água/comissão etc. todo mês manualmente.
+      let proximaOcorrencia = null;
+      if (agendamento.recorrencia === "mensal" && novoValorPago >= agendamento.valor - 0.01) {
+        const [novaOcorrencia] = await sql`
+          INSERT INTO "LancamentoFinanceiro"
+            (tipo, "contatoId", valor, "dataVencimento", "dataCompetencia", descricao, "contaBancariaId", recorrencia)
+          VALUES (
+            ${agendamento.tipo}, ${agendamento.contatoId}, ${agendamento.valor},
+            ${agendamento.dataVencimento ? proximoMes(agendamento.dataVencimento) : null},
+            ${proximoMes(agendamento.dataCompetencia)},
+            ${agendamento.descricao}, ${agendamento.contaBancariaId}, 'mensal'
+          )
+          RETURNING *
+        `;
+        const categoriasOriginais = await sql`SELECT "categoriaId", valor FROM "LancamentoFinanceiroCategoria" WHERE "lancamentoId" = ${id}`;
+        for (const c of categoriasOriginais) {
+          await sql`INSERT INTO "LancamentoFinanceiroCategoria" ("lancamentoId", "categoriaId", valor) VALUES (${novaOcorrencia.id}, ${c.categoriaId}, ${c.valor})`;
+        }
+        const centrosOriginais = await sql`SELECT "centroCustoId", valor FROM "LancamentoFinanceiroCentroCusto" WHERE "lancamentoId" = ${id}`;
+        for (const c of centrosOriginais) {
+          await sql`INSERT INTO "LancamentoFinanceiroCentroCusto" ("lancamentoId", "centroCustoId", valor) VALUES (${novaOcorrencia.id}, ${c.centroCustoId}, ${c.valor})`;
+        }
+        proximaOcorrencia = novaOcorrencia;
+      }
+
+      return { baixa, agendamento: agendamentoAtualizado, proximaOcorrencia };
     });
 
     return NextResponse.json(resultado);
