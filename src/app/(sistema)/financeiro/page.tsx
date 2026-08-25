@@ -28,7 +28,9 @@ export default function FinanceiroPage() {
   const [dreLoading, setDreLoading] = useState(true);
 
   // ── DRE calculado a partir do nosso próprio ledger (Contas a Pagar/Receber) ──
-  const [dreFonte, setDreFonte] = useState<"nibo" | "sistema">("nibo");
+  // "Sistema" por padrão — decisão do usuário de parar de depender do Excel do Nibo e
+  // usar o próprio sistema (alimentado pelo banco real) como única fonte de verdade.
+  const [dreFonte, setDreFonte] = useState<"nibo" | "sistema">("sistema");
   const [dreLinhasSistema, setDreLinhasSistema] = useState<DreLinhaImportada[]>([]);
   const [dreSistemaLoading, setDreSistemaLoading] = useState(true);
 
@@ -102,7 +104,7 @@ export default function FinanceiroPage() {
       </div>
 
       {/* ── TAB: FLUXO DE CAIXA ───────────────────────────────────────────── */}
-      {activeTab === "fluxo" && <FluxoCaixaPanel dreLinhas={dreLinhas} anoDre={anoFiltro} />}
+      {activeTab === "fluxo" && <FluxoCaixaPanel dreLinhas={dreFonte === "nibo" ? dreLinhas : dreLinhasSistema} anoDre={anoFiltro} />}
 
       {/* ── TAB: DRE ─────────────────────────────────────────────────────── */}
       {activeTab === "dre" && (
