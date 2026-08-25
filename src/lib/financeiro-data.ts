@@ -113,7 +113,7 @@ export interface Agendamento {
   detalhamento?: string;
   contaBancariaId?: string;
   contaBancariaNome?: string;
-  recorrencia?: "mensal" | null;
+  recorrencia?: "semanal" | "mensal" | null;
   categoriaId?: string;
   categoriaNome?: string;
   centroCustoId?: string;

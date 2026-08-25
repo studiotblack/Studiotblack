@@ -15,6 +15,16 @@ function proximoMes(dataStr: string): string {
   return `${yy}-${String(mm).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 }
 
+function proximaSemana(dataStr: string): string {
+  const [y, m, d] = dataStr.split("-").map(Number);
+  const data = new Date(y, m - 1, d + 7);
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
+}
+
+function proximaData(dataStr: string, recorrencia: string): string {
+  return recorrencia === "semanal" ? proximaSemana(dataStr) : proximoMes(dataStr);
+}
+
 // POST /api/financeiro/agendamentos/[id]/baixas — registra pagamento/recebimento total ou parcial
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!process.env.DATABASE_URL) {
@@ -52,18 +62,18 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       `;
 
       // Conta recorrente totalmente quitada — gera sozinha a próxima ocorrência (mesmo
-      // contato/valor/categoria/centro de custo, um mês depois), pra não precisar
-      // recadastrar aluguel/água/comissão etc. todo mês manualmente.
+      // contato/valor/categoria/centro de custo, uma semana ou um mês depois, conforme
+      // configurado), pra não precisar recadastrar aluguel/água/comissão etc. na mão.
       let proximaOcorrencia = null;
-      if (agendamento.recorrencia === "mensal" && novoValorPago >= agendamento.valor - 0.01) {
+      if ((agendamento.recorrencia === "semanal" || agendamento.recorrencia === "mensal") && novoValorPago >= agendamento.valor - 0.01) {
         const [novaOcorrencia] = await sql`
           INSERT INTO "LancamentoFinanceiro"
             (tipo, "contatoId", valor, "dataVencimento", "dataCompetencia", descricao, "contaBancariaId", recorrencia)
           VALUES (
             ${agendamento.tipo}, ${agendamento.contatoId}, ${agendamento.valor},
-            ${agendamento.dataVencimento ? proximoMes(agendamento.dataVencimento) : null},
-            ${proximoMes(agendamento.dataCompetencia)},
-            ${agendamento.descricao}, ${agendamento.contaBancariaId}, 'mensal'
+            ${agendamento.dataVencimento ? proximaData(agendamento.dataVencimento, agendamento.recorrencia) : null},
+            ${proximaData(agendamento.dataCompetencia, agendamento.recorrencia)},
+            ${agendamento.descricao}, ${agendamento.contaBancariaId}, ${agendamento.recorrencia}
           )
           RETURNING *
         `;

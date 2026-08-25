@@ -32,7 +32,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
   const [contaBancariaId, setContaBancariaId] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [centroCustoId, setCentroCustoId] = useState("");
-  const [recorrencia, setRecorrencia] = useState<"" | "mensal">("");
+  const [recorrencia, setRecorrencia] = useState<"" | "semanal" | "mensal">("");
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -60,7 +60,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
       setContaBancariaId(editando.contaBancariaId || "");
       setCategoriaId(editando.categoriaId || "");
       setCentroCustoId(editando.centroCustoId || "");
-      setRecorrencia(editando.recorrencia === "mensal" ? "mensal" : "");
+      setRecorrencia(editando.recorrencia === "semanal" || editando.recorrencia === "mensal" ? editando.recorrencia : "");
     } else {
       setContatoId(""); setValor(0); setDataVencimento(""); setDataCompetencia(today());
       setDataPrevisao(""); setDescricao(""); setReferencia(""); setDetalhamento("");
@@ -208,10 +208,16 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
 
           <div>
             <label className="form-label">Recorrência</label>
-            <select value={recorrencia} onChange={e => setRecorrencia(e.target.value as "" | "mensal")}>
+            <select value={recorrencia} onChange={e => setRecorrencia(e.target.value as "" | "semanal" | "mensal")}>
               <option value="">Não se repete</option>
-              <option value="mensal">Mensal — gera a próxima ocorrência sozinho quando essa for quitada</option>
+              <option value="semanal">Semanal</option>
+              <option value="mensal">Mensal</option>
             </select>
+            {recorrencia && (
+              <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.3rem" }}>
+                Ao quitar totalmente, a próxima ocorrência é criada sozinha {recorrencia === "semanal" ? "uma semana depois" : "no mês seguinte"}.
+              </p>
+            )}
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.25rem" }}>
