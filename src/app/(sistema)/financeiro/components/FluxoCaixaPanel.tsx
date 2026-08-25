@@ -8,7 +8,7 @@ import {
 import type { ContaBancaria, Agendamento } from "@/lib/financeiro-data";
 import { statusAgendamento } from "@/lib/financeiro-data";
 import type { DreLinhaImportada } from "@/lib/dre-data";
-import { computeIndicadoresDre, computeIndicadoresDreMes, MESES_ABREV } from "@/lib/dre-data";
+import { computeIndicadoresDre, computeIndicadoresDreMes, MESES_ABREV, DRE_MES_CAMPOS } from "@/lib/dre-data";
 
 interface BaixaComTipo {
   id: string;
@@ -133,7 +133,12 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
   const dreDoMesDisponivel = dreDoAnoCorrente && receitaMes !== 0;
   const progressoMeta = meta > 0 ? Math.min((receitaMes / meta) * 100, 100) : 0;
 
-  // ── Compromissos financeiros dos próximos 60 dias (só contas a PAGAR ainda em aberto) ──
+  // ── Compromissos financeiros dos próximos 60 dias (contas a PAGAR ainda em aberto) ──
+  // Conta como compromisso: qualquer conta a pagar não quitada que já venceu (mesmo que
+  // há tempo — ainda é dinheiro que se deve), que vence dentro dos próximos 60 dias, OU
+  // que ainda não tem data de vencimento definida (contas fixas recorrentes como aluguel
+  // e comissões são compromissos reais mesmo antes de a data exata ser cadastrada — tratar
+  // como "sem data" = "sem compromisso" é o que fazia o Caixa Livre mentir).
   const { compromissos60Dias, qtdCompromissos60Dias } = useMemo(() => {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -143,9 +148,9 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
     const pendentes = agendamentos.filter(a => {
       if (a.tipo !== "pagar") return false;
       if (statusAgendamento(a) === "pago") return false;
-      if (!a.dataVencimento) return false; // sem data ainda — não dá pra saber se cai nos próximos 60 dias
+      if (!a.dataVencimento) return true;
       const venc = new Date(a.dataVencimento + "T00:00:00");
-      return venc >= hoje && venc <= limite;
+      return venc <= limite;
     });
 
     return {
@@ -190,22 +195,23 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
       .slice(0, 8);
   }, [agendamentos]);
 
+  // Vem do DRE (já unificado Nibo + Sistema, meses fechados de um, mês atual do outro) —
+  // não dos "baixas" registrados manualmente, que ficavam vazios pra saídas sem nenhum
+  // pagamento baixado ainda no sistema. "Margem de contribuição" e "RESULTADO OPERACIONAL"
+  // batem exatamente entre as duas fontes (mesmo nome nas duas), então a diferença entre
+  // elas é sempre o total de despesas do mês, sem depender dos rótulos de grupo do Nibo
+  // (que usam texto ligeiramente diferente do Sistema e não merge por nome 1:1).
   const fluxoMensal = useMemo(() => {
-    const porMes: Record<string, { entradas: number; saidas: number }> = {};
-    baixas.forEach(b => {
-      const mesAno = b.data.slice(0, 7); // YYYY-MM
-      if (!porMes[mesAno]) porMes[mesAno] = { entradas: 0, saidas: 0 };
-      if (b.agendamentoTipo === "receber") porMes[mesAno].entradas += b.valor;
-      else porMes[mesAno].saidas += b.valor;
-    });
-    return Object.entries(porMes)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([mesAno, v]) => ({
-        name: `${mesAno.slice(5, 7)}/${mesAno.slice(0, 4)}`,
-        Entradas: v.entradas,
-        Saídas: v.saidas,
-      }));
-  }, [baixas]);
+    const receita = dreLinhas.find(l => l.resultado === "RECEITAS OPERACIONAIS");
+    const margem = dreLinhas.find(l => l.resultado === "Margem de contribuição");
+    const resultado = dreLinhas.find(l => l.resultado === "RESULTADO OPERACIONAL");
+    if (!receita) return [];
+    return DRE_MES_CAMPOS.map((campo, idx) => ({
+      name: `${MESES_ABREV[idx]}/${anoDre}`,
+      Entradas: receita[campo],
+      Saídas: (margem?.[campo] ?? 0) - (resultado?.[campo] ?? 0),
+    })).filter(m => m.Entradas !== 0 || m.Saídas !== 0);
+  }, [dreLinhas, anoDre]);
 
   if (loading) {
     return <div className="card" style={{ textAlign: "center", padding: "2rem", color: "var(--color-muted)" }}>Carregando...</div>;
@@ -353,8 +359,10 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
             color: vencidosReceber > 0 ? "var(--color-danger)" : "var(--color-success)",
           },
           {
-            id: "runway", label: "Dias de Caixa", value: diasDeCaixa > 0 ? `${Math.floor(diasDeCaixa)} dias` : "—",
-            sub: "No ritmo de despesa deste ano", alert: diasDeCaixa > 0 && diasDeCaixa < 15,
+            id: "runway", label: "Dias de Caixa",
+            value: diasDeCaixa === 0 ? "—" : diasDeCaixa < 0 ? `${Math.ceil(diasDeCaixa)} dias` : `${Math.floor(diasDeCaixa)} dias`,
+            sub: diasDeCaixa < 0 ? "Compromissos já superam o caixa" : "No ritmo de despesa deste ano",
+            alert: diasDeCaixa < 15,
             alertMsg: "Menos de 15 dias de fôlego", Icon: diasDeCaixa < 15 ? BatteryWarning : Wallet,
             color: diasDeCaixa < 0 ? "var(--color-danger)" : diasDeCaixa < 15 ? "var(--color-warning)" : "var(--color-success)",
           },

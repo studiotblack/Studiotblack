@@ -292,7 +292,49 @@ export function computeIndicadoresDre(linhas: DreLinhaImportada[]) {
   };
 }
 
-const DRE_MES_CAMPOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"] as const;
+export const DRE_MES_CAMPOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"] as const;
+
+// Une o DRE do Nibo (fonte oficial do contador, mas só tão atual quanto o último export)
+// com o DRE do Sistema (calculado ao vivo a partir do banco) numa ÚNICA fonte, mês a mês:
+// meses ANTES do mês atual usam o Nibo (já fechados oficialmente); o mês atual em diante
+// usa o Sistema (mais completo que qualquer export parcial). Nunca mistura as duas fontes
+// DENTRO do mesmo mês — cada coluna de mês vem de exatamente uma fonte, então nunca duplica
+// e o total de cada linha continua batendo com a soma dos seus meses.
+export function mesclarDreNiboSistema(
+  linhasNibo: DreLinhaImportada[],
+  linhasSistema: DreLinhaImportada[],
+  mesAtualIndex: number // 0 = Janeiro
+): DreLinhaImportada[] {
+  const porResultado = new Map<string, DreLinhaImportada>();
+
+  const aplicar = (linhas: DreLinhaImportada[], entra: (mesIdx: number) => boolean) => {
+    for (const linha of linhas) {
+      if (!porResultado.has(linha.resultado)) {
+        porResultado.set(linha.resultado, {
+          ordem: linha.ordem, resultado: linha.resultado, totalAno: 0,
+          jan: 0, fev: 0, mar: 0, abr: 0, mai: 0, jun: 0, jul: 0, ago: 0, set: 0, out: 0, nov: 0, dez: 0,
+        });
+      }
+      const destino = porResultado.get(linha.resultado)!;
+      DRE_MES_CAMPOS.forEach((campo, idx) => {
+        if (entra(idx)) destino[campo] = linha[campo];
+      });
+    }
+  };
+
+  aplicar(linhasNibo, (idx) => idx < mesAtualIndex);
+  aplicar(linhasSistema, (idx) => idx >= mesAtualIndex);
+
+  const linhasMescladas = Array.from(porResultado.values());
+  for (const l of linhasMescladas) {
+    l.totalAno = DRE_MES_CAMPOS.reduce((acc, campo) => acc + l[campo], 0);
+  }
+  // Ordem: prioriza a ordem do Nibo (estrutura mais completa/estável do plano de contas);
+  // linhas que só existem no Sistema entram no fim, na ordem em que apareceram lá.
+  const ordemNibo = new Map(linhasNibo.map(l => [l.resultado, l.ordem]));
+  linhasMescladas.sort((a, b) => (ordemNibo.get(a.resultado) ?? 100000 + a.ordem) - (ordemNibo.get(b.resultado) ?? 100000 + b.ordem));
+  return linhasMescladas.map((l, i) => ({ ...l, ordem: i }));
+}
 
 // Mesma ideia do computeIndicadoresDre, mas lendo só a coluna de um mês específico
 // (0 = Janeiro, ..., 11 = Dezembro) em vez do totalAno — usado no card "Receita/Lucro do Mês".
