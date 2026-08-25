@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { colaboradores, agendamentosHoje, kpisDashboard, receitaDiaria, servicos, produtos } from "@/lib/mock-data";
 import {
   TrendingUp, Users, Calendar, CheckSquare, Package, Clock, DollarSign,
@@ -17,10 +17,19 @@ export default function BarbershopDashboard() {
   // Simple filter scaling factor for demo responsiveness
   const scale = period === "hoje" ? 0.05 : period === "semana" ? 0.25 : 1;
 
+  // Faturamento (entradas reais do banco no período) e Saldo Líquido (saldo bancário
+  // atual consolidado) — puxados do módulo Financeiro, não são mais dado fictício.
+  const [resumoFinanceiro, setResumoFinanceiro] = useState({ faturamentoPeriodo: 0, saldoLiquido: 0 });
+  useEffect(() => {
+    fetch(`/api/financeiro/resumo-dashboard?periodo=${period}`)
+      .then(r => r.ok ? r.json() : { faturamentoPeriodo: 0, saldoLiquido: 0 })
+      .then(setResumoFinanceiro)
+      .catch(() => {});
+  }, [period]);
+
   // KPIs
-  const totalReceita = kpisDashboard.receitaMes * scale;
-  const totalDespesa = 0 * scale; // Set to 0 since data is clear
-  const saldoLiquido = totalReceita - totalDespesa;
+  const totalReceita = resumoFinanceiro.faturamentoPeriodo;
+  const saldoLiquido = resumoFinanceiro.saldoLiquido;
   const totalAgendamentos = Math.round(0 * scale); // 0 since data is clear
   const totalClientes = Math.round(kpisDashboard.clientesAtivos * scale);
   
@@ -85,9 +94,8 @@ export default function BarbershopDashboard() {
             </div>
           </div>
           <h2 style={{ fontSize: "1.75rem", fontWeight: 700, margin: 0 }}>{formatCurrency(totalReceita)}</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--color-success)" }}>
-            <ArrowUpRight size={14} />
-            <span>+18.2% em relação ao mês anterior</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--color-muted)" }}>
+            <span>Entradas reais no banco {period === "hoje" ? "hoje" : period === "semana" ? "nesta semana" : "neste mês"}</span>
           </div>
         </div>
 
@@ -99,10 +107,10 @@ export default function BarbershopDashboard() {
               <DollarSign size={20} className="value-positive" />
             </div>
           </div>
-          <h2 style={{ fontSize: "1.75rem", fontWeight: 700, margin: 0 }}>{formatCurrency(saldoLiquido)}</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--color-success)" }}>
-            <ArrowUpRight size={14} />
-            <span>Caixa positivo saudável</span>
+          <h2 style={{ fontSize: "1.75rem", fontWeight: 700, margin: 0, color: saldoLiquido >= 0 ? "var(--color-cream)" : "var(--color-danger)" }}>{formatCurrency(saldoLiquido)}</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", marginTop: "0.5rem", fontSize: "0.75rem", color: saldoLiquido >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+            {saldoLiquido >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+            <span>Saldo bancário consolidado, agora</span>
           </div>
         </div>
 

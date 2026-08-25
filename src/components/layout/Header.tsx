@@ -4,7 +4,7 @@ import { Bell, Search, CalendarDays, Clock, Menu, Sun, Moon } from "lucide-react
 import { useEffect, useState } from "react";
 import { useTheme } from "@/lib/theme-context";
 import type { Agendamento } from "@/lib/financeiro-data";
-import { estaNestaSemana } from "@/lib/financeiro-data";
+import { estaNestaSemana, statusAgendamento } from "@/lib/financeiro-data";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -26,7 +26,7 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
   const page = pageTitles[pathname] ?? { title: "Black Gestão", subtitle: "" };
   const [now, setNow] = useState(new Date());
   const [showNotif, setShowNotif] = useState(false);
-  const [contasSemana, setContasSemana] = useState<Agendamento[]>([]);
+  const [contasPagar, setContasPagar] = useState<Agendamento[]>([]);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -34,33 +34,42 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
     return () => clearInterval(t);
   }, []);
 
-  // Lembrete semanal de Contas a Pagar — recalcula sempre que o header monta (troca de
-  // página) ou o sino é aberto, e reflete a semana atual sozinho, sem precisar de um job
-  // agendado rodando.
+  // Notificações reais de Contas a Pagar — recalcula sempre que o header monta (troca de
+  // página) ou o sino é aberto, e reflete a situação atual sozinho, sem precisar de um job
+  // agendado rodando nem de dados fictícios.
   useEffect(() => {
     fetch("/api/financeiro/agendamentos?tipo=pagar")
       .then(r => r.ok ? r.json() : [])
-      .then((rows: Agendamento[]) => setContasSemana(rows.filter(estaNestaSemana)))
+      .then((rows: Agendamento[]) => setContasPagar(rows))
       .catch(() => {});
   }, [pathname, showNotif]);
 
   const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const dateStr = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
 
-  const totalContasSemana = contasSemana.reduce((acc, a) => acc + (a.valor - a.valorPago), 0);
+  const vencidas = contasPagar.filter(a => statusAgendamento(a) === "vencido");
+  const totalVencidas = vencidas.reduce((acc, a) => acc + (a.valor - a.valorPago), 0);
+
+  // "Esta semana" já inclui vencidas em aberto (ver estaNestaSemana) — exclui aqui pra não
+  // duplicar com a notificação de vencidas acima.
+  const estaSemana = contasPagar.filter(a => statusAgendamento(a) !== "vencido" && estaNestaSemana(a));
+  const totalEstaSemana = estaSemana.reduce((acc, a) => acc + (a.valor - a.valorPago), 0);
 
   const notificacoes = [
-    ...(contasSemana.length > 0 ? [{
+    ...(vencidas.length > 0 ? [{
+      id: "contas-vencidas",
+      tipo: "alerta" as const,
+      msg: `${vencidas.length} conta${vencidas.length !== 1 ? "s" : ""} a pagar vencida${vencidas.length !== 1 ? "s" : ""} — total ${brl(totalVencidas)}`,
+      tempo: "Atrasado",
+      onClick: () => router.push("/financeiro"),
+    }] : []),
+    ...(estaSemana.length > 0 ? [{
       id: "contas-semana",
       tipo: "financeiro" as const,
-      msg: `${contasSemana.length} conta${contasSemana.length !== 1 ? "s" : ""} a pagar esta semana — total ${brl(totalContasSemana)}`,
+      msg: `${estaSemana.length} conta${estaSemana.length !== 1 ? "s" : ""} a pagar esta semana — total ${brl(totalEstaSemana)}`,
       tempo: "Esta semana",
       onClick: () => router.push("/financeiro"),
     }] : []),
-    { id: 1, tipo: "agenda",  msg: "Eduardo Pereira em 15 min — Corte + Barba",  tempo: "15 min" },
-    { id: 2, tipo: "estoque", msg: "Estoque baixo: Shampoo Anti-Resíduo (8 un)", tempo: "Agora"  },
-    { id: 3, tipo: "estoque", msg: "Estoque baixo: Talco Antisséptico (4 un)",   tempo: "Agora"  },
-    { id: 4, tipo: "agenda",  msg: "Igor Alves confirmou agendamento 10:00",      tempo: "2 min"  },
   ];
 
   return (
@@ -174,12 +183,14 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
             }}
           >
             <Bell size={18} />
-            <span style={{
-              position: "absolute", top: 6, right: 6,
-              width: 8, height: 8, borderRadius: "50%",
-              background: "var(--color-gold)",
-              border: "2px solid var(--color-surface)",
-            }} />
+            {notificacoes.length > 0 && (
+              <span style={{
+                position: "absolute", top: 6, right: 6,
+                width: 8, height: 8, borderRadius: "50%",
+                background: vencidas.length > 0 ? "var(--color-danger)" : "var(--color-gold)",
+                border: "2px solid var(--color-surface)",
+              }} />
+            )}
           </button>
 
           {showNotif && (
@@ -203,6 +214,11 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
                 <span className="badge badge-gold">{notificacoes.length}</span>
               </div>
               <div style={{ padding: "0.5rem" }}>
+                {notificacoes.length === 0 && (
+                  <p style={{ padding: "1.5rem 0.875rem", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-muted)" }}>
+                    Nenhuma pendência no momento.
+                  </p>
+                )}
                 {notificacoes.map(n => (
                   <div key={n.id} style={{
                     padding: "0.75rem 0.875rem",
@@ -217,7 +233,7 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
                     <span style={{ fontSize: "1rem", flexShrink: 0 }}>
-                      {n.tipo === "agenda" ? "📅" : n.tipo === "financeiro" ? "💰" : "📦"}
+                      {n.tipo === "alerta" ? "⚠️" : "💰"}
                     </span>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: "0.8125rem", color: "var(--color-cream-dim)", lineHeight: 1.4 }}>
@@ -231,8 +247,11 @@ export default function Header({ onMobileMenuOpen }: { onMobileMenuOpen?: () => 
                 ))}
               </div>
               <div style={{ padding: "0.75rem", borderTop: "1px solid var(--color-border)", textAlign: "center" }}>
-                <button style={{ fontSize: "0.8125rem", color: "var(--color-gold)", background: "none", border: "none", cursor: "pointer" }}>
-                  Ver todas
+                <button
+                  onClick={() => { setShowNotif(false); router.push("/financeiro"); }}
+                  style={{ fontSize: "0.8125rem", color: "var(--color-gold)", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  Ver Contas a Pagar
                 </button>
               </div>
             </div>
