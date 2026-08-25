@@ -32,7 +32,6 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
   const [contaBancariaId, setContaBancariaId] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [centroCustoId, setCentroCustoId] = useState("");
-  const [reembolsavel, setReembolsavel] = useState(false);
   const [recorrencia, setRecorrencia] = useState<"" | "mensal">("");
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
@@ -61,12 +60,11 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
       setContaBancariaId(editando.contaBancariaId || "");
       setCategoriaId(editando.categoriaId || "");
       setCentroCustoId(editando.centroCustoId || "");
-      setReembolsavel(editando.reembolsavel);
       setRecorrencia(editando.recorrencia === "mensal" ? "mensal" : "");
     } else {
       setContatoId(""); setValor(0); setDataVencimento(""); setDataCompetencia(today());
       setDataPrevisao(""); setDescricao(""); setReferencia(""); setDetalhamento("");
-      setContaBancariaId(""); setCategoriaId(""); setCentroCustoId(""); setReembolsavel(false);
+      setContaBancariaId(""); setCategoriaId(""); setCentroCustoId("");
       setRecorrencia("");
     }
     setErro("");
@@ -96,7 +94,7 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
           tipo, contatoId, valor, dataVencimento: dataVencimento || undefined, dataCompetencia,
           dataPrevisao: dataPrevisao || undefined, descricao, referencia, detalhamento,
           contaBancariaId: contaBancariaId || undefined, categoriaId: categoriaId || undefined,
-          centroCustoId: centroCustoId || undefined, reembolsavel, recorrencia: recorrencia || undefined,
+          centroCustoId: centroCustoId || undefined, recorrencia: recorrencia || undefined,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -215,11 +213,6 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
               <option value="mensal">Mensal — gera a próxima ocorrência sozinho quando essa for quitada</option>
             </select>
           </div>
-
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "var(--color-cream-dim)", cursor: "pointer" }}>
-            <input type="checkbox" checked={reembolsavel} onChange={e => setReembolsavel(e.target.checked)} style={{ width: "auto" }} />
-            Reembolsável (será cobrado de terceiro depois)
-          </label>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.25rem" }}>
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>

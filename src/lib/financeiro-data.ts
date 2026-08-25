@@ -113,7 +113,6 @@ export interface Agendamento {
   detalhamento?: string;
   contaBancariaId?: string;
   contaBancariaNome?: string;
-  reembolsavel: boolean;
   recorrencia?: "mensal" | null;
   categoriaId?: string;
   categoriaNome?: string;

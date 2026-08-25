@@ -373,14 +373,14 @@ model LancamentoFinanceiro {
   contatoId        String
   valor            Float
   valorPago        Float    @default(0)
-  dataVencimento   String
+  dataVencimento   String?
   dataCompetencia  String
   dataPrevisao     String?
   descricao        String
   referencia       String?
   detalhamento     String?
   contaBancariaId  String?
-  reembolsavel     Boolean  @default(false)
+  recorrencia      String?  // null | mensal
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -466,4 +466,17 @@ model CategoriaPalavraChave {
   palavraChave String   @unique
   categoriaId  String
   createdAt    DateTime @default(now())
+}
+
+// Regra aprendida de conciliação bancária: trecho da descrição do banco (ex: "sabesp")
+// -> contato/categoria/centro de custo, gravada quando o usuário marca "lembrar esse
+// padrão" na conciliação manual. Passa a casar sozinha em sincronizações futuras.
+model RegraConciliacaoBancaria {
+  id              String   @id @default(uuid())
+  padraoDescricao String   @unique
+  contatoId       String
+  categoriaId     String?
+  centroCustoId   String?
+  descricao       String?
+  createdAt       DateTime @default(now())
 }

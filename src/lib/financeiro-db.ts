@@ -115,7 +115,6 @@ export async function ensureFinanceiroTables(sql: Sql) {
       referencia TEXT,
       detalhamento TEXT,
       "contaBancariaId" TEXT REFERENCES "ContaBancaria"(id),
-      reembolsavel BOOLEAN NOT NULL DEFAULT false,
       "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
       "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
@@ -247,6 +246,9 @@ export async function ensureFinanceiroTables(sql: Sql) {
   // a rota de baixas já cria sozinha a próxima ocorrência do mês seguinte, pra contas
   // fixas (aluguel, água, comissões, etc.) não precisarem ser recadastradas todo mês.
   await sql`ALTER TABLE "LancamentoFinanceiro" ADD COLUMN IF NOT EXISTS recorrencia TEXT`;
+
+  // "Reembolsável" foi removido — ficava só um flag sem nenhuma tela/fluxo usando ele.
+  await sql`ALTER TABLE "LancamentoFinanceiro" DROP COLUMN IF EXISTS reembolsavel`;
 
   // Regra aprendida de conciliação bancária: na primeira vez que o usuário concilia
   // manualmente uma transação e marca "lembrar esse padrão", grava aqui um trecho da
