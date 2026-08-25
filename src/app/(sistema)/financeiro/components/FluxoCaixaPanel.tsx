@@ -33,7 +33,7 @@ interface FluxoCaixaPanelProps {
 }
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtData = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
+const fmtData = (d: string | null | undefined) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "—";
 
 export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelProps) {
   const [contas, setContas] = useState<ContaBancaria[]>([]);

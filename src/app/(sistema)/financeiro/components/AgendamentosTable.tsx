@@ -8,7 +8,7 @@ import AgendamentoForm from "./AgendamentoForm";
 import BaixaModal from "./BaixaModal";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtData = (d: string) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+const fmtData = (d: string | null | undefined) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "—";
 
 export default function AgendamentosTable() {
   const [tipo, setTipo] = useState<TipoAgendamento>("pagar");
