@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, ArrowRightLeft, Bot, X, Link2, Wand2, MessageCircle } from "lucide-react";
+import { CheckCircle2, ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, Sparkles } from "lucide-react";
 import type {
   ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, Agendamento,
 } from "@/lib/financeiro-data";
@@ -32,8 +32,6 @@ export default function ConciliacaoPanel() {
   const [erroSync, setErroSync] = useState<string | null>(null);
   const [aplicandoRegra, setAplicandoRegra] = useState(false);
   const [syncingWhatsapp, setSyncingWhatsapp] = useState(false);
-
-  const [resolveTx, setResolveTx] = useState<TransacaoBancariaImportada | null>(null);
 
   const contasConectadas = useMemo(() => contas.filter(c => !!c.sicoobClientId), [contas]);
   const contaSelecionada = contas.find(c => c.id === contaId);
@@ -141,12 +139,19 @@ export default function ConciliacaoPanel() {
   const conciliadas = transacoes.filter(t => t.status === "conciliado");
   const ignoradas = transacoes.filter(t => t.status === "ignorado");
 
+  // Só sugere bater com uma conta existente se o valor em aberto dela for parecido com o
+  // da transação — sem isso a aba "Sugestão" listava as 21 contas a pagar em aberto pra
+  // qualquer PIX pequeno, sem nenhuma relação de valor (o auto-match por valor exato já
+  // resolve isso na sincronização; o que sobra pendente aqui raramente bate perfeitinho,
+  // então uma tolerância pequena pra revisão manual é o suficiente).
+  const TOLERANCIA_SUGESTAO = 5;
   const agendamentosCompativeis = (tx: TransacaoBancariaImportada) => {
     const tipoAlvo = tx.tipo === "entrada" ? "receber" : "pagar";
     return agendamentos
       .filter(a => a.tipo === tipoAlvo)
       .filter(a => statusAgendamento(a) !== "pago")
-      .sort((a, b) => (a.dataVencimento || "9999-99-99").localeCompare(b.dataVencimento || "9999-99-99"));
+      .filter(a => Math.abs((a.valor - a.valorPago) - tx.valor) <= TOLERANCIA_SUGESTAO)
+      .sort((a, b) => Math.abs((a.valor - a.valorPago) - tx.valor) - Math.abs((b.valor - b.valorPago) - tx.valor));
   };
 
   if (loading) {
@@ -238,34 +243,28 @@ export default function ConciliacaoPanel() {
       )}
 
       {/* PENDENTES */}
-      <div style={{ background: "var(--color-surface)", borderRadius: "1rem", border: "1px solid var(--color-border)", overflow: "hidden" }}>
-        <div style={{ padding: "0.85rem 1rem", borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-2)", color: "var(--color-muted)", fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)" }}>
           Pendentes de conciliação ({pendentes.length})
         </div>
 
         {pendentes.length === 0 ? (
-          <div style={{ padding: "3rem", textAlign: "center", color: "var(--color-success)" }}>
+          <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--color-success)" }}>
             <CheckCircle2 size={40} style={{ margin: "0 auto 1rem auto" }} />
             <p style={{ fontWeight: 700, fontSize: "1rem" }}>Tudo conciliado!</p>
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>Nenhuma transação pendente neste período.</p>
           </div>
         ) : (
           pendentes.map(tx => (
-            <div key={tx.id} style={{ display: "flex", alignItems: "center", padding: "0.85rem 1rem", borderBottom: "1px solid var(--color-border)", gap: "1rem" }}>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-cream)" }}>{tx.descricao}</span>
-                <span style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>{fmtData(tx.data)}{tx.descricaoComplementar ? ` — ${tx.descricaoComplementar}` : ""}</span>
-                {tx.categoriaSugeridaNome && (
-                  <span className="badge badge-gold" style={{ fontSize: "0.65rem", alignSelf: "flex-start", marginTop: "2px" }}>
-                    Sugestão: {tx.categoriaSugeridaNome}{tx.comprovanteLegenda ? ` ("${tx.comprovanteLegenda}")` : ""}
-                  </span>
-                )}
-              </div>
-              <div style={{ width: "130px", textAlign: "right", fontWeight: 800, color: tx.tipo === "entrada" ? "var(--color-success)" : "var(--color-danger)" }}>
-                {tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}
-              </div>
-              <button onClick={() => setResolveTx(tx)} className="btn btn-gold btn-sm">Conciliar</button>
-            </div>
+            <PendenteCard
+              key={tx.id}
+              tx={tx}
+              agendamentos={agendamentosCompativeis(tx)}
+              contatos={contatos}
+              categorias={categorias}
+              centros={centros}
+              onResolvido={() => { carregarTransacoes(); carregarCadastros(); }}
+            />
           ))
         )}
       </div>
@@ -291,53 +290,46 @@ export default function ConciliacaoPanel() {
       {ignoradas.length > 0 && (
         <p style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{ignoradas.length} transaç{ignoradas.length === 1 ? "ão ignorada" : "ões ignoradas"} neste período.</p>
       )}
-
-      {/* MODAL DE CONCILIAÇÃO MANUAL */}
-      {resolveTx && (
-        <ConciliarModal
-          tx={resolveTx}
-          agendamentos={agendamentosCompativeis(resolveTx)}
-          contatos={contatos}
-          categorias={categorias}
-          centros={centros}
-          onClose={() => setResolveTx(null)}
-          onSaved={() => { setResolveTx(null); carregarTransacoes(); carregarCadastros(); }}
-        />
-      )}
     </div>
   );
 }
 
-// ── Modal de conciliação manual (bater com conta existente, criar nova, ou ignorar) ──
-function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClose, onSaved }: {
+// ── Card de conciliação inline (sem modal) — cada transação pendente já mostra o
+// "palpite" (contato + categoria sugeridos, aprendidos de conciliações anteriores ou do
+// comprovante do WhatsApp) pré-preenchido, pronto pra confirmar com um clique só.
+function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResolvido }: {
   tx: TransacaoBancariaImportada;
   agendamentos: Agendamento[];
   contatos: Contato[];
   categorias: CategoriaFinanceira[];
   centros: CentroCusto[];
-  onClose: () => void;
-  onSaved: () => void;
+  onResolvido: () => void;
 }) {
-  const [modo, setModo] = useState<"match" | "novo">(agendamentos.length > 0 ? "match" : "novo");
+  const temPalpite = !!(tx.contatoSugeridoId || tx.categoriaSugeridaId);
+  const temMatch = agendamentos.length > 0;
+  // Quando existe um palpite pronto (contato+categoria), já mostra "Nova transação" pré-
+  // preenchida — é mais rápido que forçar a escolher entre uma conta existente primeiro.
+  // Sem palpite mas com uma conta existente compatível, começa em "Sugestão" (bater com ela).
+  const [modo, setModo] = useState<"sugestao" | "novo">(temMatch && !temPalpite ? "sugestao" : "novo");
   const [lancamentoId, setLancamentoId] = useState(agendamentos[0]?.id || "");
-  const [contatoId, setContatoId] = useState("");
+  const [contatoId, setContatoId] = useState(tx.contatoSugeridoId || "");
   const [categoriaId, setCategoriaId] = useState(tx.categoriaSugeridaId || "");
-  const [centroCustoId, setCentroCustoId] = useState("");
+  const [centroCustoId, setCentroCustoId] = useState(tx.centroCustoSugeridoId || "");
   const [descricao, setDescricao] = useState(tx.descricao || "");
-  const [lembrarPadrao, setLembrarPadrao] = useState(false);
+  const [lembrarPadrao, setLembrarPadrao] = useState(!tx.contatoSugeridoId);
   const [padraoDescricao, setPadraoDescricao] = useState((tx.descricao || "").toLowerCase().trim());
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
   const categoriasFiltradas = categorias.filter(c => c.tipo === (tx.tipo === "entrada" ? "entrada" : "saida"));
 
-  const salvar = async () => {
+  const confirmar = async () => {
     setErro("");
-    if (modo === "match" && !lancamentoId) { setErro("Selecione uma conta a pagar/receber."); return; }
+    if (modo === "sugestao" && !lancamentoId) { setErro("Selecione uma conta a pagar/receber."); return; }
     if (modo === "novo" && !contatoId) { setErro("Selecione um contato."); return; }
     setSaving(true);
     try {
-      const body = modo === "match"
+      const body = modo === "sugestao"
         ? { lancamentoId }
         : { novoLancamento: { contatoId, categoriaId: categoriaId || undefined, centroCustoId: centroCustoId || undefined, descricao } };
       const res = await fetch(`/api/financeiro/transacoes-bancarias/${tx.id}/conciliar`, {
@@ -355,7 +347,7 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
         }).catch(() => {});
       }
 
-      onSaved();
+      onResolvido();
     } catch (err: any) {
       setErro(err.message || "Erro ao conciliar");
     } finally {
@@ -372,7 +364,7 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
         body: JSON.stringify({ ignorar: true }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      onSaved();
+      onResolvido();
     } catch (err: any) {
       setErro(err.message || "Erro ao ignorar");
     } finally {
@@ -381,110 +373,128 @@ function ConciliarModal({ tx, agendamentos, contatos, categorias, centros, onClo
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: 520 }}>
-        <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>Conciliar Transação</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer" }}><X size={20} /></button>
+    <div className="card" style={{ position: "relative", padding: "1rem 1.25rem", overflow: "hidden" }}>
+      {temPalpite && (
+        <div style={{
+          position: "absolute", top: 0, right: 0, background: "var(--color-gold)", color: "var(--color-bg)",
+          fontSize: "0.65rem", fontWeight: 800, padding: "0.2rem 0.6rem", borderBottomLeftRadius: "0.5rem",
+          display: "flex", alignItems: "center", gap: "0.25rem",
+        }}>
+          <Sparkles size={11} /> PALPITE
         </div>
+      )}
 
-        <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <div style={{ padding: "1rem", background: "var(--color-surface-2)", borderRadius: "0.5rem" }}>
-            <p style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-cream)", margin: 0 }}>{tx.descricao}</p>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.4rem" }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>{fmtData(tx.data)}</span>
-              <span style={{ fontWeight: 800, color: tx.tipo === "entrada" ? "var(--color-success)" : "var(--color-danger)" }}>
-                {tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}
-              </span>
-            </div>
-          </div>
-
-          {erro && <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.6rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>{erro}</div>}
-
-          {tx.categoriaSugeridaNome && (
-            <div style={{ background: "rgba(212,175,140,0.08)", border: "1px solid var(--color-gold)", color: "var(--color-gold)", padding: "0.6rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.8rem" }}>
-              Sugestão a partir do comprovante do WhatsApp{tx.comprovanteLegenda ? ` ("${tx.comprovanteLegenda}")` : ""}: categoria já pré-selecionada como <strong>{tx.categoriaSugeridaNome}</strong>.
-            </div>
+      {/* Cabeçalho: data, descrição do banco, valor */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "0.75rem" }}>
+        <div>
+          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{fmtData(tx.data)}</span>
+          <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-cream)", margin: "0.15rem 0 0 0" }}>{tx.descricao}</p>
+          {tx.descricaoComplementar && (
+            <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: "0.1rem 0 0 0" }}>{tx.descricaoComplementar}</p>
           )}
-
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="button" onClick={() => setModo("match")} className={modo === "match" ? "btn btn-gold btn-sm" : "btn btn-ghost btn-sm"} disabled={agendamentos.length === 0}>
-              Baixar conta existente {agendamentos.length > 0 ? `(${agendamentos.length})` : ""}
-            </button>
-            <button type="button" onClick={() => setModo("novo")} className={modo === "novo" ? "btn btn-gold btn-sm" : "btn btn-ghost btn-sm"}>
-              Criar novo lançamento
-            </button>
-          </div>
-
-          {modo === "match" ? (
-            agendamentos.length === 0 ? (
-              <p style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>Nenhuma conta a {tx.tipo === "entrada" ? "receber" : "pagar"} em aberto com valor compatível.</p>
-            ) : (
-              <div>
-                <label className="form-label">Conta a {tx.tipo === "entrada" ? "receber" : "pagar"}</label>
-                <select value={lancamentoId} onChange={e => setLancamentoId(e.target.value)}>
-                  {agendamentos.map(a => (
-                    <option key={a.id} value={a.id}>
-                      {a.descricao} — {a.contatoNome} — {brl(a.valor - a.valorPago)} em aberto (venc. {fmtData(a.dataVencimento)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              <div>
-                <label className="form-label">Contato</label>
-                <select value={contatoId} onChange={e => setContatoId(e.target.value)} required>
-                  <option value="">Selecione...</option>
-                  {contatos.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                <div>
-                  <label className="form-label">Categoria (opcional)</label>
-                  <select value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
-                    <option value="">Sem categoria</option>
-                    {categoriasFiltradas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Centro de custo (opcional)</label>
-                  <select value={centroCustoId} onChange={e => setCentroCustoId(e.target.value)}>
-                    <option value="">Sem centro de custo</option>
-                    {centros.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="form-label">Descrição</label>
-                <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)} />
-              </div>
-
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "var(--color-cream-dim)", cursor: "pointer" }}>
-                <input type="checkbox" checked={lembrarPadrao} onChange={e => setLembrarPadrao(e.target.checked)} style={{ width: "auto" }} />
-                Lembrar esse padrão pra próxima vez
-              </label>
-              {lembrarPadrao && (
-                <div>
-                  <label className="form-label">Trecho da descrição do banco a reconhecer</label>
-                  <input type="text" value={padraoDescricao} onChange={e => setPadraoDescricao(e.target.value)} placeholder="ex: sabesp" />
-                  <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.3rem" }}>
-                    Toda transação futura cuja descrição do banco contiver esse trecho vai cair sozinha nesse contato/categoria, sem precisar conciliar manualmente de novo.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.5rem" }}>
-            <button type="button" className="btn btn-ghost" onClick={ignorar} disabled={saving}>Ignorar transação</button>
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-              <button type="button" className="btn btn-gold" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Confirmar"}</button>
-            </div>
-          </div>
         </div>
+        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: tx.tipo === "entrada" ? "var(--color-success)" : "var(--color-danger)", whiteSpace: "nowrap" }}>
+          {tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}
+        </span>
+      </div>
+
+      {(tx.contatoSugeridoNome || tx.categoriaSugeridaNome) && (
+        <div style={{ background: "rgba(212,175,140,0.08)", border: "1px solid var(--color-gold)", color: "var(--color-gold)", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", fontSize: "0.78rem", marginBottom: "0.75rem" }}>
+          {tx.contatoSugeridoNome && <>Reconhecido como <strong>{tx.contatoSugeridoNome}</strong>{tx.categoriaSugeridaNome ? " — " : ""}</>}
+          {tx.categoriaSugeridaNome && <>categoria <strong>{tx.categoriaSugeridaNome}</strong></>}
+          {tx.comprovanteLegenda && ` (comprovante WhatsApp: "${tx.comprovanteLegenda}")`}
+        </div>
+      )}
+
+      {erro && <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", fontSize: "0.8rem", marginBottom: "0.75rem" }}>{erro}</div>}
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem", borderBottom: "1px solid var(--color-border)" }}>
+        {temMatch && (
+          <button type="button" onClick={() => setModo("sugestao")}
+            style={{
+              background: "none", border: "none", cursor: "pointer", padding: "0.4rem 0.6rem", fontSize: "0.8rem", fontWeight: 600,
+              color: modo === "sugestao" ? "var(--color-gold)" : "var(--color-muted)",
+              borderBottom: modo === "sugestao" ? "2px solid var(--color-gold)" : "2px solid transparent",
+            }}>
+            Sugestão ({agendamentos.length})
+          </button>
+        )}
+        <button type="button" onClick={() => setModo("novo")}
+          style={{
+            background: "none", border: "none", cursor: "pointer", padding: "0.4rem 0.6rem", fontSize: "0.8rem", fontWeight: 600,
+            color: modo === "novo" ? "var(--color-gold)" : "var(--color-muted)",
+            borderBottom: modo === "novo" ? "2px solid var(--color-gold)" : "2px solid transparent",
+          }}>
+          Nova transação
+        </button>
+      </div>
+
+      {/* Corpo */}
+      <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+        {modo === "sugestao" ? (
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <label className="form-label">Conta a {tx.tipo === "entrada" ? "receber" : "pagar"}</label>
+            <select value={lancamentoId} onChange={e => setLancamentoId(e.target.value)}>
+              {agendamentos.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.descricao} — {a.contatoNome} — {brl(a.valor - a.valorPago)} em aberto (venc. {fmtData(a.dataVencimento)})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <>
+            <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+              <label className="form-label">Contato</label>
+              <select value={contatoId} onChange={e => setContatoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {contatos.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: "1 1 220px", minWidth: 200 }}>
+              <label className="form-label">Categoria</label>
+              <select value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
+                <option value="">Sem categoria</option>
+                {categoriasFiltradas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+              <label className="form-label">Descrição</label>
+              <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)} />
+            </div>
+          </>
+        )}
+        <button type="button" className="btn btn-gold" onClick={confirmar} disabled={saving} style={{ height: "2.5rem", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
+          {saving ? "..." : "OK"}
+        </button>
+      </div>
+
+      {modo === "novo" && (
+        <div style={{ marginTop: "0.6rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+              <label className="form-label">Centro de custo (opcional)</label>
+              <select value={centroCustoId} onChange={e => setCentroCustoId(e.target.value)}>
+                <option value="">Sem centro de custo</option>
+                {centros.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", color: "var(--color-cream-dim)", cursor: "pointer", marginTop: "1.2rem" }}>
+              <input type="checkbox" checked={lembrarPadrao} onChange={e => setLembrarPadrao(e.target.checked)} style={{ width: "auto" }} />
+              Lembrar esse padrão
+            </label>
+          </div>
+          {lembrarPadrao && (
+            <input type="text" value={padraoDescricao} onChange={e => setPadraoDescricao(e.target.value)} placeholder="trecho da descrição do banco a reconhecer, ex: sabesp" style={{ fontSize: "0.8rem" }} />
+          )}
+        </div>
+      )}
+
+      <div style={{ textAlign: "right", marginTop: "0.5rem" }}>
+        <button type="button" onClick={ignorar} disabled={saving} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer", fontSize: "0.75rem", textDecoration: "underline" }}>
+          Ignorar transação
+        </button>
       </div>
     </div>
   );

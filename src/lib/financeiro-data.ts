@@ -63,6 +63,12 @@ export interface TransacaoBancariaImportada {
   comprovanteLegenda?: string;
   categoriaSugeridaId?: string;
   categoriaSugeridaNome?: string;
+
+  // "Palpite" aprendido em conciliações manuais anteriores (RegraConciliacaoBancaria) —
+  // reconhece a descrição do banco e já sugere o contato também, não só a categoria.
+  contatoSugeridoId?: string;
+  contatoSugeridoNome?: string;
+  centroCustoSugeridoId?: string;
 }
 
 export type TipoContato = "cliente" | "fornecedor" | "funcionario" | "socio";

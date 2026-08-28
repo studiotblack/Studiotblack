@@ -21,8 +21,11 @@ export async function GET(request: NextRequest) {
         t.*,
         l.descricao AS "lancamentoDescricao",
         comp."textoLegenda" AS "comprovanteLegenda",
-        comp."categoriaSugeridaId",
-        catSug.nome AS "categoriaSugeridaNome"
+        COALESCE(comp."categoriaSugeridaId", regra."categoriaId") AS "categoriaSugeridaId",
+        COALESCE(catSug.nome, catRegra.nome) AS "categoriaSugeridaNome",
+        regra."contatoId" AS "contatoSugeridoId",
+        contSug.nome AS "contatoSugeridoNome",
+        regra."centroCustoId" AS "centroCustoSugeridoId"
       FROM "TransacaoBancariaImportada" t
       LEFT JOIN "LancamentoFinanceiro" l ON l.id = t."lancamentoId"
       LEFT JOIN LATERAL (
@@ -36,6 +39,18 @@ export async function GET(request: NextRequest) {
         LIMIT 1
       ) comp ON true
       LEFT JOIN "CategoriaFinanceira" catSug ON catSug.id = comp."categoriaSugeridaId"
+      -- "Palpite" aprendido na conciliação manual anterior (mesma ideia do Nibo: reconhece
+      -- o nome/descrição do banco e já pré-preenche contato + categoria) — só pra saídas
+      -- ainda pendentes, igual à regra que o WhatsApp usa.
+      LEFT JOIN LATERAL (
+        SELECT * FROM "RegraConciliacaoBancaria" r
+        WHERE t.tipo = 'saida' AND t.status = 'pendente'
+          AND t.descricao ILIKE '%' || r."padraoDescricao" || '%'
+        ORDER BY LENGTH(r."padraoDescricao") DESC
+        LIMIT 1
+      ) regra ON true
+      LEFT JOIN "Contato" contSug ON contSug.id = regra."contatoId"
+      LEFT JOIN "CategoriaFinanceira" catRegra ON catRegra.id = regra."categoriaId"
       WHERE 1=1
         ${contaBancariaId ? sql`AND t."contaBancariaId" = ${contaBancariaId}` : sql``}
         ${filtroMes ? sql`AND t.data LIKE ${filtroMes + "%"}` : sql``}
