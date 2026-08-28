@@ -2,6 +2,8 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   Browsers,
   DisconnectReason,
+  proto,
+  normalizeMessageContent,
   type WAMessage,
 } from "@whiskeysockets/baileys";
 import type { Sql } from "@/lib/financeiro-db";
@@ -38,13 +40,19 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
 
   function coletar(msg: WAMessage) {
     if (msg.key.remoteJid !== grupoJid) return;
-    if (!msg.message?.imageMessage) return;
+    // Desembrulha mensagens temporárias/"visualizar uma vez" — nelas a imagem não fica
+    // direto em msg.message.imageMessage, e o filtro antigo deixava passar batido.
+    const conteudo = normalizeMessageContent(msg.message);
+    if (!conteudo?.imageMessage) {
+      console.log("[whatsapp] mensagem do grupo alvo sem imagem reconhecida:", JSON.stringify(Object.keys(msg.message || {})));
+      return;
+    }
     const id = msg.key.id;
     if (id) {
       if (idsColetados.has(id)) return;
       idsColetados.add(id);
     }
-    mensagens.push(msg);
+    mensagens.push({ ...msg, message: conteudo });
   }
 
   async function conectar(): Promise<void> {
@@ -55,12 +63,16 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
       auth: state,
       version,
       browser: Browsers.macOS("Desktop"),
-      // Mensagens offline recentes já chegam pelo fluxo normal de entrega (evento
-      // "messaging-history.set" com o backlog curto), sem precisar disso. syncFullHistory
-      // força o Baileys a baixar o histórico COMPLETO de conversas ao conectar — pesado
-      // e, nesse device, faz o WhatsApp derrubar a conexão logo após o login (era o que
-      // causava "Connection Terminated" em toda tentativa de sincronizar).
+      // syncFullHistory:true anuncia esse device como um app desktop nativo (em vez do
+      // perfil "navegador" com que a sessão foi pareada) e o WhatsApp derruba a conexão
+      // na hora por causa dessa divergência de identidade — era o que causava
+      // "Connection Terminated" em toda tentativa de sincronizar. Mas deixar false sem
+      // mais nada também desliga silenciosamente o download do pacote "RECENT" (as
+      // mensagens perdidas enquanto a sessão ficou offline, que é exatamente o que a
+      // gente quer capturar) — por isso o shouldSyncHistoryMessage abaixo libera só
+      // esse tipo, sem reativar o requireFullSync que quebrava a conexão.
       syncFullHistory: false,
+      shouldSyncHistoryMessage: (msg) => msg.syncType === proto.HistorySync.HistorySyncType.RECENT,
     });
 
     return new Promise((resolve, reject) => {
@@ -82,6 +94,7 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
       sock.ev.on("creds.update", saveCreds);
 
       sock.ev.on("messages.upsert", (evento) => {
+        console.log(`[whatsapp] messages.upsert: ${evento.messages.length} msg(s) - jids: ${evento.messages.map((m) => m.key.remoteJid).join(", ")}`);
         for (const msg of evento.messages) coletar(msg);
       });
 
@@ -89,6 +102,7 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
       // (sincronização de histórico), não por "messages.upsert" — sem isso, comprovantes
       // enviados antes de clicar em "Sincronizar" nunca eram capturados.
       sock.ev.on("messaging-history.set", (evento) => {
+        console.log(`[whatsapp] messaging-history.set: ${evento.messages.length} msg(s) - jids: ${evento.messages.map((m) => m.key.remoteJid).join(", ")}`);
         for (const msg of evento.messages) coletar(msg);
       });
 

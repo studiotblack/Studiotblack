@@ -47,3 +47,6 @@ next-env.d.ts
 
 # QR code gerado no pareamento do WhatsApp (regenerado a cada pareamento, nunca commitar)
 /scripts/whatsapp-qr.png
+
+# dados de idioma baixados pelo tesseract.js (OCR) na primeira execução, nunca commitar
+/*.traineddata
