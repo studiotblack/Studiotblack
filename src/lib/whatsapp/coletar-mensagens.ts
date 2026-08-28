@@ -55,10 +55,12 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
       auth: state,
       version,
       browser: Browsers.macOS("Desktop"),
-      // Precisa estar ligado: é o que faz o Baileys de fato baixar e decodificar o
-      // pacote de histórico onde chegam as mensagens recebidas enquanto a sessão
-      // estava desconectada (senão ele só loga a notificação e descarta).
-      syncFullHistory: true,
+      // Mensagens offline recentes já chegam pelo fluxo normal de entrega (evento
+      // "messaging-history.set" com o backlog curto), sem precisar disso. syncFullHistory
+      // força o Baileys a baixar o histórico COMPLETO de conversas ao conectar — pesado
+      // e, nesse device, faz o WhatsApp derrubar a conexão logo após o login (era o que
+      // causava "Connection Terminated" em toda tentativa de sincronizar).
+      syncFullHistory: false,
     });
 
     return new Promise((resolve, reject) => {

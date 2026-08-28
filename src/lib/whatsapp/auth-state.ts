@@ -18,27 +18,42 @@ export async function ensureWhatsappAuthTable(sql: Sql) {
 export async function carregarAuthStatePostgres(sql: Sql) {
   await ensureWhatsappAuthTable(sql);
 
+  // O pareamento fica minutos esperando o usuário escanear o QR com a mesma conexão
+  // Postgres aberta o tempo todo — se o pooler (pgbouncer) derrubar essa conexão ociosa
+  // no meio da espera, a próxima leitura/escrita falha. Sem o try/catch, esse erro não
+  // tratado derrubava o processo inteiro bem na hora de salvar a sessão recém-pareada
+  // (foi exatamente isso que corrompeu uma sessão antes) — melhor logar e seguir do que
+  // perder tudo por causa de uma única query.
   const readData = async (key: string) => {
-    const [row] = await sql`SELECT valor FROM "WhatsappAuthState" WHERE chave = ${key}`;
-    if (!row) return null;
     try {
+      const [row] = await sql`SELECT valor FROM "WhatsappAuthState" WHERE chave = ${key}`;
+      if (!row) return null;
       return JSON.parse(row.valor, BufferJSON.reviver);
-    } catch {
+    } catch (err) {
+      console.error(`[whatsapp-auth-state] falha ao ler "${key}":`, err);
       return null;
     }
   };
 
   const writeData = async (key: string, data: unknown) => {
     const valor = JSON.stringify(data, BufferJSON.replacer);
-    await sql`
-      INSERT INTO "WhatsappAuthState" (chave, valor, "updatedAt")
-      VALUES (${key}, ${valor}, NOW())
-      ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, "updatedAt" = NOW()
-    `;
+    try {
+      await sql`
+        INSERT INTO "WhatsappAuthState" (chave, valor, "updatedAt")
+        VALUES (${key}, ${valor}, NOW())
+        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, "updatedAt" = NOW()
+      `;
+    } catch (err) {
+      console.error(`[whatsapp-auth-state] falha ao salvar "${key}" (sessão pode ficar incompleta):`, err);
+    }
   };
 
   const removeData = async (key: string) => {
-    await sql`DELETE FROM "WhatsappAuthState" WHERE chave = ${key}`;
+    try {
+      await sql`DELETE FROM "WhatsappAuthState" WHERE chave = ${key}`;
+    } catch (err) {
+      console.error(`[whatsapp-auth-state] falha ao remover "${key}":`, err);
+    }
   };
 
   const creds = (await readData("creds")) || initAuthCreds();
