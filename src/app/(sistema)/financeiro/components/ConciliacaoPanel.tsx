@@ -12,6 +12,24 @@ const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curren
 const fmtData = (d?: string | null) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "sem vencimento";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const ITENS_POR_PAGINA = 10;
+
+// ── Paginação simples client-side (a lista inteira já vem do fetch do mês/ano/conta
+// selecionados — não precisa de mais uma chamada à API, só corta o array em fatias).
+function Paginador({ pagina, totalPaginas, onMudar }: { pagina: number; totalPaginas: number; onMudar: (p: number) => void }) {
+  if (totalPaginas <= 1) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.75rem", padding: "0.5rem 0" }}>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onMudar(pagina - 1)} disabled={pagina <= 1}>
+        Anterior
+      </button>
+      <span style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>Página {pagina} de {totalPaginas}</span>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onMudar(pagina + 1)} disabled={pagina >= totalPaginas}>
+        Próxima
+      </button>
+    </div>
+  );
+}
 
 export default function ConciliacaoPanel() {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
@@ -32,6 +50,8 @@ export default function ConciliacaoPanel() {
   const [resumoSync, setResumoSync] = useState<string | null>(null);
   const [erroSync, setErroSync] = useState<string | null>(null);
   const [aplicandoRegra, setAplicandoRegra] = useState(false);
+  const [paginaPendentes, setPaginaPendentes] = useState(1);
+  const [paginaConciliadas, setPaginaConciliadas] = useState(1);
 
   const contasConectadas = useMemo(() => contas.filter(c => !!c.sicoobClientId), [contas]);
   const contaSelecionada = contas.find(c => c.id === contaId);
@@ -73,6 +93,7 @@ export default function ConciliacaoPanel() {
   }, []);
 
   useEffect(() => { carregarTransacoes(); }, [contaId, mes, ano]);
+  useEffect(() => { setPaginaPendentes(1); setPaginaConciliadas(1); }, [contaId, mes, ano]);
 
   // Roda sempre nessa ordem: primeiro traz o extrato real do Sicoob (é dele que vêm as
   // transações bancárias), só depois lê os comprovantes do WhatsApp pra fazer o De/Para —
@@ -172,8 +193,13 @@ export default function ConciliacaoPanel() {
     );
   }
 
+  const totalPaginasPendentes = Math.max(1, Math.ceil(pendentes.length / ITENS_POR_PAGINA));
+  const pendentesPagina = pendentes.slice((paginaPendentes - 1) * ITENS_POR_PAGINA, paginaPendentes * ITENS_POR_PAGINA);
+  const totalPaginasConciliadas = Math.max(1, Math.ceil(conciliadas.length / ITENS_POR_PAGINA));
+  const conciliadasPagina = conciliadas.slice((paginaConciliadas - 1) * ITENS_POR_PAGINA, paginaConciliadas * ITENS_POR_PAGINA);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: 860, margin: "0 auto" }}>
 
       {/* HEADER E CONTROLES */}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
@@ -255,17 +281,20 @@ export default function ConciliacaoPanel() {
             <p style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>Nenhuma transação pendente neste período.</p>
           </div>
         ) : (
-          pendentes.map(tx => (
-            <PendenteCard
-              key={tx.id}
-              tx={tx}
-              agendamentos={agendamentosCompativeis(tx)}
-              contatos={contatos}
-              categorias={categorias}
-              centros={centros}
-              onResolvido={() => { carregarTransacoes(); carregarCadastros(); }}
-            />
-          ))
+          <>
+            {pendentesPagina.map(tx => (
+              <PendenteCard
+                key={tx.id}
+                tx={tx}
+                agendamentos={agendamentosCompativeis(tx)}
+                contatos={contatos}
+                categorias={categorias}
+                centros={centros}
+                onResolvido={() => { carregarTransacoes(); carregarCadastros(); }}
+              />
+            ))}
+            <Paginador pagina={paginaPendentes} totalPaginas={totalPaginasPendentes} onMudar={setPaginaPendentes} />
+          </>
         )}
       </div>
 
@@ -276,33 +305,135 @@ export default function ConciliacaoPanel() {
             Conciliadas ({conciliadas.length})
           </h4>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-            {conciliadas.map(tx => (
-              <div key={tx.id} style={{ display: "flex", alignItems: "center", padding: "0.4rem 0", borderBottom: "1px solid var(--color-border)", opacity: 0.7, fontSize: "0.8rem" }}>
-                <div style={{ flex: 1, color: "var(--color-cream)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  {tx.comprovanteWhatsappLegenda !== null && tx.comprovanteWhatsappLegenda !== undefined && (
-                    <span
-                      title={`Conciliado a partir de um comprovante do WhatsApp: "${tx.comprovanteWhatsappLegenda || "sem legenda"}"`}
-                      style={{
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        width: "18px", height: "18px", borderRadius: "50%",
-                        background: "#25D366", color: "#fff", flexShrink: 0,
-                      }}
-                    >
-                      <MessageCircle size={11} />
-                    </span>
-                  )}
-                  {tx.descricao} {tx.lancamentoDescricao && <span style={{ color: "var(--color-muted)" }}>→ {tx.lancamentoDescricao}</span>}
-                </div>
-                <div style={{ width: "100px", textAlign: "right" }}>{tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}</div>
-                <div style={{ width: "90px", textAlign: "right", color: "var(--color-success)", fontSize: "0.75rem" }}>✔ Conciliado</div>
-              </div>
+            {conciliadasPagina.map(tx => (
+              <ConciliadaRow
+                key={tx.id}
+                tx={tx}
+                categorias={categorias}
+                onSalvo={() => carregarTransacoes()}
+              />
             ))}
           </div>
+          <Paginador pagina={paginaConciliadas} totalPaginas={totalPaginasConciliadas} onMudar={setPaginaConciliadas} />
         </div>
       )}
 
       {ignoradas.length > 0 && (
         <p style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{ignoradas.length} transaç{ignoradas.length === 1 ? "ão ignorada" : "ões ignoradas"} neste período.</p>
+      )}
+    </div>
+  );
+}
+
+// ── Linha de uma transação já conciliada. Quando veio de um match automático do
+// WhatsApp sem categoria reconhecida (selinho verde), dá pra abrir e escolher a categoria
+// na mão — e "ensinar" a legenda pro dicionário, pra próxima vez com legenda parecida
+// já vir categorizada sozinha.
+function ConciliadaRow({ tx, categorias, onSalvo }: {
+  tx: TransacaoBancariaImportada;
+  categorias: CategoriaFinanceira[];
+  onSalvo: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [categoriaId, setCategoriaId] = useState(tx.lancamentoCategoriaId || "");
+  const [palavraChave, setPalavraChave] = useState((tx.comprovanteWhatsappLegenda || "").toLowerCase().trim());
+  const [ensinarPalavra, setEnsinarPalavra] = useState(!!tx.comprovanteWhatsappLegenda && !tx.lancamentoCategoriaId);
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const categoriasFiltradas = categorias.filter(c => c.tipo === (tx.tipo === "entrada" ? "entrada" : "saida"));
+  const semCategoria = !tx.lancamentoCategoriaId;
+  const temComprovante = tx.comprovanteWhatsappLegenda !== null && tx.comprovanteWhatsappLegenda !== undefined;
+
+  const salvar = async () => {
+    if (!categoriaId) { setErro("Selecione uma categoria."); return; }
+    setSaving(true);
+    setErro("");
+    try {
+      const res = await fetch(`/api/financeiro/transacoes-bancarias/${tx.id}/categorizar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoriaId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+
+      if (ensinarPalavra && palavraChave.trim()) {
+        await fetch("/api/financeiro/palavras-chave", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ palavraChave: palavraChave.trim(), categoriaId }),
+        }).catch(() => {});
+      }
+
+      setAberto(false);
+      onSalvo();
+    } catch (err: any) {
+      setErro(err.message || "Erro ao salvar categoria");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--color-border)", fontSize: "0.8rem" }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "0.4rem 0", opacity: 0.85 }}>
+        <div style={{ flex: 1, color: "var(--color-cream)", display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+          {temComprovante && (
+            <span
+              title={`Conciliado a partir de um comprovante do WhatsApp: "${tx.comprovanteWhatsappLegenda || "sem legenda"}"`}
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: "18px", height: "18px", borderRadius: "50%",
+                background: "#25D366", color: "#fff", flexShrink: 0,
+              }}
+            >
+              <MessageCircle size={11} />
+            </span>
+          )}
+          {tx.descricao} {tx.lancamentoDescricao && <span style={{ color: "var(--color-muted)" }}>→ {tx.lancamentoDescricao}</span>}
+          {tx.lancamentoCategoriaNome ? (
+            <span style={{ color: "var(--color-gold)", fontSize: "0.72rem" }}>· {tx.lancamentoCategoriaNome}</span>
+          ) : (
+            <span style={{ color: "var(--color-danger)", fontSize: "0.72rem" }}>· sem categoria</span>
+          )}
+        </div>
+        <div style={{ width: "100px", textAlign: "right" }}>{tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}</div>
+        <button
+          type="button"
+          onClick={() => setAberto(a => !a)}
+          style={{ width: "90px", textAlign: "right", background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", color: semCategoria ? "var(--color-gold)" : "var(--color-success)" }}
+        >
+          {semCategoria ? "Categorizar" : "✔ Editar"}
+        </button>
+      </div>
+
+      {aberto && (
+        <div style={{ padding: "0.5rem 0 0.75rem 0", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {erro && <div style={{ color: "var(--color-danger)", fontSize: "0.75rem" }}>{erro}</div>}
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 220px", minWidth: 200 }}>
+              <label className="form-label">Categoria</label>
+              <select value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {categoriasFiltradas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <button type="button" className="btn btn-gold btn-sm" onClick={salvar} disabled={saving}>
+              {saving ? "..." : "Salvar"}
+            </button>
+          </div>
+          {temComprovante && (
+            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "var(--color-cream-dim)", cursor: "pointer", flexWrap: "wrap" }}>
+              <input type="checkbox" checked={ensinarPalavra} onChange={e => setEnsinarPalavra(e.target.checked)} style={{ width: "auto" }} />
+              Ensinar: comprovantes do WhatsApp com
+              <input
+                type="text" value={palavraChave} onChange={e => setPalavraChave(e.target.value)}
+                style={{ width: 160, fontSize: "0.75rem", padding: "0.2rem 0.4rem" }}
+              />
+              na legenda já vêm nessa categoria da próxima vez
+            </label>
+          )}
+        </div>
       )}
     </div>
   );

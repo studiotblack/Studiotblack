@@ -74,6 +74,11 @@ export interface TransacaoBancariaImportada {
   // de comprovanteLegenda, que é só o palpite de sugestão pra quem ainda está pendente).
   // Presente = essa transação foi conciliada a partir de um comprovante do WhatsApp.
   comprovanteWhatsappLegenda?: string | null;
+
+  // Categoria já atribuída ao lançamento conciliado (null/undefined = ainda sem categoria,
+  // caso comum de um match automático via WhatsApp sem palavra-chave reconhecida).
+  lancamentoCategoriaId?: string | null;
+  lancamentoCategoriaNome?: string | null;
 }
 
 export type TipoContato = "cliente" | "fornecedor" | "funcionario" | "socio";

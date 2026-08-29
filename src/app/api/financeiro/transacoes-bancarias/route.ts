@@ -26,12 +26,23 @@ export async function GET(request: NextRequest) {
         regra."contatoId" AS "contatoSugeridoId",
         contSug.nome AS "contatoSugeridoNome",
         regra."centroCustoId" AS "centroCustoSugeridoId",
-        wcVinc."textoLegenda" AS "comprovanteWhatsappLegenda"
+        wcVinc."textoLegenda" AS "comprovanteWhatsappLegenda",
+        lancCat."categoriaId" AS "lancamentoCategoriaId",
+        lancCat."categoriaNome" AS "lancamentoCategoriaNome"
       FROM "TransacaoBancariaImportada" t
       LEFT JOIN "LancamentoFinanceiro" l ON l.id = t."lancamentoId"
       -- Vínculo real (já conciliado via comprovante do WhatsApp), diferente do "comp"
       -- abaixo que é só o palpite de sugestão pra quem ainda está pendente.
       LEFT JOIN "WhatsappComprovante" wcVinc ON wcVinc."transacaoBancariaId" = t.id
+      -- Categoria já atribuída ao lançamento conciliado (pode não ter nenhuma — caso do
+      -- match automático por valor+data do WhatsApp sem palavra-chave reconhecida).
+      LEFT JOIN LATERAL (
+        SELECT lc."categoriaId", cat.nome AS "categoriaNome"
+        FROM "LancamentoFinanceiroCategoria" lc
+        JOIN "CategoriaFinanceira" cat ON cat.id = lc."categoriaId"
+        WHERE lc."lancamentoId" = t."lancamentoId"
+        LIMIT 1
+      ) lancCat ON true
       LEFT JOIN LATERAL (
         SELECT * FROM "WhatsappComprovante" wc
         WHERE wc.status = 'pendente'
