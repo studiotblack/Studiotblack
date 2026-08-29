@@ -28,10 +28,10 @@ export default function ConciliacaoPanel() {
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncStep, setSyncStep] = useState<"" | "sicoob" | "whatsapp">("");
   const [resumoSync, setResumoSync] = useState<string | null>(null);
   const [erroSync, setErroSync] = useState<string | null>(null);
   const [aplicandoRegra, setAplicandoRegra] = useState(false);
-  const [syncingWhatsapp, setSyncingWhatsapp] = useState(false);
 
   const contasConectadas = useMemo(() => contas.filter(c => !!c.sicoobClientId), [contas]);
   const contaSelecionada = contas.find(c => c.id === contaId);
@@ -74,12 +74,19 @@ export default function ConciliacaoPanel() {
 
   useEffect(() => { carregarTransacoes(); }, [contaId, mes, ano]);
 
+  // Roda sempre nessa ordem: primeiro traz o extrato real do Sicoob (é dele que vêm as
+  // transações bancárias), só depois lê os comprovantes do WhatsApp pra fazer o De/Para —
+  // ler o WhatsApp antes não adianta, porque a transação correspondente ainda nem existe
+  // no sistema pra casar com o comprovante.
   const handleSync = async () => {
     if (!contaId) return;
     setSyncing(true);
     setErroSync(null);
     setResumoSync(null);
+
+    let resumoSicoob = "";
     try {
+      setSyncStep("sicoob");
       const res = await fetch(`/api/financeiro/contas-bancarias/${contaId}/sincronizar-sicoob`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,14 +94,30 @@ export default function ConciliacaoPanel() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResumoSync(
-        `Saldo atual: ${brl(data.saldoSicoob)} — ${data.novos} transaç${data.novos === 1 ? "ão nova" : "ões novas"}, ${data.autoConciliados} conciliada${data.autoConciliados === 1 ? "" : "s"} automaticamente, ${data.pendentes} pendente${data.pendentes === 1 ? "" : "s"} pra revisar.`
-      );
-      await Promise.all([carregarCadastros(), carregarTransacoes()]);
+      resumoSicoob = `Sicoob: saldo ${brl(data.saldoSicoob)} — ${data.novos} transaç${data.novos === 1 ? "ão nova" : "ões novas"}, ${data.autoConciliados} conciliada${data.autoConciliados === 1 ? "" : "s"} automaticamente, ${data.pendentes} pendente${data.pendentes === 1 ? "" : "s"}.`;
     } catch (err: any) {
-      setErroSync(err.message || "Erro ao sincronizar");
+      setErroSync(err.message || "Erro ao sincronizar com o Sicoob");
+      setSyncing(false);
+      setSyncStep("");
+      await Promise.all([carregarCadastros(), carregarTransacoes()]);
+      return;
+    }
+
+    try {
+      setSyncStep("whatsapp");
+      const res = await fetch("/api/financeiro/whatsapp/sincronizar", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResumoSync(
+        `${resumoSicoob} WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.semCorrespondencia} sem correspondência ainda.`
+      );
+    } catch (err: any) {
+      setResumoSync(resumoSicoob);
+      setErroSync(`Sicoob sincronizado, mas o WhatsApp falhou: ${err.message || "erro desconhecido"}`);
     } finally {
       setSyncing(false);
+      setSyncStep("");
+      await Promise.all([carregarCadastros(), carregarTransacoes()]);
     }
   };
 
@@ -113,25 +136,6 @@ export default function ConciliacaoPanel() {
       setErroSync(err.message || "Erro ao aplicar regra de entrada");
     } finally {
       setAplicandoRegra(false);
-    }
-  };
-
-  const handleSyncWhatsapp = async () => {
-    setSyncingWhatsapp(true);
-    setErroSync(null);
-    setResumoSync(null);
-    try {
-      const res = await fetch("/api/financeiro/whatsapp/sincronizar", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setResumoSync(
-        `WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.semCorrespondencia} sem correspondência ainda.`
-      );
-      await carregarTransacoes();
-    } catch (err: any) {
-      setErroSync(err.message || "Erro ao sincronizar WhatsApp");
-    } finally {
-      setSyncingWhatsapp(false);
     }
   };
 
@@ -198,12 +202,8 @@ export default function ConciliacaoPanel() {
           </select>
 
           <button className="btn btn-gold" onClick={handleSync} disabled={syncing} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Bot size={16} />
-            {syncing ? "Sincronizando..." : "Sincronizar Extrato"}
-          </button>
-          <button className="btn btn-ghost" onClick={handleSyncWhatsapp} disabled={syncingWhatsapp} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <MessageCircle size={16} />
-            {syncingWhatsapp ? "Lendo comprovantes..." : "Sincronizar WhatsApp"}
+            {syncStep === "whatsapp" ? <MessageCircle size={16} /> : <Bot size={16} />}
+            {syncStep === "sicoob" ? "Sincronizando extrato..." : syncStep === "whatsapp" ? "Lendo comprovantes..." : "Sincronizar"}
           </button>
         </div>
       </div>
