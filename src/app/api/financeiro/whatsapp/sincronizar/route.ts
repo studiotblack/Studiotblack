@@ -78,17 +78,24 @@ export async function POST() {
       comprovantesNovos.push(comprovante);
     }
 
-    // 3. Pra cada comprovante novo: SEMPRE decide a categoria sugerida pelo dicionário de
-    // palavras-chave (mesmo sem transação correspondente ainda) — essa sugestão fica
-    // salva e disponível na tela de Conciliação pra revisão manual. Só passa direto
-    // (cria e baixa sozinho) quando for MATCH PERFEITO: achou a transação bancária pelo
-    // valor/data E o dicionário reconheceu a categoria com confiança (não o fallback
-    // genérico da conta, que é só sugestão de última instância pra revisão humana).
+    // 3. Roda o match pra TODO comprovante ainda pendente (não só os capturados agora) —
+    // um comprovante de uma sincronização anterior, cuja transação bancária correspondente
+    // só veio a existir depois (ex: extrato do Sicoob importado num sync seguinte), merece
+    // ser retestado, não fica preso pra sempre esperando um novo envio no WhatsApp.
+    // SEMPRE decide a categoria sugerida pelo dicionário de palavras-chave (mesmo sem
+    // transação correspondente ainda) — essa sugestão fica salva e disponível na tela de
+    // Conciliação pra revisão manual. O MATCH de valor+data por si só já é confiável o
+    // bastante pra criar e baixar o lançamento sozinho — não precisa mais exigir categoria
+    // reconhecida: quando não souber a categoria, usa o contato genérico de fallback e
+    // copia a legenda do WhatsApp pra descrição, deixando pra revisão humana só ajustar a
+    // categoria depois (a transação já não fica solta).
     const dicionario = await sql`SELECT * FROM "CategoriaPalavraChave"`;
+    const [contatoFallback] = await sql`SELECT id FROM "Contato" WHERE nome = 'Fornecedor Diversos (WhatsApp)' LIMIT 1`;
+    const comprovantesPendentes = await sql`SELECT * FROM "WhatsappComprovante" WHERE status = 'pendente'`;
     let vinculados = 0;
     let semCorrespondencia = 0;
 
-    for (const comp of comprovantesNovos) {
+    for (const comp of comprovantesPendentes) {
       const legendaLower = (comp.textoLegenda || "").toLowerCase();
       let categoriaSugeridaId: string | null = null;
       for (const entrada of dicionario) {
@@ -110,11 +117,11 @@ export async function POST() {
         LIMIT 1
       `;
       if (!transacao) { semCorrespondencia++; continue; }
-      if (!categoriaSugeridaId) { semCorrespondencia++; continue; }
 
       const [conta] = await sql`SELECT * FROM "ContaBancaria" WHERE id = ${transacao.contaBancariaId}`;
-      const contatoId: string | null = conta?.regraSaidaContatoId ?? null;
-      if (!conta?.regraSaidaAtiva || !contatoId) { semCorrespondencia++; continue; }
+      const contatoId: string | null =
+        conta?.regraSaidaAtiva && conta?.regraSaidaContatoId ? conta.regraSaidaContatoId : contatoFallback?.id ?? null;
+      if (!contatoId) { semCorrespondencia++; continue; }
 
       await sql.begin(async (sql) => {
         const [novoLancamento] = await sql`
@@ -124,10 +131,12 @@ export async function POST() {
             ('pagar', ${contatoId}, ${transacao.valor}, ${transacao.valor}, ${transacao.data}, ${transacao.data}, ${comp.textoLegenda || transacao.descricao}, ${transacao.contaBancariaId})
           RETURNING *
         `;
-        await sql`
-          INSERT INTO "LancamentoFinanceiroCategoria" ("lancamentoId", "categoriaId", valor)
-          VALUES (${novoLancamento.id}, ${categoriaSugeridaId}, ${transacao.valor})
-        `;
+        if (categoriaSugeridaId) {
+          await sql`
+            INSERT INTO "LancamentoFinanceiroCategoria" ("lancamentoId", "categoriaId", valor)
+            VALUES (${novoLancamento.id}, ${categoriaSugeridaId}, ${transacao.valor})
+          `;
+        }
         if (conta?.regraSaidaCentroCustoId) {
           await sql`
             INSERT INTO "LancamentoFinanceiroCentroCusto" ("lancamentoId", "centroCustoId", valor)

@@ -278,7 +278,21 @@ export default function ConciliacaoPanel() {
           <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
             {conciliadas.map(tx => (
               <div key={tx.id} style={{ display: "flex", alignItems: "center", padding: "0.4rem 0", borderBottom: "1px solid var(--color-border)", opacity: 0.7, fontSize: "0.8rem" }}>
-                <div style={{ flex: 1, color: "var(--color-cream)" }}>{tx.descricao} {tx.lancamentoDescricao && <span style={{ color: "var(--color-muted)" }}>→ {tx.lancamentoDescricao}</span>}</div>
+                <div style={{ flex: 1, color: "var(--color-cream)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  {tx.comprovanteWhatsappLegenda !== null && tx.comprovanteWhatsappLegenda !== undefined && (
+                    <span
+                      title={`Conciliado a partir de um comprovante do WhatsApp: "${tx.comprovanteWhatsappLegenda || "sem legenda"}"`}
+                      style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: "18px", height: "18px", borderRadius: "50%",
+                        background: "#25D366", color: "#fff", flexShrink: 0,
+                      }}
+                    >
+                      <MessageCircle size={11} />
+                    </span>
+                  )}
+                  {tx.descricao} {tx.lancamentoDescricao && <span style={{ color: "var(--color-muted)" }}>→ {tx.lancamentoDescricao}</span>}
+                </div>
                 <div style={{ width: "100px", textAlign: "right" }}>{tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}</div>
                 <div style={{ width: "90px", textAlign: "right", color: "var(--color-success)", fontSize: "0.75rem" }}>✔ Conciliado</div>
               </div>

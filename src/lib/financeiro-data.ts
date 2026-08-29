@@ -69,6 +69,11 @@ export interface TransacaoBancariaImportada {
   contatoSugeridoId?: string;
   contatoSugeridoNome?: string;
   centroCustoSugeridoId?: string;
+
+  // Legenda do comprovante do WhatsApp já REALMENTE vinculado a essa transação (diferente
+  // de comprovanteLegenda, que é só o palpite de sugestão pra quem ainda está pendente).
+  // Presente = essa transação foi conciliada a partir de um comprovante do WhatsApp.
+  comprovanteWhatsappLegenda?: string | null;
 }
 
 export type TipoContato = "cliente" | "fornecedor" | "funcionario" | "socio";

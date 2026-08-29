@@ -25,9 +25,13 @@ export async function GET(request: NextRequest) {
         COALESCE(catSug.nome, catRegra.nome) AS "categoriaSugeridaNome",
         regra."contatoId" AS "contatoSugeridoId",
         contSug.nome AS "contatoSugeridoNome",
-        regra."centroCustoId" AS "centroCustoSugeridoId"
+        regra."centroCustoId" AS "centroCustoSugeridoId",
+        wcVinc."textoLegenda" AS "comprovanteWhatsappLegenda"
       FROM "TransacaoBancariaImportada" t
       LEFT JOIN "LancamentoFinanceiro" l ON l.id = t."lancamentoId"
+      -- Vínculo real (já conciliado via comprovante do WhatsApp), diferente do "comp"
+      -- abaixo que é só o palpite de sugestão pra quem ainda está pendente.
+      LEFT JOIN "WhatsappComprovante" wcVinc ON wcVinc."transacaoBancariaId" = t.id
       LEFT JOIN LATERAL (
         SELECT * FROM "WhatsappComprovante" wc
         WHERE wc.status = 'pendente'
