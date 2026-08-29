@@ -80,7 +80,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: "0.75rem", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: "2px" }}>
+      <nav style={{ flex: 1, padding: "0.75rem", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap: "2px" }}>
         <div style={{ 
           fontSize: "0.65rem", color: "var(--color-muted-2)", textTransform: "uppercase", letterSpacing: "0.08em", 
           padding: "0.5rem 0.875rem 0.5rem", fontWeight: 600,

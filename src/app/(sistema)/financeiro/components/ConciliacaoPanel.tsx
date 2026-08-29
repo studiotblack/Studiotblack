@@ -539,7 +539,7 @@ function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResol
   };
 
   return (
-    <div className="card" style={{ position: "relative", padding: "1rem 1.25rem", overflow: "hidden" }}>
+    <div className="card" style={{ position: "relative", padding: temPalpite ? "1.75rem 1.25rem 1rem" : "1rem 1.25rem", overflow: "hidden" }}>
       {temPalpite && (
         <div style={{
           position: "absolute", top: 0, right: 0, background: "var(--color-gold)", color: "var(--color-bg)",
