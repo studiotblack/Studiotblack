@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
         regra."centroCustoId" AS "centroCustoSugeridoId",
         wcVinc."textoLegenda" AS "comprovanteWhatsappLegenda",
         lancCat."categoriaId" AS "lancamentoCategoriaId",
-        lancCat."categoriaNome" AS "lancamentoCategoriaNome"
+        lancCat."categoriaNome" AS "lancamentoCategoriaNome",
+        l."contatoId" AS "lancamentoContatoId"
       FROM "TransacaoBancariaImportada" t
       LEFT JOIN "LancamentoFinanceiro" l ON l.id = t."lancamentoId"
       -- Vínculo real (já conciliado via comprovante do WhatsApp), diferente do "comp"
@@ -56,11 +57,13 @@ export async function GET(request: NextRequest) {
       LEFT JOIN "CategoriaFinanceira" catSug ON catSug.id = comp."categoriaSugeridaId"
       -- "Palpite" aprendido na conciliação manual anterior (mesma ideia do Nibo: reconhece
       -- o nome/descrição do banco e já pré-preenche contato + categoria) — só pra saídas
-      -- ainda pendentes, igual à regra que o WhatsApp usa.
+      -- ainda pendentes, igual à regra que o WhatsApp usa. Checa tanto a descrição genérica
+      -- quanto a complementar (onde mora o nome/documento da contraparte do Pix — a
+      -- descrição sozinha é igual pra qualquer Pix enviado e não reconhece ninguém).
       LEFT JOIN LATERAL (
         SELECT * FROM "RegraConciliacaoBancaria" r
         WHERE t.tipo = 'saida' AND t.status = 'pendente'
-          AND t.descricao ILIKE '%' || r."padraoDescricao" || '%'
+          AND (t.descricao ILIKE '%' || r."padraoDescricao" || '%' OR t."descricaoComplementar" ILIKE '%' || r."padraoDescricao" || '%')
         ORDER BY LENGTH(r."padraoDescricao") DESC
         LIMIT 1
       ) regra ON true

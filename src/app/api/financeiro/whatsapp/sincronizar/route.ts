@@ -118,9 +118,26 @@ export async function POST() {
       `;
       if (!transacao) { semCorrespondencia++; continue; }
 
+      // Regra aprendida de conciliação (a mesma que o Sicoob e a tela de Conciliação usam):
+      // reconhece a contraparte do Pix pela descrição do banco e já traz contato/categoria/
+      // centro de custo certos — prioridade sobre o dicionário de legenda (mais confiável,
+      // porque reconhece o LUGAR, não um texto de legenda que muda a cada foto) e sobre o
+      // fallback genérico.
+      const descricaoLower = (transacao.descricao || "").toLowerCase();
+      const complementarLower = (transacao.descricaoComplementar || "").toLowerCase();
+      const [regra] = await sql`
+        SELECT * FROM "RegraConciliacaoBancaria"
+        WHERE ${descricaoLower} LIKE '%' || "padraoDescricao" || '%'
+           OR ${complementarLower} LIKE '%' || "padraoDescricao" || '%'
+        ORDER BY LENGTH("padraoDescricao") DESC
+        LIMIT 1
+      `;
+      if (regra?.categoriaId) categoriaSugeridaId = regra.categoriaId;
+
       const [conta] = await sql`SELECT * FROM "ContaBancaria" WHERE id = ${transacao.contaBancariaId}`;
       const contatoId: string | null =
-        conta?.regraSaidaAtiva && conta?.regraSaidaContatoId ? conta.regraSaidaContatoId : contatoFallback?.id ?? null;
+        regra?.contatoId ??
+        (conta?.regraSaidaAtiva && conta?.regraSaidaContatoId ? conta.regraSaidaContatoId : contatoFallback?.id ?? null);
       if (!contatoId) { semCorrespondencia++; continue; }
 
       await sql.begin(async (sql) => {
@@ -128,7 +145,7 @@ export async function POST() {
           INSERT INTO "LancamentoFinanceiro"
             (tipo, "contatoId", valor, "valorPago", "dataVencimento", "dataCompetencia", descricao, "contaBancariaId")
           VALUES
-            ('pagar', ${contatoId}, ${transacao.valor}, ${transacao.valor}, ${transacao.data}, ${transacao.data}, ${comp.textoLegenda || transacao.descricao}, ${transacao.contaBancariaId})
+            ('pagar', ${contatoId}, ${transacao.valor}, ${transacao.valor}, ${transacao.data}, ${transacao.data}, ${regra?.descricao || comp.textoLegenda || transacao.descricao}, ${transacao.contaBancariaId})
           RETURNING *
         `;
         if (categoriaSugeridaId) {
@@ -137,10 +154,11 @@ export async function POST() {
             VALUES (${novoLancamento.id}, ${categoriaSugeridaId}, ${transacao.valor})
           `;
         }
-        if (conta?.regraSaidaCentroCustoId) {
+        const centroCustoId = regra?.centroCustoId ?? conta?.regraSaidaCentroCustoId;
+        if (centroCustoId) {
           await sql`
             INSERT INTO "LancamentoFinanceiroCentroCusto" ("lancamentoId", "centroCustoId", valor)
-            VALUES (${novoLancamento.id}, ${conta.regraSaidaCentroCustoId}, ${transacao.valor})
+            VALUES (${novoLancamento.id}, ${centroCustoId}, ${transacao.valor})
           `;
         }
         await sql`

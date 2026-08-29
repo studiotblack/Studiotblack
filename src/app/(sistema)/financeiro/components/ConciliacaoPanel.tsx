@@ -5,7 +5,7 @@ import { CheckCircle2, ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, Sparkle
 import type {
   ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, Agendamento,
 } from "@/lib/financeiro-data";
-import { statusAgendamento } from "@/lib/financeiro-data";
+import { statusAgendamento, extrairContraparte } from "@/lib/financeiro-data";
 import type { TransacaoBancariaImportada } from "@/lib/financeiro-data";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -327,8 +327,9 @@ export default function ConciliacaoPanel() {
 
 // ── Linha de uma transação já conciliada. Quando veio de um match automático do
 // WhatsApp sem categoria reconhecida (selinho verde), dá pra abrir e escolher a categoria
-// na mão — e "ensinar" a legenda pro dicionário, pra próxima vez com legenda parecida
-// já vir categorizada sozinha.
+// na mão — e "lembrar esse padrão bancário" (a contraparte do Pix, não a legenda da foto,
+// que muda a cada envio) pra da próxima vez que aparecer um pagamento pro MESMO lugar já
+// vir com contato e categoria certos sozinho, com ou sem foto nova no WhatsApp.
 function ConciliadaRow({ tx, categorias, onSalvo }: {
   tx: TransacaoBancariaImportada;
   categorias: CategoriaFinanceira[];
@@ -336,8 +337,10 @@ function ConciliadaRow({ tx, categorias, onSalvo }: {
 }) {
   const [aberto, setAberto] = useState(false);
   const [categoriaId, setCategoriaId] = useState(tx.lancamentoCategoriaId || "");
-  const [palavraChave, setPalavraChave] = useState((tx.comprovanteWhatsappLegenda || "").toLowerCase().trim());
-  const [ensinarPalavra, setEnsinarPalavra] = useState(!!tx.comprovanteWhatsappLegenda && !tx.lancamentoCategoriaId);
+  const [lembrarPadrao, setLembrarPadrao] = useState(!tx.lancamentoCategoriaId);
+  const [padraoDescricao, setPadraoDescricao] = useState(
+    (extrairContraparte(tx.descricaoComplementar) || tx.descricao || "").toLowerCase().trim()
+  );
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -357,11 +360,16 @@ function ConciliadaRow({ tx, categorias, onSalvo }: {
       });
       if (!res.ok) throw new Error((await res.json()).error);
 
-      if (ensinarPalavra && palavraChave.trim()) {
-        await fetch("/api/financeiro/palavras-chave", {
+      if (lembrarPadrao && padraoDescricao.trim() && tx.lancamentoContatoId) {
+        await fetch("/api/financeiro/regras-conciliacao", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ palavraChave: palavraChave.trim(), categoriaId }),
+          body: JSON.stringify({
+            padraoDescricao: padraoDescricao.trim(),
+            contatoId: tx.lancamentoContatoId,
+            categoriaId,
+            descricao: tx.comprovanteWhatsappLegenda || tx.lancamentoDescricao || tx.descricao,
+          }),
         }).catch(() => {});
       }
 
@@ -422,16 +430,19 @@ function ConciliadaRow({ tx, categorias, onSalvo }: {
               {saving ? "..." : "Salvar"}
             </button>
           </div>
-          {temComprovante && (
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "var(--color-cream-dim)", cursor: "pointer", flexWrap: "wrap" }}>
-              <input type="checkbox" checked={ensinarPalavra} onChange={e => setEnsinarPalavra(e.target.checked)} style={{ width: "auto" }} />
-              Ensinar: comprovantes do WhatsApp com
-              <input
-                type="text" value={palavraChave} onChange={e => setPalavraChave(e.target.value)}
-                style={{ width: 160, fontSize: "0.75rem", padding: "0.2rem 0.4rem" }}
-              />
-              na legenda já vêm nessa categoria da próxima vez
-            </label>
+          {tx.lancamentoContatoId && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "var(--color-cream-dim)", cursor: "pointer" }}>
+                <input type="checkbox" checked={lembrarPadrao} onChange={e => setLembrarPadrao(e.target.checked)} style={{ width: "auto" }} />
+                Lembrar esse padrão bancário — próximos pagamentos pro mesmo lugar já vêm nessa categoria sozinhos
+              </label>
+              {lembrarPadrao && (
+                <input
+                  type="text" value={padraoDescricao} onChange={e => setPadraoDescricao(e.target.value)}
+                  placeholder="trecho da descrição do banco a reconhecer" style={{ fontSize: "0.8rem" }}
+                />
+              )}
+            </div>
           )}
         </div>
       )}
@@ -462,7 +473,12 @@ function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResol
   const [centroCustoId, setCentroCustoId] = useState(tx.centroCustoSugeridoId || "");
   const [descricao, setDescricao] = useState(tx.descricao || "");
   const [lembrarPadrao, setLembrarPadrao] = useState(!tx.contatoSugeridoId);
-  const [padraoDescricao, setPadraoDescricao] = useState((tx.descricao || "").toLowerCase().trim());
+  // Prioriza a contraparte extraída da descrição complementar (nome/documento de quem
+  // recebeu o Pix) — é isso que se repete entre pagamentos pro MESMO lugar. A descrição
+  // genérica ("PIX EMITIDO OUTRA IF") é igual pra qualquer Pix e não reconhece ninguém.
+  const [padraoDescricao, setPadraoDescricao] = useState(
+    (extrairContraparte(tx.descricaoComplementar) || tx.descricao || "").toLowerCase().trim()
+  );
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 

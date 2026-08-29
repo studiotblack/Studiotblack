@@ -116,9 +116,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       // (ex: usuário conciliou "Sabesp" manualmente uma vez e marcou "lembrar esse padrão"),
       // cria e já baixa o lançamento sozinho, sem precisar repetir a conciliação manual.
       if (tipo === "saida") {
+        // Checa tanto a descrição genérica quanto a complementar — é nela que mora o
+        // nome/documento da contraparte do Pix, o que de fato identifica "o mesmo lugar"
+        // entre pagamentos (a descrição sozinha, tipo "PIX EMITIDO OUTRA IF", é igual pra
+        // qualquer Pix enviado e não reconhece ninguém).
+        const descricaoLower = descricao.toLowerCase();
+        const complementarLower = (descricaoComplementar || "").toLowerCase();
         const [regra] = await sql`
           SELECT * FROM "RegraConciliacaoBancaria"
-          WHERE ${descricao.toLowerCase()} LIKE '%' || "padraoDescricao" || '%'
+          WHERE ${descricaoLower} LIKE '%' || "padraoDescricao" || '%'
+             OR ${complementarLower} LIKE '%' || "padraoDescricao" || '%'
           ORDER BY LENGTH("padraoDescricao") DESC
           LIMIT 1
         `;

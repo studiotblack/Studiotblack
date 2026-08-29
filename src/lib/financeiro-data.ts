@@ -79,6 +79,9 @@ export interface TransacaoBancariaImportada {
   // caso comum de um match automático via WhatsApp sem palavra-chave reconhecida).
   lancamentoCategoriaId?: string | null;
   lancamentoCategoriaNome?: string | null;
+  // Contato já atribuído ao lançamento conciliado — usado como contatoId ao criar uma regra
+  // de conciliação bancária aprendida a partir de uma transação já vinculada.
+  lancamentoContatoId?: string | null;
 }
 
 export type TipoContato = "cliente" | "fornecedor" | "funcionario" | "socio";
@@ -154,6 +157,16 @@ export interface Transferencia {
   valor: number;
   data: string;
   descricao?: string;
+}
+
+// Extrai o trecho de "descricaoComplementar" que identifica a contraparte do Pix (nome ou
+// documento) — formato do Sicoob é "Pagamento Pix|@<contraparte>|@...". É isso que se repete
+// entre pagamentos pro MESMO lugar; a descrição genérica do banco ("PIX EMITIDO OUTRA IF")
+// é idêntica pra qualquer Pix enviado e não serve pra reconhecer o destinatário.
+export function extrairContraparte(descricaoComplementar?: string | null): string {
+  if (!descricaoComplementar) return "";
+  const partes = descricaoComplementar.split("|@").map((p) => p.trim()).filter(Boolean);
+  return partes[1] || "";
 }
 
 // Status é sempre calculado a partir de valor/valorPago/dataVencimento — nunca armazenado,
