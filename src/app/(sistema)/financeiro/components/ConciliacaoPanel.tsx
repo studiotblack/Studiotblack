@@ -7,6 +7,7 @@ import type {
 } from "@/lib/financeiro-data";
 import { statusAgendamento, extrairContraparte } from "@/lib/financeiro-data";
 import type { TransacaoBancariaImportada } from "@/lib/financeiro-data";
+import CategoriaCombobox from "./CategoriaCombobox";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtData = (d?: string | null) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "sem vencimento";
@@ -199,7 +200,7 @@ export default function ConciliacaoPanel() {
   const conciliadasPagina = conciliadas.slice((paginaConciliadas - 1) * ITENS_POR_PAGINA, paginaConciliadas * ITENS_POR_PAGINA);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: 860, margin: "0 auto" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: 980 }}>
 
       {/* HEADER E CONTROLES */}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
@@ -215,15 +216,15 @@ export default function ConciliacaoPanel() {
 
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
           <select value={contaId} onChange={e => setContaId(e.target.value)}
-            style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-cream)" }}>
+            style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-cream)", maxWidth: 200, textOverflow: "ellipsis" }}>
             {contasConectadas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
           <select value={mes} onChange={e => setMes(Number(e.target.value))}
-            style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-cream)" }}>
+            style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-cream)", maxWidth: 130 }}>
             {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
           <select value={ano} onChange={e => setAno(Number(e.target.value))}
-            style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-cream)" }}>
+            style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-cream)", maxWidth: 90 }}>
             {[hoje.getFullYear() - 1, hoje.getFullYear(), hoje.getFullYear() + 1].map(a => <option key={a} value={a}>{a}</option>)}
           </select>
 
@@ -291,6 +292,7 @@ export default function ConciliacaoPanel() {
                 categorias={categorias}
                 centros={centros}
                 onResolvido={() => { carregarTransacoes(); carregarCadastros(); }}
+                onCategoriaCriada={(nova) => setCategorias(prev => [...prev, nova])}
               />
             ))}
             <Paginador pagina={paginaPendentes} totalPaginas={totalPaginasPendentes} onMudar={setPaginaPendentes} />
@@ -311,6 +313,7 @@ export default function ConciliacaoPanel() {
                 tx={tx}
                 categorias={categorias}
                 onSalvo={() => carregarTransacoes()}
+                onCategoriaCriada={(nova) => setCategorias(prev => [...prev, nova])}
               />
             ))}
           </div>
@@ -330,10 +333,11 @@ export default function ConciliacaoPanel() {
 // na mão — e "lembrar esse padrão bancário" (a contraparte do Pix, não a legenda da foto,
 // que muda a cada envio) pra da próxima vez que aparecer um pagamento pro MESMO lugar já
 // vir com contato e categoria certos sozinho, com ou sem foto nova no WhatsApp.
-function ConciliadaRow({ tx, categorias, onSalvo }: {
+function ConciliadaRow({ tx, categorias, onSalvo, onCategoriaCriada }: {
   tx: TransacaoBancariaImportada;
   categorias: CategoriaFinanceira[];
   onSalvo: () => void;
+  onCategoriaCriada: (nova: CategoriaFinanceira) => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const [categoriaId, setCategoriaId] = useState(tx.lancamentoCategoriaId || "");
@@ -344,7 +348,6 @@ function ConciliadaRow({ tx, categorias, onSalvo }: {
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
-  const categoriasFiltradas = categorias.filter(c => c.tipo === (tx.tipo === "entrada" ? "entrada" : "saida"));
   const semCategoria = !tx.lancamentoCategoriaId;
   const temComprovante = tx.comprovanteWhatsappLegenda !== null && tx.comprovanteWhatsappLegenda !== undefined;
 
@@ -421,10 +424,13 @@ function ConciliadaRow({ tx, categorias, onSalvo }: {
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 220px", minWidth: 200 }}>
               <label className="form-label">Categoria</label>
-              <select value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
-                <option value="">Selecione...</option>
-                {categoriasFiltradas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+              <CategoriaCombobox
+                categorias={categorias}
+                tipo={tx.tipo === "entrada" ? "entrada" : "saida"}
+                value={categoriaId}
+                onChange={setCategoriaId}
+                onCriada={onCategoriaCriada}
+              />
             </div>
             <button type="button" className="btn btn-gold btn-sm" onClick={salvar} disabled={saving}>
               {saving ? "..." : "Salvar"}
@@ -453,13 +459,14 @@ function ConciliadaRow({ tx, categorias, onSalvo }: {
 // ── Card de conciliação inline (sem modal) — cada transação pendente já mostra o
 // "palpite" (contato + categoria sugeridos, aprendidos de conciliações anteriores ou do
 // comprovante do WhatsApp) pré-preenchido, pronto pra confirmar com um clique só.
-function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResolvido }: {
+function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResolvido, onCategoriaCriada }: {
   tx: TransacaoBancariaImportada;
   agendamentos: Agendamento[];
   contatos: Contato[];
   categorias: CategoriaFinanceira[];
   centros: CentroCusto[];
   onResolvido: () => void;
+  onCategoriaCriada: (nova: CategoriaFinanceira) => void;
 }) {
   const temPalpite = !!(tx.contatoSugeridoId || tx.categoriaSugeridaId);
   const temMatch = agendamentos.length > 0;
@@ -481,8 +488,6 @@ function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResol
   );
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
-
-  const categoriasFiltradas = categorias.filter(c => c.tipo === (tx.tipo === "entrada" ? "entrada" : "saida"));
 
   const confirmar = async () => {
     setErro("");
@@ -615,10 +620,14 @@ function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResol
             </div>
             <div style={{ flex: "1 1 220px", minWidth: 200 }}>
               <label className="form-label">Categoria</label>
-              <select value={categoriaId} onChange={e => setCategoriaId(e.target.value)}>
-                <option value="">Sem categoria</option>
-                {categoriasFiltradas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+              <CategoriaCombobox
+                categorias={categorias}
+                tipo={tx.tipo === "entrada" ? "entrada" : "saida"}
+                value={categoriaId}
+                onChange={setCategoriaId}
+                onCriada={onCategoriaCriada}
+                placeholder="Sem categoria"
+              />
             </div>
             <div style={{ flex: "1 1 200px", minWidth: 180 }}>
               <label className="form-label">Descrição</label>
