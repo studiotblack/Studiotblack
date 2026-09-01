@@ -12,6 +12,22 @@ import CategoriaCombobox from "./CategoriaCombobox";
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtData = (d?: string | null) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "sem vencimento";
 
+// A sincronização do WhatsApp pode demorar (conecta, escuta um tempo, roda OCR) — se algum
+// proxy/gateway na frente do servidor cortar a conexão por demorar demais, a resposta que
+// chega não é o JSON da rota e sim uma página de erro genérica, e "res.json()" quebra com um
+// erro críptico tipo "Unexpected token 'A'...". Lendo como texto primeiro dá pra mostrar uma
+// mensagem que já explica o que aconteceu.
+async function lerRespostaJson(res: Response): Promise<any> {
+  const texto = await res.text();
+  try {
+    return JSON.parse(texto);
+  } catch {
+    throw new Error(
+      `O servidor não respondeu em formato válido (HTTP ${res.status}) — provavelmente demorou demais e a conexão foi cortada no meio. Tente sincronizar de novo.`
+    );
+  }
+}
+
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const ITENS_POR_PAGINA = 10;
 
@@ -114,7 +130,7 @@ export default function ConciliacaoPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mes, ano }),
       });
-      const data = await res.json();
+      const data = await lerRespostaJson(res);
       if (!res.ok) throw new Error(data.error);
       resumoSicoob = `Sicoob: saldo ${brl(data.saldoSicoob)} — ${data.novos} transaç${data.novos === 1 ? "ão nova" : "ões novas"}, ${data.autoConciliados} conciliada${data.autoConciliados === 1 ? "" : "s"} automaticamente, ${data.pendentes} pendente${data.pendentes === 1 ? "" : "s"}.`;
     } catch (err: any) {
@@ -128,7 +144,7 @@ export default function ConciliacaoPanel() {
     try {
       setSyncStep("whatsapp");
       const res = await fetch("/api/financeiro/whatsapp/sincronizar", { method: "POST" });
-      const data = await res.json();
+      const data = await lerRespostaJson(res);
       if (!res.ok) throw new Error(data.error);
       setResumoSync(
         `${resumoSicoob} WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.semCorrespondencia} sem correspondência ainda.`
