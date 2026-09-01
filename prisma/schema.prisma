@@ -221,6 +221,7 @@ model IntegracaoBancaria {
 model DesempenhoProfissionalDB {
   id            String   @id @default(uuid())
   profissional  String
+  contatoId     String?  // vinculo com Contato (tipos: funcionario) — nullable p/ linhas antigas sem match
   item          String
   data          String
   valorBruto    Float
@@ -233,6 +234,23 @@ model DesempenhoProfissionalDB {
   createdAt     DateTime @default(now())
 
   @@index([profissional, mesAno])
+  @@index([contatoId, mesAno])
+}
+
+model MetaProfissional {
+  id             String   @id @default(uuid())
+  contatoId      String
+  mesAno         String   // "MM/YYYY", mesmo padrao de DesempenhoProfissionalDB
+  metaServicos   Float
+  metaProdutos   Float
+  metaTicket     Float
+  bonusServicos  Float
+  bonusProdutos  Float
+  bonusTicket    Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([contatoId, mesAno])
 }
 
 model TaxaOcupacao {

@@ -155,12 +155,33 @@ export const normalizeProfName = (name: string): string => {
   if (firstWord === "tiago") return "Tiago";
   if (firstWord === "vanessa") return "Vanessa";
   if (firstWord === "bruna") return "Bruna";
+  if (firstWord === "gilciliane") return "Gi";
+  if (firstWord === "otavio" || firstWord === "otávio") return "Otávio";
   return trimmed;
 };
 
 export const getPrimeiroNome = (name: string): string => {
   if (!name) return "";
   return name.trim().split(" ")[0];
+};
+
+// Liga o nome do profissional (como aparece no AppBarber / normalizeProfName) ao Contato
+// canônico usado no Financeiro para essa pessoa — necessário porque, por conta do histórico de
+// importação do Nibo, o Contato "oficial" de cada um (com CPF, usado nos lançamentos/baixas) quase
+// sempre é um registro diferente do Contato informal tipos:['funcionario'] usado só na Performance.
+export const PROFISSIONAL_CONTATO_MAP: Record<string, string> = {
+  "Wallacy": "0edb804a-f49a-4bc0-90b2-41e3cf557040", // WALLACE WNDEL DE OLIVEIRA
+  "Henrique Botelho": "e307092f-5bfb-46ff-9e66-a49df4d46f5c", // Henrique Botelho
+  "Tiago": "b4138caa-46b8-4fad-93ef-85d0903647cd", // TIAGO HENRIQUE
+  "Vanessa": "46420520-14de-4789-9523-972c06df8d26", // (PF) VANESSA GRAZIELA DA BOA SORTE
+  "Bruna": "159ccd44-4de3-4002-b7d4-f17e1785ba07", // BRUNA MAGELLA OLIVEIRA
+  "Otávio": "7ae52f64-4ab3-4c82-aa28-4fc2063f6854", // Otávio (Barbeiro)
+  "Gi": "0abf1400-3a4d-480b-b133-7306fb3f7160", // Gi (Cabeleireira)
+};
+
+export const getContatoIdPorProfissional = (profissionalRaw: string): string | null => {
+  const norm = normalizeProfName(profissionalRaw);
+  return PROFISSIONAL_CONTATO_MAP[norm] ?? null;
 };
 
 // ── Parsing compartilhado (usado pelo upload manual em ImportacaoDados.tsx E pelo script de automação scripts/import-watch.ts) ──
@@ -335,3 +356,8 @@ export const getTotalFaturado = (data: DesempenhoProfissional[]) => {
 export const getTotalComissao = (data: DesempenhoProfissional[]) => {
   return data.reduce((acc, curr) => acc + curr.valorComissao, 0);
 };
+
+const nomeProdutosSet = new Set(catalogoProdutos.map(p => p.nome.toLowerCase()));
+
+// Classifica um item de venda como Produto (vs Serviço) — mesmo critério usado em ProfissionalStats.tsx
+export const isProduto = (item: string): boolean => nomeProdutosSet.has((item || "").toLowerCase().trim());

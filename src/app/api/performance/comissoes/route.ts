@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import postgres from "postgres";
-import { normalizeProfName, getPrimeiroNome } from "@/lib/performance-data";
+import { normalizeProfName, getPrimeiroNome, getContatoIdPorProfissional } from "@/lib/performance-data";
 import { isAdminRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,9 @@ async function ensureTables(sql: ReturnType<typeof postgres>) {
       "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`ALTER TABLE "DesempenhoProfissionalDB" ADD COLUMN IF NOT EXISTS "contatoId" TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_desemp_prof_mes ON "DesempenhoProfissionalDB" (profissional, "mesAno")`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_desemp_contato_mes ON "DesempenhoProfissionalDB" ("contatoId", "mesAno")`;
   tablesEnsured = true;
 }
 
@@ -123,11 +125,13 @@ export async function POST(request: NextRequest) {
     let inseridos = 0;
     for (const r of registros) {
       const rNormProf = normalizeProfName(r.profissional || normProf);
+      const contatoId = getContatoIdPorProfissional(rNormProf);
       await sql`
-        INSERT INTO "DesempenhoProfissionalDB" (id, profissional, item, data, "valorBruto", "valorComissao", pagamento, percentual, cliente, pago, "mesAno")
-        VALUES (${r.id}, ${rNormProf}, ${r.item}, ${r.data}, ${r.valorBruto}, ${r.valorComissao}, ${r.pagamento ?? null}, ${r.percentual ?? null}, ${r.cliente}, ${r.pago ?? false}, ${r.mesAno})
+        INSERT INTO "DesempenhoProfissionalDB" (id, profissional, "contatoId", item, data, "valorBruto", "valorComissao", pagamento, percentual, cliente, pago, "mesAno")
+        VALUES (${r.id}, ${rNormProf}, ${contatoId}, ${r.item}, ${r.data}, ${r.valorBruto}, ${r.valorComissao}, ${r.pagamento ?? null}, ${r.percentual ?? null}, ${r.cliente}, ${r.pago ?? false}, ${r.mesAno})
         ON CONFLICT (id) DO UPDATE SET
           profissional = EXCLUDED.profissional,
+          "contatoId" = EXCLUDED."contatoId",
           item = EXCLUDED.item,
           data = EXCLUDED.data,
           "valorBruto" = EXCLUDED."valorBruto",

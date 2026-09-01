@@ -7,10 +7,11 @@ import ProfissionalStats from "./components/ProfissionalStats";
 import ImportacaoDados from "./components/ImportacaoDados";
 import ConfigHorarios, { ConfigHorariosType } from "./components/ConfigHorarios";
 import ConfigMetas, { ConfigMetasType } from "./components/ConfigMetas";
+import PagamentosPanel from "./components/PagamentosPanel";
 import { DesempenhoProfissional, TaxaOcupacaoImportada } from "@/lib/performance-data";
-import { Clock, Target } from "lucide-react";
+import { Clock, Target, Wallet } from "lucide-react";
 
-type Tab = "bi" | "profissionais" | "importacao" | "config-metas";
+type Tab = "bi" | "profissionais" | "importacao" | "config-metas" | "pagamentos";
 
 export default function PerformancePage() {
   const [activeTab, setActiveTab] = useState<Tab>("bi");
@@ -88,6 +89,7 @@ export default function PerformancePage() {
     { id: "profissionais" as Tab, label: "Por Profissional", icon: <Users size={16} /> },
     { id: "importacao" as Tab, label: "Importar Base (Excel)", icon: <FileUp size={16} /> },
     { id: "config-metas" as Tab, label: "Metas & Bônus", icon: <Target size={16} /> },
+    { id: "pagamentos" as Tab, label: "Pagamentos", icon: <Wallet size={16} /> },
   ];
 
   return (
@@ -123,6 +125,7 @@ export default function PerformancePage() {
         {activeTab === "profissionais" && <ProfissionalStats key={dataVersion} data={data} ocupacao={ocupacao} metas={metas} initialSelectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} />}
         {activeTab === "importacao" && <ImportacaoDados data={data} ocupacao={ocupacao} onImport={handleDataImport} selectedProf={globalSelectedProf} onProfChange={setGlobalSelectedProf} onNavigateToProf={() => setActiveTab("profissionais")} onOcupacaoImport={handleOcupacaoImport} />}
         {activeTab === "config-metas" && <ConfigMetas data={data} metas={metas} setMetas={setMetas} />}
+        {activeTab === "pagamentos" && <PagamentosPanel />}
       </div>
     </div>
   );
