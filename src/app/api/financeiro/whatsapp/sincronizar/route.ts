@@ -94,6 +94,10 @@ export async function POST() {
     const comprovantesPendentes = await sql`SELECT * FROM "WhatsappComprovante" WHERE status = 'pendente'`;
     let vinculados = 0;
     let semCorrespondencia = 0;
+    // Lista detalhada do que rolou com cada comprovante — sem isso, o resumo só dizia "1
+    // vinculado, 1 sem correspondência" sem dizer QUAL comprovante, com QUE valor/legenda,
+    // pra QUE categoria/contato, o que não dava pra conferir de verdade.
+    const detalhes: Array<{ legenda: string | null; valor: number | null; dataEnvio: string; status: string; categoria: string | null; contato: string | null }> = [];
 
     for (const comp of comprovantesPendentes) {
       const legendaLower = (comp.textoLegenda || "").toLowerCase();
@@ -106,7 +110,11 @@ export async function POST() {
       }
       await sql`UPDATE "WhatsappComprovante" SET "categoriaSugeridaId" = ${categoriaSugeridaId} WHERE id = ${comp.id}`;
 
-      if (comp.valorOcr === null || comp.valorOcr === undefined) { semCorrespondencia++; continue; }
+      if (comp.valorOcr === null || comp.valorOcr === undefined) {
+        semCorrespondencia++;
+        detalhes.push({ legenda: comp.textoLegenda, valor: null, dataEnvio: comp.dataHoraEnvio, status: "sem correspondência (valor não reconhecido)", categoria: null, contato: null });
+        continue;
+      }
 
       const dataComp = new Date(comp.dataHoraEnvio).toISOString().slice(0, 10);
       const [transacao] = await sql`
@@ -116,7 +124,11 @@ export async function POST() {
         ORDER BY ABS(data::date - ${dataComp}::date) ASC
         LIMIT 1
       `;
-      if (!transacao) { semCorrespondencia++; continue; }
+      if (!transacao) {
+        semCorrespondencia++;
+        detalhes.push({ legenda: comp.textoLegenda, valor: comp.valorOcr, dataEnvio: comp.dataHoraEnvio, status: "sem correspondência (nenhuma transação bancária com esse valor/data)", categoria: null, contato: null });
+        continue;
+      }
 
       // Regra aprendida de conciliação (a mesma que o Sicoob e a tela de Conciliação usam):
       // reconhece a contraparte do Pix pela descrição do banco e já traz contato/categoria/
@@ -138,7 +150,11 @@ export async function POST() {
       const contatoId: string | null =
         regra?.contatoId ??
         (conta?.regraSaidaAtiva && conta?.regraSaidaContatoId ? conta.regraSaidaContatoId : contatoFallback?.id ?? null);
-      if (!contatoId) { semCorrespondencia++; continue; }
+      if (!contatoId) {
+        semCorrespondencia++;
+        detalhes.push({ legenda: comp.textoLegenda, valor: comp.valorOcr, dataEnvio: comp.dataHoraEnvio, status: "sem correspondência (sem contato pra usar)", categoria: null, contato: null });
+        continue;
+      }
 
       await sql.begin(async (sql) => {
         const [novoLancamento] = await sql`
@@ -173,6 +189,18 @@ export async function POST() {
         `;
       });
       vinculados++;
+      const [contatoNome] = await sql`SELECT nome FROM "Contato" WHERE id = ${contatoId}`;
+      const categoriaNome = categoriaSugeridaId
+        ? (await sql`SELECT nome FROM "CategoriaFinanceira" WHERE id = ${categoriaSugeridaId}`)[0]?.nome ?? null
+        : null;
+      detalhes.push({
+        legenda: comp.textoLegenda,
+        valor: transacao.valor,
+        dataEnvio: comp.dataHoraEnvio,
+        status: "vinculado",
+        categoria: categoriaNome,
+        contato: contatoNome?.nome ?? null,
+      });
     }
 
     return NextResponse.json({
@@ -182,6 +210,7 @@ export async function POST() {
       jaExistiam,
       vinculados,
       semCorrespondencia,
+      detalhes,
     });
   } catch (error: any) {
     console.error("[POST /api/financeiro/whatsapp/sincronizar]", error);

@@ -33,6 +33,12 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
     const client = new SicoobClient(conta.sicoobClientId, conta.sicoobCertificado, conta.sicoobChavePrivada);
 
+    let categoriaEntradaNome: string | null = null;
+    if (conta.regraEntradaCategoriaId) {
+      const [catEntrada] = await sql`SELECT nome FROM "CategoriaFinanceira" WHERE id = ${conta.regraEntradaCategoriaId}`;
+      categoriaEntradaNome = catEntrada?.nome ?? null;
+    }
+
     // 1. Saldo real
     const respostaSaldo = await client.getSaldo(conta.sicoobNumeroConta);
     const saldoAtual = Number(respostaSaldo?.resultado?.saldo ?? respostaSaldo?.saldo ?? 0);
@@ -49,6 +55,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     let autoConciliados = 0;
     let pendentes = 0;
     let jaImportados = 0;
+    // Lista detalhada do que essa sincronização realmente fez — sem isso, o resumo só dizia
+    // "17 novas, 12 conciliadas" sem dizer QUAIS, DE QUANDO ou QUE CATEGORIA, o que não dava
+    // pra conferir nada de verdade.
+    const detalhes: Array<{ data: string; valor: number; tipo: string; descricao: string; status: string; categoria: string | null }> = [];
 
     for (const t of transacoesRaw) {
       const idTransacaoSicoob: string | null = t.transactionId ?? null;
@@ -109,6 +119,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           `;
         });
         autoConciliados++;
+        const [catMatch] = await sql`
+          SELECT cat.nome FROM "LancamentoFinanceiroCategoria" lc JOIN "CategoriaFinanceira" cat ON cat.id = lc."categoriaId"
+          WHERE lc."lancamentoId" = ${match.id} LIMIT 1
+        `;
+        detalhes.push({ data, valor, tipo, descricao: match.descricao || descricao, status: "conciliado (conta existente)", categoria: catMatch?.nome ?? null });
         continue;
       }
 
@@ -123,10 +138,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         const descricaoLower = descricao.toLowerCase();
         const complementarLower = (descricaoComplementar || "").toLowerCase();
         const [regra] = await sql`
-          SELECT * FROM "RegraConciliacaoBancaria"
-          WHERE ${descricaoLower} LIKE '%' || "padraoDescricao" || '%'
-             OR ${complementarLower} LIKE '%' || "padraoDescricao" || '%'
-          ORDER BY LENGTH("padraoDescricao") DESC
+          SELECT r.*, cat.nome AS "categoriaNome" FROM "RegraConciliacaoBancaria" r
+          LEFT JOIN "CategoriaFinanceira" cat ON cat.id = r."categoriaId"
+          WHERE ${descricaoLower} LIKE '%' || r."padraoDescricao" || '%'
+             OR ${complementarLower} LIKE '%' || r."padraoDescricao" || '%'
+          ORDER BY LENGTH(r."padraoDescricao") DESC
           LIMIT 1
         `;
         if (regra) {
@@ -159,6 +175,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
             `;
           });
           autoConciliados++;
+          detalhes.push({ data, valor, tipo, descricao: regra.descricao || descricao, status: "conciliado (regra aprendida)", categoria: regra.categoriaNome ?? null });
           continue;
         }
       }
@@ -195,12 +212,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           `;
         });
         autoConciliados++;
+        detalhes.push({ data, valor, tipo, descricao, status: "conciliado (regra de entrada)", categoria: categoriaEntradaNome });
         continue;
       }
 
       // Sem match e sem regra — fica pendente pra revisão manual na Conciliação Bancária
       // (a linha já foi inserida como 'pendente' na reserva acima, não precisa fazer mais nada)
       pendentes++;
+      detalhes.push({ data, valor, tipo, descricao, status: "pendente", categoria: null });
     }
 
     return NextResponse.json({
@@ -209,6 +228,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       mes, ano,
       totalNoExtrato: transacoesRaw.length,
       novos, autoConciliados, pendentes, jaImportados,
+      detalhes,
     });
   } catch (error: any) {
     console.error("[POST /api/financeiro/contas-bancarias/[id]/sincronizar-sicoob]", error);

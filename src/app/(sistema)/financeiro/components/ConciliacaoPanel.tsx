@@ -48,6 +48,93 @@ function Paginador({ pagina, totalPaginas, onMudar }: { pagina: number; totalPag
   );
 }
 
+// ── Lista linha-a-linha do que a última sincronização/aplicação de regra realmente fez —
+// data, valor, descrição, categoria e o que aconteceu com cada uma. Sem isso o resumo em
+// texto ("17 novas, 12 conciliadas") não dava pra conferir de verdade.
+function DetalhesSincronizacao({ detalhesSicoob, detalhesWhatsapp, detalhesRegraSaida }: {
+  detalhesSicoob: any[];
+  detalhesWhatsapp: any[];
+  detalhesRegraSaida: any[];
+}) {
+  if (detalhesSicoob.length === 0 && detalhesWhatsapp.length === 0 && detalhesRegraSaida.length === 0) return null;
+
+  const corStatus = (status: string) => {
+    if (status.startsWith("conciliado")) return "var(--color-success)";
+    if (status === "vinculado") return "var(--color-success)";
+    if (status === "pendente") return "var(--color-muted)";
+    return "var(--color-danger)";
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {detalhesSicoob.length > 0 && (
+        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
+            Extrato Sicoob — {detalhesSicoob.length} transaç{detalhesSicoob.length === 1 ? "ão" : "ões"} processada{detalhesSicoob.length === 1 ? "" : "s"}
+          </h4>
+          <div style={{ maxHeight: 280, overflowY: "auto" }}>
+            {detalhesSicoob.map((d, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.3rem 0", borderBottom: "1px solid var(--color-border)", fontSize: "0.78rem" }}>
+                <span style={{ color: "var(--color-muted)", width: 78, flexShrink: 0 }}>{fmtData(d.data)}</span>
+                <span style={{ flex: 1, color: "var(--color-cream)" }}>
+                  {d.descricao}
+                  {d.categoria && <span style={{ color: "var(--color-gold)" }}> · {d.categoria}</span>}
+                </span>
+                <span style={{ width: 90, textAlign: "right", color: d.tipo === "entrada" ? "var(--color-success)" : "var(--color-danger)" }}>
+                  {d.tipo === "entrada" ? "+" : "-"}{brl(d.valor)}
+                </span>
+                <span style={{ width: 190, textAlign: "right", color: corStatus(d.status), fontSize: "0.72rem" }}>{d.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {detalhesWhatsapp.length > 0 && (
+        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
+            Comprovantes WhatsApp — {detalhesWhatsapp.length} processado{detalhesWhatsapp.length === 1 ? "" : "s"}
+          </h4>
+          <div style={{ maxHeight: 280, overflowY: "auto" }}>
+            {detalhesWhatsapp.map((d, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.3rem 0", borderBottom: "1px solid var(--color-border)", fontSize: "0.78rem" }}>
+                <span style={{ color: "var(--color-muted)", width: 130, flexShrink: 0 }}>{new Date(d.dataEnvio).toLocaleString("pt-BR")}</span>
+                <span style={{ flex: 1, color: "var(--color-cream)" }}>
+                  {d.legenda || <em style={{ color: "var(--color-muted)" }}>sem legenda</em>}
+                  {d.categoria && <span style={{ color: "var(--color-gold)" }}> · {d.categoria}</span>}
+                  {d.contato && <span style={{ color: "var(--color-muted)" }}> ({d.contato})</span>}
+                </span>
+                <span style={{ width: 90, textAlign: "right" }}>{d.valor !== null ? brl(d.valor) : "—"}</span>
+                <span style={{ width: 260, textAlign: "right", color: corStatus(d.status), fontSize: "0.72rem" }}>{d.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {detalhesRegraSaida.length > 0 && (
+        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
+            Regras aprendidas aplicadas — {detalhesRegraSaida.length} conciliada{detalhesRegraSaida.length === 1 ? "" : "s"}
+          </h4>
+          <div style={{ maxHeight: 280, overflowY: "auto" }}>
+            {detalhesRegraSaida.map((d, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.3rem 0", borderBottom: "1px solid var(--color-border)", fontSize: "0.78rem" }}>
+                <span style={{ color: "var(--color-muted)", width: 78, flexShrink: 0 }}>{fmtData(d.data)}</span>
+                <span style={{ flex: 1, color: "var(--color-cream)" }}>
+                  {d.descricao} <span style={{ color: "var(--color-muted)" }}>({d.contato})</span>
+                  {d.categoria && <span style={{ color: "var(--color-gold)" }}> · {d.categoria}</span>}
+                </span>
+                <span style={{ width: 90, textAlign: "right", color: "var(--color-danger)" }}>-{brl(d.valor)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ConciliacaoPanel() {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [contatos, setContatos] = useState<Contato[]>([]);
@@ -67,8 +154,15 @@ export default function ConciliacaoPanel() {
   const [resumoSync, setResumoSync] = useState<string | null>(null);
   const [erroSync, setErroSync] = useState<string | null>(null);
   const [aplicandoRegra, setAplicandoRegra] = useState(false);
+  const [aplicandoRegraSaida, setAplicandoRegraSaida] = useState(false);
   const [paginaPendentes, setPaginaPendentes] = useState(1);
   const [paginaConciliadas, setPaginaConciliadas] = useState(1);
+  // Detalhe linha-a-linha da última sincronização/aplicação de regra — o resumo em texto
+  // ("17 novas, 12 conciliadas") não dizia QUAIS, DE QUANDO ou QUE CATEGORIA, então nada dava
+  // pra conferir de verdade. Fica visível até a próxima ação, não precisa abrir/fechar nada.
+  const [detalhesSicoob, setDetalhesSicoob] = useState<any[]>([]);
+  const [detalhesWhatsapp, setDetalhesWhatsapp] = useState<any[]>([]);
+  const [detalhesRegraSaida, setDetalhesRegraSaida] = useState<any[]>([]);
 
   const contasConectadas = useMemo(() => contas.filter(c => !!c.sicoobClientId), [contas]);
   const contaSelecionada = contas.find(c => c.id === contaId);
@@ -121,6 +215,8 @@ export default function ConciliacaoPanel() {
     setSyncing(true);
     setErroSync(null);
     setResumoSync(null);
+    setDetalhesSicoob([]);
+    setDetalhesWhatsapp([]);
 
     let resumoSicoob = "";
     try {
@@ -133,6 +229,7 @@ export default function ConciliacaoPanel() {
       const data = await lerRespostaJson(res);
       if (!res.ok) throw new Error(data.error);
       resumoSicoob = `Sicoob: saldo ${brl(data.saldoSicoob)} — ${data.novos} transaç${data.novos === 1 ? "ão nova" : "ões novas"}, ${data.autoConciliados} conciliada${data.autoConciliados === 1 ? "" : "s"} automaticamente, ${data.pendentes} pendente${data.pendentes === 1 ? "" : "s"}.`;
+      setDetalhesSicoob(data.detalhes || []);
     } catch (err: any) {
       setErroSync(err.message || "Erro ao sincronizar com o Sicoob");
       setSyncing(false);
@@ -149,6 +246,7 @@ export default function ConciliacaoPanel() {
       setResumoSync(
         `${resumoSicoob} WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.semCorrespondencia} sem correspondência ainda.`
       );
+      setDetalhesWhatsapp(data.detalhes || []);
     } catch (err: any) {
       setResumoSync(resumoSicoob);
       setErroSync(`Sicoob sincronizado, mas o WhatsApp falhou: ${err.message || "erro desconhecido"}`);
@@ -174,6 +272,30 @@ export default function ConciliacaoPanel() {
       setErroSync(err.message || "Erro ao aplicar regra de entrada");
     } finally {
       setAplicandoRegra(false);
+    }
+  };
+
+  // Regras de conciliação aprendidas (ex: "lembrar esse padrão" numa saída) só valiam pros
+  // pagamentos FUTUROS do mesmo lugar — os que já estavam pendentes de antes continuavam
+  // parados esperando revisão manual. Isso aplica retroativamente em cima de TODOS os
+  // pendentes de saída da conta, de uma vez.
+  const handleAplicarRegraSaida = async () => {
+    if (!contaId) return;
+    setAplicandoRegraSaida(true);
+    setErroSync(null);
+    setResumoSync(null);
+    setDetalhesRegraSaida([]);
+    try {
+      const res = await fetch(`/api/financeiro/contas-bancarias/${contaId}/aplicar-regras-saida`, { method: "POST" });
+      const data = await lerRespostaJson(res);
+      if (!res.ok) throw new Error(data.error);
+      setResumoSync(`${data.aplicados} saída${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente por regras aprendidas (${data.semRegra} sem regra reconhecida ainda).`);
+      setDetalhesRegraSaida(data.detalhes || []);
+      await carregarTransacoes();
+    } catch (err: any) {
+      setErroSync(err.message || "Erro ao aplicar regras de saída");
+    } finally {
+      setAplicandoRegraSaida(false);
     }
   };
 
@@ -274,6 +396,15 @@ export default function ConciliacaoPanel() {
         </div>
       )}
 
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <button className="btn btn-ghost btn-sm" onClick={handleAplicarRegraSaida} disabled={aplicandoRegraSaida}>
+          <Wand2 size={13} /> {aplicandoRegraSaida ? "Aplicando..." : "Aplicar regras aprendidas às pendentes (saída)"}
+        </button>
+        <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+          Concilia de uma vez todas as saídas pendentes desta conta (de qualquer mês) que batem com um padrão já ensinado (ex: "lembrar esse padrão").
+        </span>
+      </div>
+
       {erroSync && (
         <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.75rem 1rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>
           {erroSync}
@@ -284,6 +415,8 @@ export default function ConciliacaoPanel() {
           {resumoSync}
         </div>
       )}
+
+      <DetalhesSincronizacao detalhesSicoob={detalhesSicoob} detalhesWhatsapp={detalhesWhatsapp} detalhesRegraSaida={detalhesRegraSaida} />
 
       {/* PENDENTES */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
