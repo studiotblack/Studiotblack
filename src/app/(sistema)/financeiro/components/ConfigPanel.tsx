@@ -21,16 +21,15 @@ export default function ConfigPanel({ linhas, ano }: ConfigPanelProps) {
           Estrutura do DRE
         </h2>
         <p style={{ color: "var(--color-muted)", fontSize: "0.9rem", marginTop: "0.25rem" }}>
-          A estrutura vem direto do relatório &quot;Realizado&quot; do seu sistema contábil — não há categorias pra configurar manualmente aqui.
+          A estrutura vem do seu próprio plano de contas (cadastrado em Categorias) e dos lançamentos já registrados — não há categorias pra configurar manualmente aqui.
         </p>
       </div>
 
       <div className="card" style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", background: "rgba(52,152,219,0.06)", borderColor: "rgba(52,152,219,0.25)" }}>
         <Info size={18} color="var(--color-info)" style={{ flexShrink: 0, marginTop: 2 }} />
         <p style={{ fontSize: "0.85rem", color: "var(--color-cream-dim)", margin: 0, lineHeight: 1.6 }}>
-          Toda vez que você exporta o &quot;Realizado&quot; do seu sistema contábil e salva em <strong>Downloads/AppBarber Financeiro</strong>,
-          o sistema recarrega o ano inteiro automaticamente — na mesma ordem e com os mesmos nomes de conta do Excel.
-          Não existe edição manual de categoria: se uma conta nova aparecer no seu contador, ela aparece aqui na próxima importação.
+          Esses números vêm do Sicoob (via nossa própria conciliação bancária), não mais de um Excel importado do Nibo —
+          se uma categoria nova for criada em Cadastros, ela aparece aqui assim que tiver algum lançamento.
         </p>
       </div>
 

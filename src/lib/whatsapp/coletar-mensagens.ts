@@ -25,6 +25,13 @@ const JANELA_ESCUTA_MS = 30_000;
 const MAX_TENTATIVAS_RECONEXAO = 5;
 const ATRASO_ENTRE_TENTATIVAS_MS = 3_000;
 
+// Teto absoluto pra função inteira: se a conexão nunca disparar "open" nem "close" (o
+// socket fica preso em "connecting" — acontece em ambiente serverless, onde a conexão
+// WebSocket de saída pode nunca completar o handshake), nenhum dos timeouts/reconexões
+// acima dispara, e sem isso a Promise ficava pendente pra sempre — foi o que deixou o
+// botão travado em "Lendo comprovantes..." indefinidamente em produção.
+const TIMEOUT_TOTAL_MS = 45_000;
+
 function aguardar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -137,6 +144,10 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
     });
   }
 
-  await conectar();
+  const timeoutTotal = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Sincronização do WhatsApp travou (sem resposta em ${TIMEOUT_TOTAL_MS / 1000}s) — tente novamente em instantes.`)), TIMEOUT_TOTAL_MS);
+  });
+
+  await Promise.race([conectar(), timeoutTotal]);
   return mensagens;
 }

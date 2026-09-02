@@ -42,6 +42,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const ano = searchParams.get("ano") || String(new Date().getFullYear());
 
+    // Só entra no DRE "ao vivo" o que já venceu/aconteceu de fato (dataCompetencia <= hoje)
+    // ou já foi efetivamente pago — um lançamento futuro (ex: comissão com vencimento daqui
+    // a 1 semana) não é despesa "já incorrida" e não pode derrubar o resultado do mês antes
+    // da hora, mesmo que já esteja cadastrado no sistema.
     const rows = await sql`
       SELECT
         cat.codigo, cat.nome, cat.grupo,
@@ -52,6 +56,7 @@ export async function GET(request: NextRequest) {
       JOIN "CategoriaFinanceira" cat ON cat.id = acat."categoriaId"
       WHERE a."dataCompetencia" LIKE ${ano + "-%"}
         AND cat.codigo IS NOT NULL
+        AND (a."dataCompetencia"::date <= CURRENT_DATE OR a."valorPago" > 0)
       GROUP BY cat.codigo, cat.nome, cat.grupo, mes
       ORDER BY cat.codigo, mes
     `;

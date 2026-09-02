@@ -133,17 +133,17 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
   const dreDoMesDisponivel = dreDoAnoCorrente && receitaMes !== 0;
   const progressoMeta = meta > 0 ? Math.min((receitaMes / meta) * 100, 100) : 0;
 
-  // ── Compromissos financeiros dos próximos 60 dias (contas a PAGAR ainda em aberto) ──
+  // ── Compromissos financeiros dos próximos 30 dias (contas a PAGAR ainda em aberto) ──
   // Conta como compromisso: qualquer conta a pagar não quitada que já venceu (mesmo que
-  // há tempo — ainda é dinheiro que se deve), que vence dentro dos próximos 60 dias, OU
+  // há tempo — ainda é dinheiro que se deve), que vence dentro dos próximos 30 dias, OU
   // que ainda não tem data de vencimento definida (contas fixas recorrentes como aluguel
   // e comissões são compromissos reais mesmo antes de a data exata ser cadastrada — tratar
   // como "sem data" = "sem compromisso" é o que fazia o Caixa Livre mentir).
-  const { compromissos60Dias, qtdCompromissos60Dias } = useMemo(() => {
+  const { compromissos30Dias, qtdCompromissos30Dias } = useMemo(() => {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const limite = new Date(hoje);
-    limite.setDate(hoje.getDate() + 60);
+    limite.setDate(hoje.getDate() + 30);
 
     const pendentes = agendamentos.filter(a => {
       if (a.tipo !== "pagar") return false;
@@ -154,12 +154,12 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
     });
 
     return {
-      compromissos60Dias: pendentes.reduce((acc, a) => acc + (a.valor - a.valorPago), 0),
-      qtdCompromissos60Dias: pendentes.length,
+      compromissos30Dias: pendentes.reduce((acc, a) => acc + (a.valor - a.valorPago), 0),
+      qtdCompromissos30Dias: pendentes.length,
     };
   }, [agendamentos]);
 
-  const caixaLivre = saldoConsolidado - compromissos60Dias;
+  const caixaLivre = saldoConsolidado - compromissos30Dias;
 
   // ── Indicadores de saúde financeira (ano) — mesma leitura da aba DRE, só que aqui
   // no Fluxo de Caixa pra dar a visão de "painel" completa numa tela só ──────────
@@ -197,19 +197,19 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
 
   // Vem do DRE (já unificado Nibo + Sistema, meses fechados de um, mês atual do outro) —
   // não dos "baixas" registrados manualmente, que ficavam vazios pra saídas sem nenhum
-  // pagamento baixado ainda no sistema. "Margem de contribuição" e "RESULTADO OPERACIONAL"
-  // batem exatamente entre as duas fontes (mesmo nome nas duas), então a diferença entre
-  // elas é sempre o total de despesas do mês, sem depender dos rótulos de grupo do Nibo
-  // (que usam texto ligeiramente diferente do Sistema e não merge por nome 1:1).
+  // pagamento baixado ainda no sistema. Saídas = Entradas - RESULTADO OPERACIONAL, ou seja
+  // TODO o custo+despesa entre a receita bruta e o resultado (inclui Custos Operacionais,
+  // onde ficam as Comissões — antes o cálculo usava só "Margem de contribuição -
+  // RESULTADO OPERACIONAL", que é apenas a fatia de Despesas e deixava de fora os Custos
+  // Operacionais inteiros, subestimando bastante o total de saídas do mês).
   const fluxoMensal = useMemo(() => {
     const receita = dreLinhas.find(l => l.resultado === "RECEITAS OPERACIONAIS");
-    const margem = dreLinhas.find(l => l.resultado === "Margem de contribuição");
     const resultado = dreLinhas.find(l => l.resultado === "RESULTADO OPERACIONAL");
     if (!receita) return [];
     return DRE_MES_CAMPOS.map((campo, idx) => ({
       name: `${MESES_ABREV[idx]}/${anoDre}`,
       Entradas: receita[campo],
-      Saídas: (margem?.[campo] ?? 0) - (resultado?.[campo] ?? 0),
+      Saídas: receita[campo] - (resultado?.[campo] ?? 0),
     })).filter(m => m.Entradas !== 0 || m.Saídas !== 0);
   }, [dreLinhas, anoDre]);
 
@@ -291,18 +291,18 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
           </span>
         </div>
 
-        {/* 4. Compromissos financeiros dos próximos 60 dias */}
+        {/* 4. Compromissos financeiros dos próximos 30 dias */}
         <div className="kpi-card">
-          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>Compromissos (60 dias)</span>
+          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>Compromissos (30 dias)</span>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "4px 0 0 0", color: "var(--color-danger)" }}>
-            {brl(compromissos60Dias)}
+            {brl(compromissos30Dias)}
           </h2>
           <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
-            {qtdCompromissos60Dias} conta{qtdCompromissos60Dias !== 1 ? "s" : ""} a pagar em aberto
+            {qtdCompromissos30Dias} conta{qtdCompromissos30Dias !== 1 ? "s" : ""} a pagar em aberto
           </span>
         </div>
 
-        {/* 5. Caixa Livre = Saldo em caixa − Compromissos (60 dias) */}
+        {/* 5. Caixa Livre = Saldo em caixa − Compromissos (30 dias) */}
         <div className="kpi-card" style={{
           border: `1px solid ${caixaLivre >= 0 ? "var(--color-success)" : "var(--color-danger)"}`,
           background: caixaLivre >= 0 ? "rgba(46,204,113,0.06)" : "rgba(231,76,60,0.08)",
@@ -312,7 +312,7 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
             {brl(caixaLivre)}
           </h2>
           <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
-            Saldo hoje − compromissos 60 dias
+            Saldo hoje − compromissos 30 dias
           </span>
           {caixaLivre < 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.7rem", color: "var(--color-danger)", fontWeight: 600, marginTop: "0.35rem" }}>

@@ -7,7 +7,6 @@ import {
 
 // DRE imports
 import type { DreLinhaImportada } from "@/lib/dre-data";
-import { mesclarDreNiboSistema } from "@/lib/dre-data";
 import DRETable from "./components/DRETable";
 import IndicadoresBar from "./components/IndicadoresBar";
 import ConciliacaoPanel from "./components/ConciliacaoPanel";
@@ -24,40 +23,13 @@ export default function FinanceiroPage() {
   const [activeTab, setActiveTab] = useState<Tab>("fluxo");
   const [anoFiltro] = useState(2026);
 
-  // ── DRE Real (importado do Excel "Realizado") ────────────────────────────
-  const [dreLinhas, setDreLinhas] = useState<DreLinhaImportada[]>([]);
-  const [dreLoading, setDreLoading] = useState(true);
-
-  // ── DRE calculado a partir do nosso próprio ledger (Contas a Pagar/Receber) ──
+  // ── DRE calculado a partir do nosso próprio ledger (Sicoob + Contas a Pagar/Receber) —
+  // fonte única de verdade. O Nibo deixou de alimentar o DRE em uso: os dois deveriam
+  // refletir a mesma conta bancária e, quando divergem, confiamos no que o banco
+  // realmente mostra em vez de um Excel exportado manualmente.
   const [dreLinhasSistema, setDreLinhasSistema] = useState<DreLinhaImportada[]>([]);
   const [dreSistemaLoading, setDreSistemaLoading] = useState(true);
-
-  // ── Fonte única: meses já fechados vêm do Nibo (fonte oficial do contador),
-  // o mês corrente vem do Sistema (ao vivo do banco, sempre mais completo que
-  // qualquer export parcial) — nunca mistura as duas fontes dentro do mesmo mês.
-  const mesAtualIndex = new Date().getMonth();
-  const dreLinhasUnificado = useMemo(
-    () => mesclarDreNiboSistema(dreLinhas, dreLinhasSistema, mesAtualIndex),
-    [dreLinhas, dreLinhasSistema, mesAtualIndex]
-  );
-
-  useEffect(() => {
-    const loadDre = async () => {
-      setDreLoading(true);
-      try {
-        const res = await fetch(`/api/financeiro/dre?ano=${anoFiltro}`);
-        if (res.ok) {
-          const rows = await res.json();
-          setDreLinhas(rows.map((r: any, i: number) => ({ ...r, ordem: r.ordem ?? i })));
-        }
-      } catch (err) {
-        console.error("Erro ao carregar DRE:", err);
-      } finally {
-        setDreLoading(false);
-      }
-    };
-    loadDre();
-  }, [anoFiltro]);
+  const dreLinhasUnificado = dreLinhasSistema;
 
   useEffect(() => {
     const loadDreSistema = async () => {
@@ -122,7 +94,7 @@ export default function FinanceiroPage() {
                 DRE — Demonstração do Resultado do Exercício
               </h2>
               <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: "2px 0 0 0" }}>
-                Meses já fechados vêm do &quot;Realizado&quot; do seu sistema contábil (Nibo); o mês corrente vem ao vivo do banco — fonte única, sem duplicar.
+                Calculado ao vivo a partir do extrato do Sicoob e dos lançamentos do sistema — sem depender de importação externa.
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -133,7 +105,7 @@ export default function FinanceiroPage() {
             </div>
           </div>
 
-          {(dreLoading || dreSistemaLoading) ? (
+          {dreSistemaLoading ? (
             <div className="card" style={{ textAlign: "center", padding: "3rem", color: "var(--color-muted)" }}>
               Carregando DRE...
             </div>

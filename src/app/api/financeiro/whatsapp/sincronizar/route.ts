@@ -6,6 +6,10 @@ import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
 import { extrairValor } from "@/lib/whatsapp/extrair-valor";
 
 export const dynamic = "force-dynamic";
+// Sem isso, o Vercel mata a função no limite padrão (10s no plano Hobby) bem antes dos
+// ~30s que o coletarMensagensDoGrupo já leva só esperando o backlog do WhatsApp — a
+// função nunca tinha chance de terminar, o que também ajuda a explicar o "trava".
+export const maxDuration = 60;
 
 // Tolerância de diferença de valor pra considerar "o mesmo pagamento" entre o que o OCR
 // leu no comprovante e o que consta no extrato bancário já importado.
