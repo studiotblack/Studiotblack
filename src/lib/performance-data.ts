@@ -305,8 +305,10 @@ export const buildTaxaOcupacaoPayload = (profissional: string, mesAno: string, t
   const jornadaEfetiva = totais.jornada - totais.bloqueado;
   const taxaOcupComBloqueio = jornadaEfetiva > 0 ? totais.atendimento / jornadaEfetiva : taxaOcup;
 
+  const nomeNormalizado = normalizeProfName(profissional);
   return {
-    profissional: normalizeProfName(profissional),
+    profissional: nomeNormalizado,
+    contatoId: getContatoIdPorProfissional(nomeNormalizado),
     mesAno,
     taxaOcupacao: taxaOcup,
     taxaOcupacaoComBloqueios: taxaOcupComBloqueio,

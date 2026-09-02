@@ -37,6 +37,7 @@ async function ensureTable(sql: ReturnType<typeof postgres>) {
       UNIQUE(profissional, "mesAno")
     )
   `;
+  await sql`ALTER TABLE "TaxaOcupacao" ADD COLUMN IF NOT EXISTS "contatoId" TEXT`;
   tableEnsured = true;
 }
 
@@ -87,10 +88,11 @@ export async function POST(request: NextRequest) {
     }
 
     await sql`
-      INSERT INTO "TaxaOcupacao" (id, profissional, "mesAno", "taxaOcupacao", "taxaOcupacaoComBloqueios", "tempoAtendimentoStr", "tempoBloqueadoStr", "tempoJornadaStr", "updatedAt")
+      INSERT INTO "TaxaOcupacao" (id, profissional, "contatoId", "mesAno", "taxaOcupacao", "taxaOcupacaoComBloqueios", "tempoAtendimentoStr", "tempoBloqueadoStr", "tempoJornadaStr", "updatedAt")
       VALUES (
         gen_random_uuid()::text,
         ${taxa.profissional},
+        ${taxa.contatoId ?? null},
         ${taxa.mesAno},
         ${taxa.taxaOcupacao},
         ${taxa.taxaOcupacaoComBloqueios},
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest) {
         NOW()
       )
       ON CONFLICT (profissional, "mesAno") DO UPDATE SET
+        "contatoId" = EXCLUDED."contatoId",
         "taxaOcupacao" = EXCLUDED."taxaOcupacao",
         "taxaOcupacaoComBloqueios" = EXCLUDED."taxaOcupacaoComBloqueios",
         "tempoAtendimentoStr" = EXCLUDED."tempoAtendimentoStr",

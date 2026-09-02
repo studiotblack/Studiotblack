@@ -23,6 +23,7 @@ import postgres from "postgres";
 import {
   normalizeProfName,
   getPrimeiroNome,
+  getContatoIdPorProfissional,
   getMesAno,
   isPlanilhaOcupacao,
   parseComissoesRows,
@@ -133,6 +134,7 @@ async function ensureTables(sql: Sql) {
       "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`ALTER TABLE "DesempenhoProfissionalDB" ADD COLUMN IF NOT EXISTS "contatoId" TEXT`;
   await sql`
     CREATE TABLE IF NOT EXISTS "TaxaOcupacao" (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -148,6 +150,7 @@ async function ensureTables(sql: Sql) {
       UNIQUE(profissional, "mesAno")
     )
   `;
+  await sql`ALTER TABLE "TaxaOcupacao" ADD COLUMN IF NOT EXISTS "contatoId" TEXT`;
   await sql`
     CREATE TABLE IF NOT EXISTS "DreLinha" (
       id TEXT PRIMARY KEY,
@@ -187,11 +190,13 @@ async function upsertComissoes(sql: Sql, registros: DesempenhoProfissional[], me
 
   for (const r of registros) {
     const rNormProf = normalizeProfName(r.profissional || normProf);
+    const contatoId = getContatoIdPorProfissional(rNormProf);
     await sql`
-      INSERT INTO "DesempenhoProfissionalDB" (id, profissional, item, data, "valorBruto", "valorComissao", pagamento, percentual, cliente, pago, "mesAno")
-      VALUES (${r.id}, ${rNormProf}, ${r.item}, ${r.data}, ${r.valorBruto}, ${r.valorComissao}, ${r.pagamento ?? null}, ${r.percentual ?? null}, ${r.cliente}, ${r.pago ?? false}, ${mesAno})
+      INSERT INTO "DesempenhoProfissionalDB" (id, profissional, "contatoId", item, data, "valorBruto", "valorComissao", pagamento, percentual, cliente, pago, "mesAno")
+      VALUES (${r.id}, ${rNormProf}, ${contatoId}, ${r.item}, ${r.data}, ${r.valorBruto}, ${r.valorComissao}, ${r.pagamento ?? null}, ${r.percentual ?? null}, ${r.cliente}, ${r.pago ?? false}, ${mesAno})
       ON CONFLICT (id) DO UPDATE SET
         profissional = EXCLUDED.profissional,
+        "contatoId" = EXCLUDED."contatoId",
         item = EXCLUDED.item,
         data = EXCLUDED.data,
         "valorBruto" = EXCLUDED."valorBruto",
@@ -208,13 +213,14 @@ async function upsertComissoes(sql: Sql, registros: DesempenhoProfissional[], me
 // Mesma lógica de upsert do POST /api/performance/ocupacao
 async function upsertOcupacao(sql: Sql, payload: ReturnType<typeof buildTaxaOcupacaoPayload>) {
   await sql`
-    INSERT INTO "TaxaOcupacao" (id, profissional, "mesAno", "taxaOcupacao", "taxaOcupacaoComBloqueios", "tempoAtendimentoStr", "tempoBloqueadoStr", "tempoJornadaStr", "updatedAt")
+    INSERT INTO "TaxaOcupacao" (id, profissional, "contatoId", "mesAno", "taxaOcupacao", "taxaOcupacaoComBloqueios", "tempoAtendimentoStr", "tempoBloqueadoStr", "tempoJornadaStr", "updatedAt")
     VALUES (
       gen_random_uuid()::text,
-      ${payload.profissional}, ${payload.mesAno}, ${payload.taxaOcupacao}, ${payload.taxaOcupacaoComBloqueios},
+      ${payload.profissional}, ${payload.contatoId}, ${payload.mesAno}, ${payload.taxaOcupacao}, ${payload.taxaOcupacaoComBloqueios},
       ${payload.tempoAtendimentoStr}, ${payload.tempoBloqueadoStr}, ${payload.tempoJornadaStr}, NOW()
     )
     ON CONFLICT (profissional, "mesAno") DO UPDATE SET
+      "contatoId" = EXCLUDED."contatoId",
       "taxaOcupacao" = EXCLUDED."taxaOcupacao",
       "taxaOcupacaoComBloqueios" = EXCLUDED."taxaOcupacaoComBloqueios",
       "tempoAtendimentoStr" = EXCLUDED."tempoAtendimentoStr",
