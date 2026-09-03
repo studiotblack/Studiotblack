@@ -26,6 +26,7 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
   const [regraSaidaContatoId, setRegraSaidaContatoId] = useState("");
   const [regraSaidaCategoriaId, setRegraSaidaCategoriaId] = useState("");
   const [regraSaidaCentroCustoId, setRegraSaidaCentroCustoId] = useState("");
+  const [cartaoDiaVencimento, setCartaoDiaVencimento] = useState("");
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -43,6 +44,7 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
     setRegraSaidaContatoId(conta.regraSaidaContatoId || "");
     setRegraSaidaCategoriaId(conta.regraSaidaCategoriaId || "");
     setRegraSaidaCentroCustoId(conta.regraSaidaCentroCustoId || "");
+    setCartaoDiaVencimento(conta.cartaoDiaVencimento ? String(conta.cartaoDiaVencimento) : "");
     setErro("");
   }, [conta]);
 
@@ -76,6 +78,7 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
           regraSaidaContatoId: regraSaidaAtiva ? (regraSaidaContatoId || null) : null,
           regraSaidaCategoriaId: regraSaidaAtiva ? (regraSaidaCategoriaId || null) : null,
           regraSaidaCentroCustoId: regraSaidaAtiva ? (regraSaidaCentroCustoId || null) : null,
+          cartaoDiaVencimento: cartaoDiaVencimento ? Number(cartaoDiaVencimento) : null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -202,6 +205,19 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
                 </p>
               </div>
             )}
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1rem" }}>
+            <label className="form-label">Dia de vencimento da fatura do cartão (opcional)</label>
+            <input
+              type="number" min={1} max={31} value={cartaoDiaVencimento}
+              onChange={e => setCartaoDiaVencimento(e.target.value)}
+              placeholder="ex: 22" style={{ maxWidth: 120 }}
+            />
+            <p style={{ fontSize: "0.72rem", color: "var(--color-muted)", margin: "0.35rem 0 0 0" }}>
+              Usado só pra saber em que mês cada parcela de uma compra marcada como "cartao" no
+              WhatsApp cai, na tela de Conciliação → Fatura do Cartão de Crédito.
+            </p>
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.25rem" }}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, Sparkles } from "lucide-react";
+import { CheckCircle2, ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, Sparkles, CreditCard } from "lucide-react";
 import type {
   ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, Agendamento,
 } from "@/lib/financeiro-data";
@@ -30,6 +30,110 @@ async function lerRespostaJson(res: Response): Promise<any> {
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const ITENS_POR_PAGINA = 10;
+
+// ── Fatura do Cartão de Crédito: compras acumuladas (marcadas manualmente como "cartao" no
+// WhatsApp) esperando o dia em que a fatura inteira aparece como UMA saída no extrato. Nunca
+// dá baixa sozinho — só sugere e espera confirmação de um clique.
+function FaturaCartaoSection({ refreshTrigger, onConciliado }: { refreshTrigger: number; onConciliado: () => void }) {
+  const [pendentes, setPendentes] = useState<any[]>([]);
+  const [sugestoes, setSugestoes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+  const [erro, setErro] = useState("");
+
+  const carregar = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/financeiro/cartao-credito/sugestoes");
+      const data = await res.json();
+      setPendentes(data.pendentes || []);
+      setSugestoes(data.sugestoes || []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { carregar(); }, [refreshTrigger]);
+
+  const confirmar = async (transacaoId: string) => {
+    setConfirmandoId(transacaoId);
+    setErro("");
+    try {
+      const res = await fetch(`/api/financeiro/cartao-credito/sugestoes/${transacaoId}/confirmar`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      await carregar();
+      onConciliado();
+    } catch (err: any) {
+      setErro(err.message || "Erro ao confirmar fatura");
+    } finally {
+      setConfirmandoId(null);
+    }
+  };
+
+  if (loading || (pendentes.length === 0 && sugestoes.length === 0)) return null;
+
+  const porMes = pendentes.reduce((acc: Record<string, any[]>, c: any) => {
+    (acc[c.mesReferencia] ||= []).push(c);
+    return acc;
+  }, {});
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+        <CreditCard size={15} /> Fatura do Cartão de Crédito
+      </div>
+
+      {erro && (
+        <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.6rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>{erro}</div>
+      )}
+
+      {sugestoes.map((s) => (
+        <div key={s.transacaoId} className="card" style={{ padding: "1rem 1.25rem", border: "1px solid var(--color-gold)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "0.6rem" }}>
+            <div>
+              <p style={{ fontWeight: 700, color: "var(--color-cream)", margin: 0 }}>
+                Fatura de {new Date(s.dataTransacao + "T12:00:00").toLocaleDateString("pt-BR")}: {brl(s.valorTransacao)}
+              </p>
+              <p style={{ fontSize: "0.78rem", color: "var(--color-muted)", margin: "0.15rem 0 0 0" }}>
+                = soma de {s.compras.length} compra{s.compras.length === 1 ? "" : "s"} acumulada{s.compras.length === 1 ? "" : "s"} ({brl(s.somaCompras)})
+              </p>
+            </div>
+            <button type="button" className="btn btn-gold btn-sm" onClick={() => confirmar(s.transacaoId)} disabled={confirmandoId === s.transacaoId}>
+              {confirmandoId === s.transacaoId ? "Confirmando..." : "Confirmar baixa"}
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+            {s.compras.map((c: any) => (
+              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--color-cream-dim)" }}>
+                <span>{c.descricao || "sem legenda"} {c.parcelaTotal > 1 && `(parcela ${c.parcelaNumero}/${c.parcelaTotal})`}</span>
+                <span>{brl(c.valorParcela)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {Object.keys(porMes).length > 0 && (
+        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
+            Acumulado, aguardando fatura ({pendentes.length})
+          </h4>
+          {Object.entries(porMes).map(([mes, compras]) => (
+            <div key={mes} style={{ marginBottom: "0.5rem" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--color-gold)", fontWeight: 700 }}>{mes}</span>
+              {compras.map((c: any) => (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--color-cream-dim)", padding: "0.15rem 0" }}>
+                  <span>{c.descricao || "sem legenda"} {c.parcelaTotal > 1 && `(parcela ${c.parcelaNumero}/${c.parcelaTotal})`} {c.contaNome ? `· ${c.contaNome}` : ""}</span>
+                  <span>{brl(c.valorParcela)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Paginação simples client-side (a lista inteira já vem do fetch do mês/ano/conta
 // selecionados — não precisa de mais uma chamada à API, só corta o array em fatias).
@@ -163,6 +267,7 @@ export default function ConciliacaoPanel() {
   const [detalhesSicoob, setDetalhesSicoob] = useState<any[]>([]);
   const [detalhesWhatsapp, setDetalhesWhatsapp] = useState<any[]>([]);
   const [detalhesRegraSaida, setDetalhesRegraSaida] = useState<any[]>([]);
+  const [refreshCartao, setRefreshCartao] = useState(0);
 
   const contasConectadas = useMemo(() => contas.filter(c => !!c.sicoobClientId), [contas]);
   const contaSelecionada = contas.find(c => c.id === contaId);
@@ -244,9 +349,10 @@ export default function ConciliacaoPanel() {
       const data = await lerRespostaJson(res);
       if (!res.ok) throw new Error(data.error);
       setResumoSync(
-        `${resumoSicoob} WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.semCorrespondencia} sem correspondência ainda.`
+        `${resumoSicoob} WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.cartaoRegistrado || 0} de cartão acumulado${data.cartaoRegistrado === 1 ? "" : "s"}, ${data.semCorrespondencia} sem correspondência ainda.`
       );
       setDetalhesWhatsapp(data.detalhes || []);
+      setRefreshCartao(n => n + 1);
     } catch (err: any) {
       setResumoSync(resumoSicoob);
       setErroSync(`Sicoob sincronizado, mas o WhatsApp falhou: ${err.message || "erro desconhecido"}`);
@@ -417,6 +523,8 @@ export default function ConciliacaoPanel() {
       )}
 
       <DetalhesSincronizacao detalhesSicoob={detalhesSicoob} detalhesWhatsapp={detalhesWhatsapp} detalhesRegraSaida={detalhesRegraSaida} />
+
+      <FaturaCartaoSection refreshTrigger={refreshCartao} onConciliado={() => carregarTransacoes()} />
 
       {/* PENDENTES */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>

@@ -13,10 +13,13 @@ import { carregarAuthStatePostgres } from "./auth-state";
 // a gente estava offline (o WhatsApp reenvia esse backlog assim que reconecta, igual
 // reabrir o WhatsApp Web) — sem isso a gente só pegaria mensagens que chegassem
 // exatamente durante essa janela, e nunca o que já estava esperando.
-// Precisa ser generoso: com o histórico ativado, o Baileys espera até 20s pela
-// notificação de sincronização antes de liberar o buffer, e só depois disso baixa
-// e decripta o pacote de histórico (onde as mensagens offline realmente chegam).
-const JANELA_ESCUTA_MS = 30_000;
+// O Baileys espera até 20s pela notificação de sincronização de histórico antes de
+// liberar o buffer (timeout interno dele, não dá pra configurar) — por isso não dá pra
+// encurtar demais essa janela. Mas ela conta contra o limite de 60s da função na Vercel
+// (maxDuration abaixo), e o que sobra precisa dar tempo pro OCR das imagens rodar — por
+// isso não é generosa além do necessário: alguns segundos de folga depois dos 20s do
+// Baileys já bastam pros eventos chegarem, o resto do tempo fica pro OCR e a gravação.
+const JANELA_ESCUTA_MS = 22_000;
 
 // Rede de segurança contra loop de reconexão: se a conexão cair repetidamente antes
 // de sequer abrir (ex: sessão temporariamente rejeitada pelo WhatsApp), reconectar sem
@@ -30,7 +33,10 @@ const ATRASO_ENTRE_TENTATIVAS_MS = 3_000;
 // WebSocket de saída pode nunca completar o handshake), nenhum dos timeouts/reconexões
 // acima dispara, e sem isso a Promise ficava pendente pra sempre — foi o que deixou o
 // botão travado em "Lendo comprovantes..." indefinidamente em produção.
-const TIMEOUT_TOTAL_MS = 45_000;
+// Precisa deixar folga clara sob os 60s de maxDuration da rota (route.ts) pro OCR das
+// imagens e as gravações no banco rodarem depois que isso aqui retornar — por isso é bem
+// menor que os 60s inteiros, mesmo cobrindo reconexões.
+const TIMEOUT_TOTAL_MS = 28_000;
 
 function aguardar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

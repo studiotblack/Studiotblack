@@ -38,6 +38,28 @@ export interface ContaBancaria {
   // Cache do saldo real puxado do Sicoob na última sincronização
   saldoSicoob?: number;
   saldoSicoobAtualizadoEm?: string;
+
+  // Dia do mês em que a fatura do cartão dessa conta fecha/debita (ex: 22) — usado só pra
+  // calcular em qual ciclo de fatura cada parcela de uma compra no cartão cai.
+  cartaoDiaVencimento?: number;
+}
+
+// Uma parcela de uma compra no cartão de crédito, marcada manualmente (legenda "cartao" no
+// comprovante do WhatsApp) — acumulada aqui até o dia em que a fatura inteira (soma de
+// várias compras) aparece como UMA saída só no extrato, quando aí sim é confirmada e vira
+// um LancamentoFinanceiro de verdade.
+export interface CompraCartaoCredito {
+  id: string;
+  whatsappComprovanteId?: string | null;
+  contaBancariaId?: string | null;
+  descricao?: string | null;
+  valorParcela: number;
+  parcelaNumero: number;
+  parcelaTotal: number;
+  mesReferencia: string; // "MM/YYYY"
+  status: "pendente" | "baixado";
+  lancamentoId?: string | null;
+  createdAt?: string;
 }
 
 export type StatusTransacaoBancaria = "pendente" | "conciliado" | "ignorado";

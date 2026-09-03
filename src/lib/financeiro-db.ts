@@ -97,6 +97,10 @@ export async function ensureFinanceiroTables(sql: Sql) {
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraSaidaCategoriaId" TEXT REFERENCES "CategoriaFinanceira"(id)`;
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraSaidaCentroCustoId" TEXT REFERENCES "CentroCusto"(id)`;
 
+  // Dia do mês em que a fatura do cartão dessa conta fecha/debita (ex: 22) — só usado pra
+  // calcular em qual ciclo de fatura cada parcela de uma compra no cartão cai.
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "cartaoDiaVencimento" INT`;
+
   // Chamado "LancamentoFinanceiro" (não "Agendamento") porque esse nome já existe no schema
   // pra outra coisa — o agendamento de horário de atendimento do salão (model Agendamento
   // em prisma/schema.prisma: cliente/colaborador/data/hora). São entidades completamente
@@ -200,6 +204,30 @@ export async function ensureFinanceiroTables(sql: Sql) {
   // mesmo quando não dá pra fazer o match automático com uma transação bancária, pra já
   // vir pré-selecionada na hora da conciliação manual.
   await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "categoriaSugeridaId" TEXT REFERENCES "CategoriaFinanceira"(id)`;
+  // Texto bruto reconhecido pelo OCR (quando a legenda não tinha o valor e precisou rodar
+  // OCR na imagem) — guardado pra poder procurar o padrão "Nx R$valor" de parcelamento
+  // depois, no momento de decidir se é uma compra no cartão (o valor em si já foi extraído
+  // na hora, mas o texto completo não ficava salvo em lugar nenhum antes disso).
+  await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "textoOcr" TEXT`;
+
+  // Parcelas de compras no cartão de crédito, marcadas manualmente (legenda "cartao" no
+  // comprovante) — ficam acumuladas aqui até a fatura inteira (soma de várias) aparecer
+  // como UMA saída só no extrato e ser confirmada manualmente na Conciliação.
+  await sql`
+    CREATE TABLE IF NOT EXISTS "CompraCartaoCredito" (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      "whatsappComprovanteId" TEXT REFERENCES "WhatsappComprovante"(id),
+      "contaBancariaId" TEXT REFERENCES "ContaBancaria"(id),
+      descricao TEXT,
+      "valorParcela" FLOAT NOT NULL,
+      "parcelaNumero" INT NOT NULL DEFAULT 1,
+      "parcelaTotal" INT NOT NULL DEFAULT 1,
+      "mesReferencia" TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pendente',
+      "lancamentoId" TEXT REFERENCES "LancamentoFinanceiro"(id),
+      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `;
 
   // Dicionário de palavras-chave pra categoria de saída — usado no match automático e
   // realimentado sempre que o usuário resolve manualmente um caso que o dicionário não cobria.

@@ -74,6 +74,7 @@ export async function PUT(request: NextRequest) {
         "regraSaidaContatoId" = COALESCE(${b.regraSaidaContatoId ?? null}, "regraSaidaContatoId"),
         "regraSaidaCategoriaId" = COALESCE(${b.regraSaidaCategoriaId ?? null}, "regraSaidaCategoriaId"),
         "regraSaidaCentroCustoId" = COALESCE(${b.regraSaidaCentroCustoId ?? null}, "regraSaidaCentroCustoId"),
+        "cartaoDiaVencimento" = COALESCE(${b.cartaoDiaVencimento ?? null}, "cartaoDiaVencimento"),
         "updatedAt" = NOW()
       WHERE id = ${b.id}
       RETURNING *

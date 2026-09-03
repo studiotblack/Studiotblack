@@ -3,7 +3,7 @@ import { createWorker } from "tesseract.js";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
-import { extrairValor } from "@/lib/whatsapp/extrair-valor";
+import { extrairValor, extrairParcelas, ehComprovanteCartao } from "@/lib/whatsapp/extrair-valor";
 
 export const dynamic = "force-dynamic";
 // Sem isso, o Vercel mata a função no limite padrão (10s no plano Hobby) bem antes dos
@@ -47,39 +47,50 @@ export async function POST() {
     let jaExistiam = 0;
     const comprovantesNovos: any[] = [];
 
-    for (const msg of mensagens) {
-      const msgId = msg.key.id;
-      if (!msgId) continue;
+    // Um worker de OCR só, reaproveitado pra todas as imagens do lote — criar um novo por
+    // imagem (como era antes) soma um cold-start caro (carregar o modelo de português) a
+    // cada foto, o que em ambiente serverless comia boa parte do orçamento de 60s da
+    // função e ajudava a estourar o timeout com 2+ comprovantes sem legenda reconhecida.
+    let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
 
-      const [existente] = await sql`SELECT id FROM "WhatsappComprovante" WHERE "mensagemWhatsappId" = ${msgId}`;
-      if (existente) { jaExistiam++; continue; }
+    try {
+      for (const msg of mensagens) {
+        const msgId = msg.key.id;
+        if (!msgId) continue;
 
-      const caption = msg.message?.imageMessage?.caption || "";
-      let valorOcr: number | null = extrairValor(caption);
+        const [existente] = await sql`SELECT id FROM "WhatsappComprovante" WHERE "mensagemWhatsappId" = ${msgId}`;
+        if (existente) { jaExistiam++; continue; }
 
-      if (valorOcr === null) {
-        try {
-          const buffer = await downloadMediaMessage(msg, "buffer", {});
-          const worker = await createWorker("por");
-          const { data } = await worker.recognize(buffer);
-          await worker.terminate();
-          valorOcr = extrairValor(data.text);
-        } catch (err) {
-          console.error("[whatsapp/sincronizar] Erro no OCR:", err);
+        const caption = msg.message?.imageMessage?.caption || "";
+        let valorOcr: number | null = extrairValor(caption);
+        let textoOcr: string | null = null;
+
+        if (valorOcr === null) {
+          try {
+            const buffer = await downloadMediaMessage(msg, "buffer", {});
+            if (!worker) worker = await createWorker("por");
+            const { data } = await worker.recognize(buffer);
+            valorOcr = extrairValor(data.text);
+            textoOcr = data.text;
+          } catch (err) {
+            console.error("[whatsapp/sincronizar] Erro no OCR:", err);
+          }
         }
+
+        const timestampSeg = typeof msg.messageTimestamp === "number" ? msg.messageTimestamp : Number(msg.messageTimestamp);
+        const dataEnvio = new Date(timestampSeg * 1000);
+
+        const [comprovante] = await sql`
+          INSERT INTO "WhatsappComprovante"
+            (id, "mensagemWhatsappId", "grupoId", remetente, "dataHoraEnvio", "textoLegenda", "valorOcr", "textoOcr", "dataHoraOcr", status)
+          VALUES
+            (gen_random_uuid()::text, ${msgId}, ${grupoJid}, ${msg.pushName || null}, ${dataEnvio.toISOString()}, ${caption}, ${valorOcr}, ${textoOcr}, NOW(), 'pendente')
+          RETURNING *
+        `;
+        comprovantesNovos.push(comprovante);
       }
-
-      const timestampSeg = typeof msg.messageTimestamp === "number" ? msg.messageTimestamp : Number(msg.messageTimestamp);
-      const dataEnvio = new Date(timestampSeg * 1000);
-
-      const [comprovante] = await sql`
-        INSERT INTO "WhatsappComprovante"
-          (id, "mensagemWhatsappId", "grupoId", remetente, "dataHoraEnvio", "textoLegenda", "valorOcr", "dataHoraOcr", status)
-        VALUES
-          (gen_random_uuid()::text, ${msgId}, ${grupoJid}, ${msg.pushName || null}, ${dataEnvio.toISOString()}, ${caption}, ${valorOcr}, NOW(), 'pendente')
-        RETURNING *
-      `;
-      comprovantesNovos.push(comprovante);
+    } finally {
+      if (worker) await worker.terminate();
     }
 
     // 3. Roda o match pra TODO comprovante ainda pendente (não só os capturados agora) —
@@ -98,6 +109,24 @@ export async function POST() {
     const comprovantesPendentes = await sql`SELECT * FROM "WhatsappComprovante" WHERE status = 'pendente'`;
     let vinculados = 0;
     let semCorrespondencia = 0;
+    let cartaoRegistrado = 0;
+
+    // Conta(s) que têm o dia de vencimento da fatura configurado — só dá pra decidir sozinho
+    // qual conta uma compra pertence quando existe exatamente uma; com mais de uma, fica sem
+    // conta (contaBancariaId null) pra revisão manual na tela de Conciliação.
+    const contasComCartao = await sql`SELECT id, "cartaoDiaVencimento" FROM "ContaBancaria" WHERE "cartaoDiaVencimento" IS NOT NULL`;
+    const contaCartaoUnica = contasComCartao.length === 1 ? contasComCartao[0] : null;
+
+    // Primeira data (>= dataCompra) em que o dia-do-mês bate com o vencimento da fatura —
+    // é o ciclo em que a parcela 1 vai debitar. Parcelas seguintes somam 1 mês cada.
+    const primeiraOcorrenciaFatura = (dataCompra: Date, diaVencimento: number): Date => {
+      const candidato = new Date(dataCompra.getFullYear(), dataCompra.getMonth(), diaVencimento);
+      return candidato >= dataCompra ? candidato : new Date(dataCompra.getFullYear(), dataCompra.getMonth() + 1, diaVencimento);
+    };
+    const mesReferenciaDe = (base: Date, offsetMeses: number): string => {
+      const d = new Date(base.getFullYear(), base.getMonth() + offsetMeses, 1);
+      return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    };
     // Lista detalhada do que rolou com cada comprovante — sem isso, o resumo só dizia "1
     // vinculado, 1 sem correspondência" sem dizer QUAL comprovante, com QUE valor/legenda,
     // pra QUE categoria/contato, o que não dava pra conferir de verdade.
@@ -113,6 +142,51 @@ export async function POST() {
         }
       }
       await sql`UPDATE "WhatsappComprovante" SET "categoriaSugeridaId" = ${categoriaSugeridaId} WHERE id = ${comp.id}`;
+
+      // Compra no cartão de crédito, marcada manualmente pelo usuário (legenda com "cartao")
+      // — nunca vai bater 1:1 com uma transação bancária (a fatura só debita em uma saída só,
+      // somando várias compras, lá na frente), então em vez de tentar o match normal, acumula
+      // a(s) parcela(s) na "caixinha" (CompraCartaoCredito) pra reconciliar com a fatura depois.
+      if (ehComprovanteCartao(comp.textoLegenda)) {
+        const parcelasInfo =
+          extrairParcelas(comp.textoLegenda) ??
+          extrairParcelas(comp.textoOcr) ??
+          (comp.valorOcr ? { parcelas: 1, valorParcela: comp.valorOcr } : null);
+
+        if (!parcelasInfo) {
+          semCorrespondencia++;
+          detalhes.push({ legenda: comp.textoLegenda, valor: null, dataEnvio: comp.dataHoraEnvio, status: "cartão marcado, mas sem valor reconhecido (revisar manualmente)", categoria: null, contato: null });
+          await sql`UPDATE "WhatsappComprovante" SET status = 'erro_cartao' WHERE id = ${comp.id}`;
+          continue;
+        }
+
+        const dataCompra = new Date(comp.dataHoraEnvio);
+        const primeiraParcela = contaCartaoUnica
+          ? primeiraOcorrenciaFatura(dataCompra, contaCartaoUnica.cartaoDiaVencimento)
+          : dataCompra;
+
+        for (let p = 1; p <= parcelasInfo.parcelas; p++) {
+          await sql`
+            INSERT INTO "CompraCartaoCredito"
+              ("whatsappComprovanteId", "contaBancariaId", descricao, "valorParcela", "parcelaNumero", "parcelaTotal", "mesReferencia")
+            VALUES
+              (${comp.id}, ${contaCartaoUnica?.id ?? null}, ${comp.textoLegenda}, ${parcelasInfo.valorParcela}, ${p}, ${parcelasInfo.parcelas}, ${mesReferenciaDe(primeiraParcela, p - 1)})
+          `;
+        }
+        await sql`UPDATE "WhatsappComprovante" SET status = 'cartao_registrado' WHERE id = ${comp.id}`;
+        cartaoRegistrado++;
+        detalhes.push({
+          legenda: comp.textoLegenda,
+          valor: parcelasInfo.valorParcela,
+          dataEnvio: comp.dataHoraEnvio,
+          status: parcelasInfo.parcelas > 1
+            ? `cartão: ${parcelasInfo.parcelas}x de ${parcelasInfo.valorParcela} — acumulado, aguardando fatura`
+            : "cartão: acumulado, aguardando fatura",
+          categoria: null,
+          contato: null,
+        });
+        continue;
+      }
 
       if (comp.valorOcr === null || comp.valorOcr === undefined) {
         semCorrespondencia++;
@@ -214,6 +288,7 @@ export async function POST() {
       jaExistiam,
       vinculados,
       semCorrespondencia,
+      cartaoRegistrado,
       detalhes,
     });
   } catch (error: any) {
