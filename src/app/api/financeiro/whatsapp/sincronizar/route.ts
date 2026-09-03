@@ -4,16 +4,14 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
 import { extrairValor, extrairParcelas, ehComprovanteCartao } from "@/lib/whatsapp/extrair-valor";
+import { registrarParcelasCartao } from "@/lib/whatsapp/cartao-credito";
+import { tentarVincularComprovante } from "@/lib/whatsapp/vincular-comprovante";
 
 export const dynamic = "force-dynamic";
 // Sem isso, o Vercel mata a função no limite padrão (10s no plano Hobby) bem antes dos
 // ~30s que o coletarMensagensDoGrupo já leva só esperando o backlog do WhatsApp — a
 // função nunca tinha chance de terminar, o que também ajuda a explicar o "trava".
 export const maxDuration = 60;
-
-// Tolerância de diferença de valor pra considerar "o mesmo pagamento" entre o que o OCR
-// leu no comprovante e o que consta no extrato bancário já importado.
-const TOLERANCIA_VALOR = 0.02;
 
 // POST /api/financeiro/whatsapp/sincronizar
 // Lê os comprovantes novos do grupo do WhatsApp configurado, tenta ler o valor de cada
@@ -97,52 +95,17 @@ export async function POST() {
     // um comprovante de uma sincronização anterior, cuja transação bancária correspondente
     // só veio a existir depois (ex: extrato do Sicoob importado num sync seguinte), merece
     // ser retestado, não fica preso pra sempre esperando um novo envio no WhatsApp.
-    // SEMPRE decide a categoria sugerida pelo dicionário de palavras-chave (mesmo sem
-    // transação correspondente ainda) — essa sugestão fica salva e disponível na tela de
-    // Conciliação pra revisão manual. O MATCH de valor+data por si só já é confiável o
-    // bastante pra criar e baixar o lançamento sozinho — não precisa mais exigir categoria
-    // reconhecida: quando não souber a categoria, usa o contato genérico de fallback e
-    // copia a legenda do WhatsApp pra descrição, deixando pra revisão humana só ajustar a
-    // categoria depois (a transação já não fica solta).
-    const dicionario = await sql`SELECT * FROM "CategoriaPalavraChave"`;
-    const [contatoFallback] = await sql`SELECT id FROM "Contato" WHERE nome = 'Fornecedor Diversos (WhatsApp)' LIMIT 1`;
     const comprovantesPendentes = await sql`SELECT * FROM "WhatsappComprovante" WHERE status = 'pendente'`;
     let vinculados = 0;
     let semCorrespondencia = 0;
     let cartaoRegistrado = 0;
 
-    // Conta(s) que têm o dia de vencimento da fatura configurado — só dá pra decidir sozinho
-    // qual conta uma compra pertence quando existe exatamente uma; com mais de uma, fica sem
-    // conta (contaBancariaId null) pra revisão manual na tela de Conciliação.
-    const contasComCartao = await sql`SELECT id, "cartaoDiaVencimento" FROM "ContaBancaria" WHERE "cartaoDiaVencimento" IS NOT NULL`;
-    const contaCartaoUnica = contasComCartao.length === 1 ? contasComCartao[0] : null;
-
-    // Primeira data (>= dataCompra) em que o dia-do-mês bate com o vencimento da fatura —
-    // é o ciclo em que a parcela 1 vai debitar. Parcelas seguintes somam 1 mês cada.
-    const primeiraOcorrenciaFatura = (dataCompra: Date, diaVencimento: number): Date => {
-      const candidato = new Date(dataCompra.getFullYear(), dataCompra.getMonth(), diaVencimento);
-      return candidato >= dataCompra ? candidato : new Date(dataCompra.getFullYear(), dataCompra.getMonth() + 1, diaVencimento);
-    };
-    const mesReferenciaDe = (base: Date, offsetMeses: number): string => {
-      const d = new Date(base.getFullYear(), base.getMonth() + offsetMeses, 1);
-      return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-    };
     // Lista detalhada do que rolou com cada comprovante — sem isso, o resumo só dizia "1
     // vinculado, 1 sem correspondência" sem dizer QUAL comprovante, com QUE valor/legenda,
     // pra QUE categoria/contato, o que não dava pra conferir de verdade.
     const detalhes: Array<{ legenda: string | null; valor: number | null; dataEnvio: string; status: string; categoria: string | null; contato: string | null }> = [];
 
     for (const comp of comprovantesPendentes) {
-      const legendaLower = (comp.textoLegenda || "").toLowerCase();
-      let categoriaSugeridaId: string | null = null;
-      for (const entrada of dicionario) {
-        if (legendaLower.includes(String(entrada.palavraChave).toLowerCase())) {
-          categoriaSugeridaId = entrada.categoriaId;
-          break;
-        }
-      }
-      await sql`UPDATE "WhatsappComprovante" SET "categoriaSugeridaId" = ${categoriaSugeridaId} WHERE id = ${comp.id}`;
-
       // Compra no cartão de crédito, marcada manualmente pelo usuário (legenda com "cartao")
       // — nunca vai bater 1:1 com uma transação bancária (a fatura só debita em uma saída só,
       // somando várias compras, lá na frente), então em vez de tentar o match normal, acumula
@@ -160,19 +123,13 @@ export async function POST() {
           continue;
         }
 
-        const dataCompra = new Date(comp.dataHoraEnvio);
-        const primeiraParcela = contaCartaoUnica
-          ? primeiraOcorrenciaFatura(dataCompra, contaCartaoUnica.cartaoDiaVencimento)
-          : dataCompra;
-
-        for (let p = 1; p <= parcelasInfo.parcelas; p++) {
-          await sql`
-            INSERT INTO "CompraCartaoCredito"
-              ("whatsappComprovanteId", "contaBancariaId", descricao, "valorParcela", "parcelaNumero", "parcelaTotal", "mesReferencia")
-            VALUES
-              (${comp.id}, ${contaCartaoUnica?.id ?? null}, ${comp.textoLegenda}, ${parcelasInfo.valorParcela}, ${p}, ${parcelasInfo.parcelas}, ${mesReferenciaDe(primeiraParcela, p - 1)})
-          `;
-        }
+        await registrarParcelasCartao(sql, {
+          whatsappComprovanteId: comp.id,
+          descricao: comp.textoLegenda,
+          dataCompra: new Date(comp.dataHoraEnvio),
+          parcelas: parcelasInfo.parcelas,
+          valorParcela: parcelasInfo.valorParcela,
+        });
         await sql`UPDATE "WhatsappComprovante" SET status = 'cartao_registrado' WHERE id = ${comp.id}`;
         cartaoRegistrado++;
         detalhes.push({
@@ -188,97 +145,28 @@ export async function POST() {
         continue;
       }
 
-      if (comp.valorOcr === null || comp.valorOcr === undefined) {
+      const resultado = await tentarVincularComprovante(sql, comp);
+      if (resultado.status === "vinculado") {
+        vinculados++;
+        detalhes.push({
+          legenda: comp.textoLegenda,
+          valor: resultado.valor,
+          dataEnvio: comp.dataHoraEnvio,
+          status: "vinculado",
+          categoria: resultado.categoria,
+          contato: resultado.contato,
+        });
+      } else {
         semCorrespondencia++;
-        detalhes.push({ legenda: comp.textoLegenda, valor: null, dataEnvio: comp.dataHoraEnvio, status: "sem correspondência (valor não reconhecido)", categoria: null, contato: null });
-        continue;
+        detalhes.push({
+          legenda: comp.textoLegenda,
+          valor: comp.valorOcr,
+          dataEnvio: comp.dataHoraEnvio,
+          status: `sem correspondência (${resultado.motivo})`,
+          categoria: null,
+          contato: null,
+        });
       }
-
-      const dataComp = new Date(comp.dataHoraEnvio).toISOString().slice(0, 10);
-      const [transacao] = await sql`
-        SELECT * FROM "TransacaoBancariaImportada"
-        WHERE tipo = 'saida' AND status = 'pendente'
-          AND valor BETWEEN ${comp.valorOcr - TOLERANCIA_VALOR} AND ${comp.valorOcr + TOLERANCIA_VALOR}
-        ORDER BY ABS(data::date - ${dataComp}::date) ASC
-        LIMIT 1
-      `;
-      if (!transacao) {
-        semCorrespondencia++;
-        detalhes.push({ legenda: comp.textoLegenda, valor: comp.valorOcr, dataEnvio: comp.dataHoraEnvio, status: "sem correspondência (nenhuma transação bancária com esse valor/data)", categoria: null, contato: null });
-        continue;
-      }
-
-      // Regra aprendida de conciliação (a mesma que o Sicoob e a tela de Conciliação usam):
-      // reconhece a contraparte do Pix pela descrição do banco e já traz contato/categoria/
-      // centro de custo certos — prioridade sobre o dicionário de legenda (mais confiável,
-      // porque reconhece o LUGAR, não um texto de legenda que muda a cada foto) e sobre o
-      // fallback genérico.
-      const descricaoLower = (transacao.descricao || "").toLowerCase();
-      const complementarLower = (transacao.descricaoComplementar || "").toLowerCase();
-      const [regra] = await sql`
-        SELECT * FROM "RegraConciliacaoBancaria"
-        WHERE ${descricaoLower} LIKE '%' || "padraoDescricao" || '%'
-           OR ${complementarLower} LIKE '%' || "padraoDescricao" || '%'
-        ORDER BY LENGTH("padraoDescricao") DESC
-        LIMIT 1
-      `;
-      if (regra?.categoriaId) categoriaSugeridaId = regra.categoriaId;
-
-      const [conta] = await sql`SELECT * FROM "ContaBancaria" WHERE id = ${transacao.contaBancariaId}`;
-      const contatoId: string | null =
-        regra?.contatoId ??
-        (conta?.regraSaidaAtiva && conta?.regraSaidaContatoId ? conta.regraSaidaContatoId : contatoFallback?.id ?? null);
-      if (!contatoId) {
-        semCorrespondencia++;
-        detalhes.push({ legenda: comp.textoLegenda, valor: comp.valorOcr, dataEnvio: comp.dataHoraEnvio, status: "sem correspondência (sem contato pra usar)", categoria: null, contato: null });
-        continue;
-      }
-
-      await sql.begin(async (sql) => {
-        const [novoLancamento] = await sql`
-          INSERT INTO "LancamentoFinanceiro"
-            (tipo, "contatoId", valor, "valorPago", "dataVencimento", "dataCompetencia", descricao, "contaBancariaId")
-          VALUES
-            ('pagar', ${contatoId}, ${transacao.valor}, ${transacao.valor}, ${transacao.data}, ${transacao.data}, ${regra?.descricao || comp.textoLegenda || transacao.descricao}, ${transacao.contaBancariaId})
-          RETURNING *
-        `;
-        if (categoriaSugeridaId) {
-          await sql`
-            INSERT INTO "LancamentoFinanceiroCategoria" ("lancamentoId", "categoriaId", valor)
-            VALUES (${novoLancamento.id}, ${categoriaSugeridaId}, ${transacao.valor})
-          `;
-        }
-        const centroCustoId = regra?.centroCustoId ?? conta?.regraSaidaCentroCustoId;
-        if (centroCustoId) {
-          await sql`
-            INSERT INTO "LancamentoFinanceiroCentroCusto" ("lancamentoId", "centroCustoId", valor)
-            VALUES (${novoLancamento.id}, ${centroCustoId}, ${transacao.valor})
-          `;
-        }
-        await sql`
-          INSERT INTO "Baixa" ("lancamentoId", valor, data, "contaBancariaId", observacao)
-          VALUES (${novoLancamento.id}, ${transacao.valor}, ${transacao.data}, ${transacao.contaBancariaId}, ${"Categorizado automaticamente via comprovante do WhatsApp"})
-        `;
-        await sql`
-          UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${novoLancamento.id} WHERE id = ${transacao.id}
-        `;
-        await sql`
-          UPDATE "WhatsappComprovante" SET status = 'vinculado', "transacaoBancariaId" = ${transacao.id} WHERE id = ${comp.id}
-        `;
-      });
-      vinculados++;
-      const [contatoNome] = await sql`SELECT nome FROM "Contato" WHERE id = ${contatoId}`;
-      const categoriaNome = categoriaSugeridaId
-        ? (await sql`SELECT nome FROM "CategoriaFinanceira" WHERE id = ${categoriaSugeridaId}`)[0]?.nome ?? null
-        : null;
-      detalhes.push({
-        legenda: comp.textoLegenda,
-        valor: transacao.valor,
-        dataEnvio: comp.dataHoraEnvio,
-        status: "vinculado",
-        categoria: categoriaNome,
-        contato: contatoNome?.nome ?? null,
-      });
     }
 
     return NextResponse.json({

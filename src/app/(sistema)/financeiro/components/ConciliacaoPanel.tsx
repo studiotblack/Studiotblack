@@ -31,6 +31,181 @@ async function lerRespostaJson(res: Response): Promise<any> {
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const ITENS_POR_PAGINA = 10;
 
+// ── Comprovantes do WhatsApp que ainda precisam de ação — diferente do resumo da última
+// sincronização (que só mostra o que aconteceu e some ao recarregar), essa lista vem do
+// banco e fica visível até o usuário resolver cada um: editar o valor e tentar vincular de
+// novo na hora, marcar manualmente como compra no cartão (sem depender de reenviar a foto
+// com a legenda certa), ou ignorar.
+function ComprovantesPendentesSection({ refreshTrigger, onResolvido }: { refreshTrigger: number; onResolvido: () => void }) {
+  const [itens, setItens] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const carregar = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/financeiro/whatsapp/comprovantes");
+      setItens(res.ok ? await res.json() : []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { carregar(); }, [refreshTrigger]);
+
+  if (loading || itens.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+        <MessageCircle size={15} /> Comprovantes do WhatsApp sem resolver ({itens.length})
+      </div>
+      {itens.map((item) => (
+        <ComprovanteCard key={item.id} item={item} onResolvido={() => { carregar(); onResolvido(); }} />
+      ))}
+    </div>
+  );
+}
+
+function ComprovanteCard({ item, onResolvido }: { item: any; onResolvido: () => void }) {
+  const [modo, setModo] = useState<"" | "valor" | "cartao">("");
+  const [valor, setValor] = useState(item.valorOcr ? String(item.valorOcr) : "");
+  const [parcelas, setParcelas] = useState("1");
+  const [valorParcela, setValorParcela] = useState(item.valorOcr ? String(item.valorOcr) : "");
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState("");
+  const [resultado, setResultado] = useState<string | null>(null);
+
+  const ehErroCartao = item.status === "erro_cartao";
+
+  const salvarValor = async () => {
+    const v = parseFloat(valor.replace(",", "."));
+    if (!v || v <= 0) { setErro("Digite um valor válido."); return; }
+    setSaving(true);
+    setErro("");
+    try {
+      const res = await fetch(`/api/financeiro/whatsapp/comprovantes/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ valorOcr: v }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (data.resultado?.status === "vinculado") {
+        setResultado(`Vinculado! ${brl(data.resultado.valor)}${data.resultado.contato ? ` — ${data.resultado.contato}` : ""}`);
+        setTimeout(onResolvido, 1200);
+      } else {
+        setErro(`Salvo, mas ainda sem correspondência (${data.resultado?.motivo || "sem transação compatível"}).`);
+        onResolvido();
+      }
+    } catch (err: any) {
+      setErro(err.message || "Erro ao salvar valor");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const marcarCartao = async () => {
+    const n = parseInt(parcelas, 10) || 1;
+    const v = parseFloat(valorParcela.replace(",", "."));
+    if (!v || v <= 0) { setErro("Digite o valor da parcela."); return; }
+    setSaving(true);
+    setErro("");
+    try {
+      const res = await fetch(`/api/financeiro/whatsapp/comprovantes/${item.id}/marcar-cartao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parcelas: n, valorParcela: v }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      onResolvido();
+    } catch (err: any) {
+      setErro(err.message || "Erro ao marcar como cartão");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const ignorar = async () => {
+    setSaving(true);
+    setErro("");
+    try {
+      const res = await fetch(`/api/financeiro/whatsapp/comprovantes/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ignorar: true }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      onResolvido();
+    } catch (err: any) {
+      setErro(err.message || "Erro ao ignorar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ padding: "0.9rem 1.1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+        <div>
+          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{new Date(item.dataHoraEnvio).toLocaleString("pt-BR")}</span>
+          <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-cream)", margin: "0.15rem 0 0 0" }}>
+            {item.textoLegenda || <em style={{ color: "var(--color-muted)", fontWeight: 400 }}>sem legenda</em>}
+          </p>
+          <p style={{ fontSize: "0.78rem", color: ehErroCartao ? "var(--color-gold)" : "var(--color-danger)", margin: "0.2rem 0 0 0" }}>
+            {ehErroCartao
+              ? "Marcado como cartão, mas não deu pra ler o valor/parcela sozinho — preencha abaixo."
+              : item.valorOcr
+                ? `Valor lido: ${brl(item.valorOcr)} — nenhuma transação bancária bateu com esse valor/data ainda.`
+                : "Não consegui ler nenhum valor nessa imagem (nem na legenda, nem no OCR)."}
+          </p>
+        </div>
+        <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--color-cream-dim)", whiteSpace: "nowrap" }}>
+          {item.valorOcr ? brl(item.valorOcr) : "—"}
+        </span>
+      </div>
+
+      {erro && <div style={{ marginTop: "0.6rem", fontSize: "0.78rem", color: "var(--color-danger)" }}>{erro}</div>}
+      {resultado && <div style={{ marginTop: "0.6rem", fontSize: "0.78rem", color: "var(--color-success)" }}>{resultado}</div>}
+
+      {!modo && (
+        <div style={{ display: "flex", gap: "1rem", marginTop: "0.75rem" }}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("valor")}>Corrigir valor e tentar vincular</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("cartao")}>Marcar como compra no cartão</button>
+          <button type="button" onClick={ignorar} disabled={saving} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer", fontSize: "0.78rem", textDecoration: "underline" }}>
+            Ignorar
+          </button>
+        </div>
+      )}
+
+      {modo === "valor" && (
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", marginTop: "0.75rem", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 160 }}>
+            <label className="form-label">Valor correto</label>
+            <input type="text" value={valor} onChange={e => setValor(e.target.value)} placeholder="ex: 105,36" />
+          </div>
+          <button type="button" className="btn btn-gold btn-sm" onClick={salvarValor} disabled={saving}>{saving ? "..." : "Salvar e tentar vincular"}</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("")} disabled={saving}>Cancelar</button>
+        </div>
+      )}
+
+      {modo === "cartao" && (
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", marginTop: "0.75rem", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 100 }}>
+            <label className="form-label">Parcelas</label>
+            <input type="number" min={1} max={24} value={parcelas} onChange={e => setParcelas(e.target.value)} />
+          </div>
+          <div style={{ minWidth: 160 }}>
+            <label className="form-label">Valor de cada parcela</label>
+            <input type="text" value={valorParcela} onChange={e => setValorParcela(e.target.value)} placeholder="ex: 105,36" />
+          </div>
+          <button type="button" className="btn btn-gold btn-sm" onClick={marcarCartao} disabled={saving}>{saving ? "..." : "Confirmar"}</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("")} disabled={saving}>Cancelar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Fatura do Cartão de Crédito: compras acumuladas (marcadas manualmente como "cartao" no
 // WhatsApp) esperando o dia em que a fatura inteira aparece como UMA saída no extrato. Nunca
 // dá baixa sozinho — só sugere e espera confirmação de um clique.
@@ -523,6 +698,8 @@ export default function ConciliacaoPanel() {
       )}
 
       <DetalhesSincronizacao detalhesSicoob={detalhesSicoob} detalhesWhatsapp={detalhesWhatsapp} detalhesRegraSaida={detalhesRegraSaida} />
+
+      <ComprovantesPendentesSection refreshTrigger={refreshCartao} onResolvido={() => { setRefreshCartao(n => n + 1); carregarTransacoes(); }} />
 
       <FaturaCartaoSection refreshTrigger={refreshCartao} onConciliado={() => carregarTransacoes()} />
 
