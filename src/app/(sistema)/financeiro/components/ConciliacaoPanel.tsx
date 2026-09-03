@@ -732,7 +732,11 @@ function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResol
   // Sem palpite mas com uma conta existente compatível, começa em "Sugestão" (bater com ela).
   const [modo, setModo] = useState<"sugestao" | "novo">(temMatch && !temPalpite ? "sugestao" : "novo");
   const [lancamentoId, setLancamentoId] = useState(agendamentos[0]?.id || "");
-  const [contatoId, setContatoId] = useState(tx.contatoSugeridoId || "");
+  // Gasto pontual/avulso não devia obrigar escolher um contato específico na lista enorme
+  // de fornecedores cadastrados — sem sugestão de contato, já pré-preenche com o contato
+  // genérico "Gasto Pontual" (o usuário ainda pode trocar se quiser um contato de verdade).
+  const contatoGenerico = contatos.find(c => c.nome === "Gasto Pontual");
+  const [contatoId, setContatoId] = useState(tx.contatoSugeridoId || contatoGenerico?.id || "");
   const [categoriaId, setCategoriaId] = useState(tx.categoriaSugeridaId || "");
   const [centroCustoId, setCentroCustoId] = useState(tx.centroCustoSugeridoId || "");
   const [descricao, setDescricao] = useState(tx.descricao || "");
