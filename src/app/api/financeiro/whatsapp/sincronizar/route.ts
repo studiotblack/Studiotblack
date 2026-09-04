@@ -20,9 +20,16 @@ export const maxDuration = 60;
 // quando encontra os dois, cria e já baixa o lançamento sozinho — mesmo espírito da regra
 // de entrada automática, só que pro lado da saída.
 export async function POST() {
+  // Instrumentação de tempo — sem isso, quando a função estoura os 60s da Vercel em
+  // produção, não tem como saber DE ONDE veio o tempo (conectar no WhatsApp? OCR? banco?)
+  // só olhando o erro genérico de 504 que o cliente recebe. Aparece nos logs da função.
+  const inicio = Date.now();
+  const log = (etapa: string) => console.log(`[whatsapp/sincronizar] ${etapa} — ${((Date.now() - inicio) / 1000).toFixed(1)}s`);
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({ error: "Variável DATABASE_URL não configurada." }, { status: 500 });
   }
+  log("início da função");
   const sql = getDb();
   try {
     await ensureFinanceiroTables(sql);
@@ -39,7 +46,9 @@ export async function POST() {
     }
 
     // 1. Conecta e coleta as mensagens de imagem novas do grupo
+    log("antes de conectar no WhatsApp");
     const mensagens = await coletarMensagensDoGrupo(sql, grupoJid);
+    log(`depois de conectar — ${mensagens.length} mensagem(ns) coletada(s)`);
 
     // 2. Processa cada uma: dedupe, OCR, grava WhatsappComprovante
     let jaExistiam = 0;
@@ -90,12 +99,14 @@ export async function POST() {
     } finally {
       if (worker) await worker.terminate();
     }
+    log(`depois do OCR/gravação dos novos — ${comprovantesNovos.length} novo(s), ${jaExistiam} já existia(m)`);
 
     // 3. Roda o match pra TODO comprovante ainda pendente (não só os capturados agora) —
     // um comprovante de uma sincronização anterior, cuja transação bancária correspondente
     // só veio a existir depois (ex: extrato do Sicoob importado num sync seguinte), merece
     // ser retestado, não fica preso pra sempre esperando um novo envio no WhatsApp.
     const comprovantesPendentes = await sql`SELECT * FROM "WhatsappComprovante" WHERE status = 'pendente'`;
+    log(`antes do loop de match — ${comprovantesPendentes.length} comprovante(s) pendente(s)`);
     let vinculados = 0;
     let semCorrespondencia = 0;
     let cartaoRegistrado = 0;
@@ -169,6 +180,7 @@ export async function POST() {
       }
     }
 
+    log("fim do loop de match — respondendo");
     return NextResponse.json({
       ok: true,
       mensagensLidas: mensagens.length,
