@@ -8,6 +8,7 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import type { Sql } from "@/lib/financeiro-db";
 import { carregarAuthStatePostgres } from "./auth-state";
+import type { Logger } from "@/lib/diagnostico";
 
 // Quanto tempo esperar depois de conectar pra receber mensagens que chegaram enquanto
 // a gente estava offline (o WhatsApp reenvia esse backlog assim que reconecta, igual
@@ -45,17 +46,11 @@ function aguardar(ms: number) {
 // Conecta no WhatsApp reaproveitando a sessão já pareada, escuta por um tempo curto,
 // coleta as mensagens de IMAGEM do grupo alvo, e desconecta. Não fica ligado — é chamado
 // uma vez por clique de "Sincronizar".
-export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promise<WAMessage[]> {
+export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string, log: Logger): Promise<WAMessage[]> {
   const mensagens: WAMessage[] = [];
 
   const idsColetados = new Set<string>();
   let tentativas = 0;
-
-  // Mesma instrumentação de tempo do route.ts — aqui dá pra ver quanto do orçamento foi
-  // pra carregar as credenciais/versão do Baileys vs. o handshake do socket vs. a janela
-  // de escuta em si, sem precisar adivinhar de onde veio o estouro dos 60s.
-  const inicio = Date.now();
-  const log = (etapa: string) => console.log(`[whatsapp/coletar] ${etapa} — ${((Date.now() - inicio) / 1000).toFixed(1)}s`);
 
   function coletar(msg: WAMessage) {
     if (msg.key.remoteJid !== grupoJid) return;
@@ -75,11 +70,11 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
   }
 
   async function conectar(): Promise<void> {
-    log("carregando credenciais do banco");
+    await log("carregando credenciais do banco");
     const { state, saveCreds } = await carregarAuthStatePostgres(sql);
-    log("buscando versão do Baileys (chamada de rede)");
+    await log("buscando versão do Baileys (chamada de rede)");
     const { version } = await fetchLatestBaileysVersion();
-    log("versão obtida, abrindo socket");
+    await log("versão obtida, abrindo socket");
 
     const sock = makeWASocket({
       auth: state,
@@ -132,14 +127,14 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
         const { connection, lastDisconnect } = update;
 
         if (connection === "open") {
-          log("conexão aberta, começando janela de escuta");
+          log("conexão aberta, começando janela de escuta").catch(() => {});
           tentativas = 0; // conexão de fato estabeleceu — zera o contador de falhas
           // Espera a janela pra receber o backlog de mensagens offline, depois encerra
           timeoutId = setTimeout(encerrar, JANELA_ESCUTA_MS);
         }
 
         if (connection === "close") {
-          log("conexão fechada");
+          log("conexão fechada").catch(() => {});
           if (timeoutId) clearTimeout(timeoutId);
           if (encerrado) return;
           const statusCode = (lastDisconnect?.error as { output?: { statusCode?: number } })?.output?.statusCode;
@@ -166,6 +161,6 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string): Promi
   });
 
   await Promise.race([conectar(), timeoutTotal]);
-  log(`retornando ${mensagens.length} mensagem(ns)`);
+  await log(`retornando ${mensagens.length} mensagem(ns)`);
   return mensagens;
 }
