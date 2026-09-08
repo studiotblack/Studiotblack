@@ -116,6 +116,31 @@ export async function ensureFinanceiroTables(sql: Sql) {
   // calcular em qual ciclo de fatura cada parcela de uma compra no cartão cai.
   p.push(sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "cartaoDiaVencimento" INT`);
 
+  // O "plano" por trás de uma recorrência indefinida (aluguel, mensalidade) ou de um
+  // parcelamento fechado (compra em 3x/12x) — cada ocorrência real vira uma linha em
+  // "LancamentoFinanceiro" (via "serieId"/"parcelaNumero" logo abaixo), mas o valor,
+  // categoria, conta e intervalo "combinados" ficam guardados aqui uma vez só, pra dar pra
+  // editar "todas as próximas de uma vez" ou cancelar a série inteira sem mexer ocorrência
+  // por ocorrência. "parcelaTotal" nulo = recorrência sem fim definido (só para quando
+  // cancelada); um número = parcelamento fechado (ex: 3x).
+  p.push(sql`
+    CREATE TABLE IF NOT EXISTS "LancamentoSerie" (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      tipo TEXT NOT NULL,
+      "contatoId" TEXT NOT NULL REFERENCES "Contato"(id),
+      descricao TEXT NOT NULL,
+      "valorParcela" FLOAT NOT NULL,
+      intervalo TEXT NOT NULL,
+      "parcelaTotal" INT,
+      "contaBancariaId" TEXT REFERENCES "ContaBancaria"(id),
+      "categoriaId" TEXT REFERENCES "CategoriaFinanceira"(id),
+      "centroCustoId" TEXT REFERENCES "CentroCusto"(id),
+      ativa BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
   // Chamado "LancamentoFinanceiro" (não "Agendamento") porque esse nome já existe no schema
   // pra outra coisa — o agendamento de horário de atendimento do salão (model Agendamento
   // em prisma/schema.prisma: cliente/colaborador/data/hora). São entidades completamente
@@ -138,6 +163,13 @@ export async function ensureFinanceiroTables(sql: Sql) {
       "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
+
+  // Vínculo com "LancamentoSerie" — nulo pra lançamentos avulsos (a grande maioria) e pra
+  // recorrências antigas no modelo reativo de "recorrencia" (coluna abaixo, mantida como
+  // está por compatibilidade). "parcelaNumero" é a posição dessa ocorrência dentro da série
+  // (1, 2, 3...), usado só pra exibir "2/4" na tela — a série em si já sabe o total.
+  p.push(sql`ALTER TABLE "LancamentoFinanceiro" ADD COLUMN IF NOT EXISTS "serieId" TEXT REFERENCES "LancamentoSerie"(id)`);
+  p.push(sql`ALTER TABLE "LancamentoFinanceiro" ADD COLUMN IF NOT EXISTS "parcelaNumero" INT`);
 
   // Rateio N:N — v1 da tela só cria 1 linha por lançamento, mas o schema já suporta várias
   p.push(sql`

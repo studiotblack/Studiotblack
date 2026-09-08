@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Check, Search, Trash2, Pencil } from "lucide-react";
+import { Plus, Check, Search, Trash2, Pencil, Repeat } from "lucide-react";
 import type { Agendamento, TipoAgendamento, StatusAgendamento } from "@/lib/financeiro-data";
 import { statusAgendamento, estaNestaSemana, STATUS_LABELS, STATUS_COLORS } from "@/lib/financeiro-data";
 import AgendamentoForm from "./AgendamentoForm";
@@ -111,7 +111,18 @@ export default function AgendamentosTable() {
               <tr key={a.id}>
                 <td style={{ fontSize: "0.8rem", whiteSpace: "nowrap" }}>{fmtData(a.dataVencimento)}</td>
                 <td style={{ fontWeight: 500 }}>{a.contatoNome}</td>
-                <td style={{ fontSize: "0.85rem", color: "var(--color-cream-dim)" }}>{a.descricao}</td>
+                <td style={{ fontSize: "0.85rem", color: "var(--color-cream-dim)" }}>
+                  {a.descricao}
+                  {a.serieId && (
+                    <span
+                      title={a.serieParcelaTotal ? `Parcela ${a.parcelaNumero} de ${a.serieParcelaTotal}` : `Recorrência — ocorrência ${a.parcelaNumero}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", marginLeft: "0.5rem", fontSize: "0.7rem", color: "var(--color-gold)", border: "1px solid var(--color-gold)", borderRadius: "999px", padding: "0.05rem 0.45rem" }}
+                    >
+                      <Repeat size={10} />
+                      {a.serieParcelaTotal ? `${a.parcelaNumero}/${a.serieParcelaTotal}` : "recorrente"}
+                    </span>
+                  )}
+                </td>
                 <td style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>{a.categoriaNome || "—"}</td>
                 <td>
                   <span className="badge" style={{ background: `${STATUS_COLORS[a.status]}22`, color: STATUS_COLORS[a.status], border: `1px solid ${STATUS_COLORS[a.status]}55` }}>

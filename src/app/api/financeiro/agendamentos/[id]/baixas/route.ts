@@ -1,29 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
+import { proximaData } from "@/lib/financeiro-recorrencia";
 
 export const dynamic = "force-dynamic";
-
-// Mesmo dia do mês seguinte, com o dia ajustado (clamp) se o mês seguinte for mais curto
-// (ex: 31/01 -> 28 ou 29/02) — evita datas inválidas tipo 31 de fevereiro.
-function proximoMes(dataStr: string): string {
-  const [y, m, d] = dataStr.split("-").map(Number);
-  const primeiroDiaProximoMes = new Date(y, m, 1); // mês m (0-indexado) já é o mês seguinte ao mês humano m
-  const ultimoDiaProximoMes = new Date(primeiroDiaProximoMes.getFullYear(), primeiroDiaProximoMes.getMonth() + 1, 0).getDate();
-  const dia = Math.min(d, ultimoDiaProximoMes);
-  const yy = primeiroDiaProximoMes.getFullYear();
-  const mm = primeiroDiaProximoMes.getMonth() + 1;
-  return `${yy}-${String(mm).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-}
-
-function proximaSemana(dataStr: string): string {
-  const [y, m, d] = dataStr.split("-").map(Number);
-  const data = new Date(y, m - 1, d + 7);
-  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
-}
-
-function proximaData(dataStr: string, recorrencia: string): string {
-  return recorrencia === "semanal" ? proximaSemana(dataStr) : proximoMes(dataStr);
-}
 
 // POST /api/financeiro/agendamentos/[id]/baixas — registra pagamento/recebimento total ou parcial
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -86,6 +65,42 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           await sql`INSERT INTO "LancamentoFinanceiroCentroCusto" ("lancamentoId", "centroCustoId", valor) VALUES (${novaOcorrencia.id}, ${c.centroCustoId}, ${c.valor})`;
         }
         proximaOcorrencia = novaOcorrencia;
+      }
+
+      // Ocorrência de uma série nova (LancamentoSerie) totalmente quitada — mantém uma
+      // janela de 3 ocorrências futuras em aberto pra recorrência indefinida (parcelaTotal
+      // nulo): gera mais uma lá na ponta. Parcelamento fechado (parcelaTotal definido) já
+      // teve todas as N parcelas criadas de uma vez na hora da série — esse bloco não faz
+      // nada nesse caso (o guard de parcelaTotal abaixo cobre isso sozinho).
+      if (agendamento.serieId && novoValorPago >= agendamento.valor - 0.01) {
+        const [serie] = await sql`SELECT * FROM "LancamentoSerie" WHERE id = ${agendamento.serieId}`;
+        if (serie?.ativa) {
+          const [ultimaOcorrencia] = await sql`
+            SELECT * FROM "LancamentoFinanceiro" WHERE "serieId" = ${serie.id} ORDER BY "parcelaNumero" DESC LIMIT 1
+          `;
+          const proximoNumero = (ultimaOcorrencia?.parcelaNumero ?? agendamento.parcelaNumero ?? 0) + 1;
+          if (!serie.parcelaTotal || proximoNumero <= serie.parcelaTotal) {
+            const base = ultimaOcorrencia ?? agendamento;
+            const [novaOcorrenciaSerie] = await sql`
+              INSERT INTO "LancamentoFinanceiro"
+                (tipo, "contatoId", valor, "dataVencimento", "dataCompetencia", descricao, "contaBancariaId", "serieId", "parcelaNumero")
+              VALUES (
+                ${serie.tipo}, ${serie.contatoId}, ${serie.valorParcela},
+                ${base.dataVencimento ? proximaData(base.dataVencimento, serie.intervalo) : null},
+                ${proximaData(base.dataCompetencia, serie.intervalo)},
+                ${serie.descricao}, ${serie.contaBancariaId}, ${serie.id}, ${proximoNumero}
+              )
+              RETURNING *
+            `;
+            if (serie.categoriaId) {
+              await sql`INSERT INTO "LancamentoFinanceiroCategoria" ("lancamentoId", "categoriaId", valor) VALUES (${novaOcorrenciaSerie.id}, ${serie.categoriaId}, ${serie.valorParcela})`;
+            }
+            if (serie.centroCustoId) {
+              await sql`INSERT INTO "LancamentoFinanceiroCentroCusto" ("lancamentoId", "centroCustoId", valor) VALUES (${novaOcorrenciaSerie.id}, ${serie.centroCustoId}, ${serie.valorParcela})`;
+            }
+            proximaOcorrencia = novaOcorrenciaSerie;
+          }
+        }
       }
 
       return { baixa, agendamento: agendamentoAtualizado, proximaOcorrencia };

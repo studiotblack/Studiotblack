@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
         cat.id AS "categoriaId",
         cat.nome AS "categoriaNome",
         cc.id AS "centroCustoId",
-        cc.nome AS "centroCustoNome"
+        cc.nome AS "centroCustoNome",
+        serie."parcelaTotal" AS "serieParcelaTotal",
+        serie.ativa AS "serieAtiva"
       FROM "LancamentoFinanceiro" a
       JOIN "Contato" c ON c.id = a."contatoId"
       LEFT JOIN "ContaBancaria" cb ON cb.id = a."contaBancariaId"
@@ -36,6 +38,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN "CategoriaFinanceira" cat ON cat.id = ac."categoriaId"
       LEFT JOIN "LancamentoFinanceiroCentroCusto" acc ON acc."lancamentoId" = a.id
       LEFT JOIN "CentroCusto" cc ON cc.id = acc."centroCustoId"
+      LEFT JOIN "LancamentoSerie" serie ON serie.id = a."serieId"
       WHERE 1=1
         ${tipo ? sql`AND a.tipo = ${tipo}` : sql``}
         ${categoriaId ? sql`AND cat.id = ${categoriaId}` : sql``}

@@ -161,6 +161,14 @@ export interface Agendamento {
   centroCustoNome?: string;
   createdAt?: string;
   updatedAt?: string;
+
+  // Série (recorrência indefinida ou parcelamento fechado) — serieId presente indica que
+  // esse lançamento é uma ocorrência de uma LancamentoSerie, não avulso. serieParcelaTotal
+  // nulo = recorrência sem fim definido (aluguel); número = parcelamento fechado (3x, 12x).
+  serieId?: string | null;
+  parcelaNumero?: number | null;
+  serieParcelaTotal?: number | null;
+  serieAtiva?: boolean | null;
 }
 
 export interface Baixa {

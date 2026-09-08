@@ -33,6 +33,15 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
   const [categoriaId, setCategoriaId] = useState("");
   const [centroCustoId, setCentroCustoId] = useState("");
   const [recorrencia, setRecorrencia] = useState<"" | "semanal" | "mensal">("");
+  // Repetição nova (série de verdade) — só usada na criação. Editar um lançamento avulso ou
+  // já existente com o modelo antigo de recorrência continua usando o campo acima.
+  const [repeticao, setRepeticao] = useState<"" | "parcelado" | "recorrente">("");
+  const [parcelaTotal, setParcelaTotal] = useState<number>(3);
+  const [intervaloSerie, setIntervaloSerie] = useState<"semanal" | "mensal">("mensal");
+  // Ao editar uma ocorrência que já pertence a uma série, dá pra propagar a mudança de
+  // valor/categoria/centro de custo/conta pra todas as parcelas futuras ainda não pagas de
+  // uma vez, em vez de editar mês a mês conforme cada uma nasce.
+  const [aplicarFuturas, setAplicarFuturas] = useState(false);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -61,11 +70,12 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
       setCategoriaId(editando.categoriaId || "");
       setCentroCustoId(editando.centroCustoId || "");
       setRecorrencia(editando.recorrencia === "semanal" || editando.recorrencia === "mensal" ? editando.recorrencia : "");
+      setAplicarFuturas(false);
     } else {
       setContatoId(""); setValor(0); setDataVencimento(""); setDataCompetencia(today());
       setDataPrevisao(""); setDescricao(""); setReferencia(""); setDetalhamento("");
       setContaBancariaId(""); setCategoriaId(""); setCentroCustoId("");
-      setRecorrencia("");
+      setRecorrencia(""); setRepeticao(""); setParcelaTotal(3); setIntervaloSerie("mensal");
     }
     setErro("");
   }, [isOpen, tipoInicial, editando]);
@@ -84,20 +94,57 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
       setErro("Contato e descrição são obrigatórios.");
       return;
     }
+    if (!editando && repeticao === "parcelado" && (!parcelaTotal || parcelaTotal < 2)) {
+      setErro("Número de parcelas precisa ser pelo menos 2.");
+      return;
+    }
+    if (!editando && (repeticao === "parcelado" || repeticao === "recorrente") && !dataVencimento) {
+      setErro("Defina a data de vencimento da primeira parcela.");
+      return;
+    }
     setSaving(true);
     try {
-      const url = editando ? `/api/financeiro/agendamentos/${editando.id}` : "/api/financeiro/agendamentos";
-      const res = await fetch(url, {
-        method: editando ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo, contatoId, valor, dataVencimento: dataVencimento || undefined, dataCompetencia,
-          dataPrevisao: dataPrevisao || undefined, descricao, referencia, detalhamento,
-          contaBancariaId: contaBancariaId || undefined, categoriaId: categoriaId || undefined,
-          centroCustoId: centroCustoId || undefined, recorrencia: recorrencia || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
+      if (editando?.serieId && aplicarFuturas) {
+        // Propaga a edição pra todas as parcelas futuras ainda não pagas da série de uma vez.
+        const res = await fetch(`/api/financeiro/series/${editando.serieId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            valorParcela: valor, descricao,
+            contaBancariaId: contaBancariaId || null,
+            categoriaId: categoriaId || null, centroCustoId: centroCustoId || null,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+      } else if (!editando && (repeticao === "parcelado" || repeticao === "recorrente")) {
+        // Cria a série (parcelamento fechado gera todas as parcelas já; recorrência
+        // indefinida gera só a janela inicial, o resto nasce sozinho conforme for pago).
+        const res = await fetch("/api/financeiro/series", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tipo, contatoId, valorParcela: valor, intervalo: intervaloSerie,
+            parcelaTotal: repeticao === "parcelado" ? parcelaTotal : undefined,
+            dataInicio: dataVencimento, descricao, referencia, detalhamento,
+            contaBancariaId: contaBancariaId || undefined, categoriaId: categoriaId || undefined,
+            centroCustoId: centroCustoId || undefined,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+      } else {
+        const url = editando ? `/api/financeiro/agendamentos/${editando.id}` : "/api/financeiro/agendamentos";
+        const res = await fetch(url, {
+          method: editando ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tipo, contatoId, valor, dataVencimento: dataVencimento || undefined, dataCompetencia,
+            dataPrevisao: dataPrevisao || undefined, descricao, referencia, detalhamento,
+            contaBancariaId: contaBancariaId || undefined, categoriaId: categoriaId || undefined,
+            centroCustoId: centroCustoId || undefined, recorrencia: recorrencia || undefined,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+      }
       onSaved();
       onClose();
     } catch (err: any) {
@@ -206,19 +253,80 @@ export default function AgendamentoForm({ isOpen, onClose, onSaved, tipoInicial 
             <textarea placeholder="Detalhamento" value={detalhamento} onChange={e => setDetalhamento(e.target.value)} rows={2} />
           </div>
 
-          <div>
-            <label className="form-label">Recorrência</label>
-            <select value={recorrencia} onChange={e => setRecorrencia(e.target.value as "" | "semanal" | "mensal")}>
-              <option value="">Não se repete</option>
-              <option value="semanal">Semanal</option>
-              <option value="mensal">Mensal</option>
-            </select>
-            {recorrencia && (
-              <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.3rem" }}>
-                Ao quitar totalmente, a próxima ocorrência é criada sozinha {recorrencia === "semanal" ? "uma semana depois" : "no mês seguinte"}.
+          {editando?.serieId ? (
+            <div style={{ background: "rgba(212,175,140,0.08)", border: "1px solid var(--color-gold)", borderRadius: "0.5rem", padding: "0.75rem 1rem" }}>
+              <p style={{ fontSize: "0.8rem", color: "var(--color-gold)", margin: 0, fontWeight: 600 }}>
+                {editando.serieParcelaTotal ? `Parcela ${editando.parcelaNumero} de ${editando.serieParcelaTotal}` : `Ocorrência ${editando.parcelaNumero} de uma recorrência`}
               </p>
-            )}
-          </div>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", color: "var(--color-cream-dim)", cursor: "pointer", marginTop: "0.5rem" }}>
+                <input type="checkbox" checked={aplicarFuturas} onChange={e => setAplicarFuturas(e.target.checked)} style={{ width: "auto" }} />
+                Aplicar valor/categoria/centro de custo/conta a todas as parcelas futuras ainda não pagas
+              </label>
+            </div>
+          ) : editando ? (
+            <div>
+              <label className="form-label">Recorrência</label>
+              <select value={recorrencia} onChange={e => setRecorrencia(e.target.value as "" | "semanal" | "mensal")}>
+                <option value="">Não se repete</option>
+                <option value="semanal">Semanal</option>
+                <option value="mensal">Mensal</option>
+              </select>
+              {recorrencia && (
+                <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.3rem" }}>
+                  Ao quitar totalmente, a próxima ocorrência é criada sozinha {recorrencia === "semanal" ? "uma semana depois" : "no mês seguinte"}.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="form-label">Repetição</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
+                {([
+                  { v: "", label: "Não se repete" },
+                  { v: "parcelado", label: "Parcelado" },
+                  { v: "recorrente", label: "Recorrente" },
+                ] as const).map(opt => (
+                  <button key={opt.v} type="button" onClick={() => setRepeticao(opt.v)}
+                    style={{
+                      padding: "0.5rem", borderRadius: "0.5rem", cursor: "pointer", fontWeight: 600, fontSize: "0.78rem",
+                      background: repeticao === opt.v ? "rgba(212,175,140,0.15)" : "var(--color-surface-2)",
+                      color: repeticao === opt.v ? "var(--color-gold)" : "var(--color-muted)",
+                      border: `1px solid ${repeticao === opt.v ? "var(--color-gold)" : "var(--color-border)"}`,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {(repeticao === "parcelado" || repeticao === "recorrente") && (
+                <div style={{ display: "grid", gridTemplateColumns: repeticao === "parcelado" ? "1fr 1fr" : "1fr", gap: "0.75rem", marginTop: "0.6rem" }}>
+                  {repeticao === "parcelado" && (
+                    <div>
+                      <label className="form-label">Número de parcelas</label>
+                      <input type="number" min={2} value={parcelaTotal} onChange={e => setParcelaTotal(Number(e.target.value))} />
+                    </div>
+                  )}
+                  <div>
+                    <label className="form-label">Intervalo</label>
+                    <select value={intervaloSerie} onChange={e => setIntervaloSerie(e.target.value as "semanal" | "mensal")}>
+                      <option value="mensal">Mensal</option>
+                      <option value="semanal">Semanal</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+              {repeticao === "parcelado" && (
+                <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.4rem" }}>
+                  Cria as {parcelaTotal || "N"} parcelas de uma vez, a partir da data de vencimento definida acima.
+                </p>
+              )}
+              {repeticao === "recorrente" && (
+                <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "0.4rem" }}>
+                  Cria as 3 próximas ocorrências de uma vez; conforme cada uma for paga, a próxima nasce sozinha, mantendo sempre 3 em aberto.
+                </p>
+              )}
+            </div>
+          )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.25rem" }}>
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
