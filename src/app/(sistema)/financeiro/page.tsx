@@ -51,9 +51,9 @@ export default function FinanceiroPage() {
     { id: "fluxo",        label: "Fluxo de Caixa",       icon: <ArrowUpRight size={14} /> },
     { id: "dre",          label: "DRE",                  icon: <BarChart3 size={14} />    },
     { id: "lancamentos",  label: "Contas a Pagar/Receber", icon: <List size={14} />       },
+    { id: "conciliacao",  label: "Conciliação Bancária", icon: <Landmark size={14} />     },
     { id: "relatorio",    label: "Relatório",            icon: <SlidersHorizontal size={14} /> },
     { id: "cadastros",    label: "Cadastros",            icon: <FolderKanban size={14} /> },
-    { id: "conciliacao",  label: "Conciliação Bancária", icon: <Landmark size={14} />     },
     { id: "configuracao", label: "Configuração DRE",     icon: <Shield size={14} />       },
   ];
 

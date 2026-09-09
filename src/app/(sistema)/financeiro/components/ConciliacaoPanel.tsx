@@ -1079,11 +1079,12 @@ function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResol
   };
 
   return (
-    <div className="card" style={{ position: "relative", padding: temPalpite ? "1.75rem 1.25rem 1rem" : "1rem 1.25rem", overflow: "hidden" }}>
+    <div className="card" style={{ position: "relative", padding: temPalpite ? "1.75rem 1.25rem 1rem" : "1rem 1.25rem" }}>
       {temPalpite && (
         <div style={{
           position: "absolute", top: 0, right: 0, background: "var(--color-gold)", color: "var(--color-bg)",
-          fontSize: "0.65rem", fontWeight: 800, padding: "0.2rem 0.6rem", borderBottomLeftRadius: "0.5rem",
+          fontSize: "0.65rem", fontWeight: 800, padding: "0.2rem 0.6rem",
+          borderTopRightRadius: "1rem", borderBottomLeftRadius: "0.5rem",
           display: "flex", alignItems: "center", gap: "0.25rem",
         }}>
           <Sparkles size={11} /> PALPITE
