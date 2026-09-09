@@ -232,6 +232,48 @@ export function estaNestaSemana(a: Pick<Agendamento, "valor" | "valorPago" | "da
   return vencimento <= fimSemana;
 }
 
+// Agrupamento por urgência de vencimento pra tela de Contas a Pagar/Receber — em vez de
+// uma tabela plana com um toggle "esta semana" que esconde tudo o resto, o padrão é
+// mostrar sempre, organizado por quão urgente cada conta é. Quitados nunca entram nos
+// baldes de data — viram um grupo próprio, só histórico, sem destaque nenhum.
+export type BucketAgendamento = "vencido" | "estaSemana" | "esteMes" | "futuro" | "semData" | "quitado";
+
+export function bucketAgendamento(a: Pick<Agendamento, "valor" | "valorPago" | "dataVencimento">): BucketAgendamento {
+  if (statusAgendamento(a) === "pago") return "quitado";
+  if (!a.dataVencimento) return "semData";
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const vencimento = new Date(a.dataVencimento + "T00:00:00");
+  if (vencimento < hoje) return "vencido";
+  const diaSemana = hoje.getDay(); // 0=domingo
+  const fimSemana = new Date(hoje);
+  fimSemana.setDate(hoje.getDate() + (6 - diaSemana));
+  fimSemana.setHours(23, 59, 59, 999);
+  if (vencimento <= fimSemana) return "estaSemana";
+  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  fimMes.setHours(23, 59, 59, 999);
+  if (vencimento <= fimMes) return "esteMes";
+  return "futuro";
+}
+
+export function diasEmAtraso(dataVencimento: string): number {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const vencimento = new Date(dataVencimento + "T00:00:00");
+  return Math.max(0, Math.round((hoje.getTime() - vencimento.getTime()) / 86_400_000));
+}
+
+export const BUCKET_ORDEM: BucketAgendamento[] = ["vencido", "estaSemana", "esteMes", "futuro", "semData", "quitado"];
+
+export const BUCKET_LABELS: Record<BucketAgendamento, string> = {
+  vencido: "Vencidos",
+  estaSemana: "Esta semana",
+  esteMes: "Este mês",
+  futuro: "Futuro",
+  semData: "Sem vencimento",
+  quitado: "Quitados",
+};
+
 export const STATUS_LABELS: Record<StatusAgendamento, string> = {
   aberto: "Em aberto",
   parcial: "Parcialmente pago",

@@ -3,9 +3,10 @@ import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/financeiro/agendamentos?tipo=&categoriaId=&centroCustoId=&contaBancariaId=&contatoId=&dataInicio=&dataFim=
+// GET /api/financeiro/agendamentos?tipo=&categoriaId=&centroCustoId=&contaBancariaId=&contatoId=&dataInicio=&dataFim=&apenasAbertos=
 // Todos os filtros são opcionais e combinam com AND — usado tanto na tela de Contas a
-// Pagar/Receber (só tipo) quanto no Relatório Financeiro (todos os filtros disponíveis).
+// Pagar/Receber (tipo + apenasAbertos por padrão) quanto no Relatório Financeiro (todos os
+// filtros disponíveis, sem apenasAbertos).
 export async function GET(request: NextRequest) {
   if (!process.env.DATABASE_URL) return NextResponse.json([], { status: 200 });
   const sql = getDb();
@@ -19,6 +20,10 @@ export async function GET(request: NextRequest) {
     const contatoId = searchParams.get("contatoId");
     const dataInicio = searchParams.get("dataInicio");
     const dataFim = searchParams.get("dataFim");
+    // Corta os lançamentos já 100% quitados direto no banco — a tela de Contas a Pagar
+    // tem MILHARES de linhas históricas já pagas (importadas do Nibo), e buscar tudo só
+    // pra esconder a maioria no client depois é lento e sem necessidade nenhuma.
+    const apenasAbertos = searchParams.get("apenasAbertos") === "true";
 
     const rows = await sql`
       SELECT
@@ -47,6 +52,7 @@ export async function GET(request: NextRequest) {
         ${contatoId ? sql`AND a."contatoId" = ${contatoId}` : sql``}
         ${dataInicio ? sql`AND a."dataVencimento" >= ${dataInicio}` : sql``}
         ${dataFim ? sql`AND a."dataVencimento" <= ${dataFim}` : sql``}
+        ${apenasAbertos ? sql`AND a."valorPago" < a.valor` : sql``}
       ORDER BY a."dataVencimento" ASC
     `;
 
