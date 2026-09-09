@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createWorker } from "tesseract.js";
-import { downloadMediaMessage } from "@whiskeysockets/baileys";
+import { downloadMediaMessage, type WAMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
 import { extrairValor, extrairParcelas, ehComprovanteCartao } from "@/lib/whatsapp/extrair-valor";
@@ -54,56 +54,67 @@ export async function POST() {
     const mensagens = await coletarMensagensDoGrupo(sql, grupoJid, log);
     await log(`depois de conectar — ${mensagens.length} mensagem(ns) coletada(s)`);
 
-    // 2. Processa cada uma: dedupe, OCR, grava WhatsappComprovante
+    // 2a. Grava TODAS as mensagens novas imediatamente — só regex na legenda (extrairValor),
+    // sem baixar mídia nem rodar OCR ainda. Isso é rápido de propósito: uma mensagem do
+    // WhatsApp só chega UMA vez (não tem como "pedir de novo" depois); se a função for
+    // morta pela Vercel no meio do processamento antes de gravar uma mensagem, ela some
+    // pra sempre. Gravando primeiro (rápido) e rodando o OCR depois (mais lento, com
+    // limite), na pior das hipóteses um comprovante fica esperando o valor ser preenchido
+    // à mão — mas nunca desaparece.
     let jaExistiam = 0;
     const comprovantesNovos: any[] = [];
+    const paraOcr: { msg: WAMessage; comprovanteId: string }[] = [];
 
-    // Um worker de OCR só, reaproveitado pra todas as imagens do lote — criar um novo por
-    // imagem (como era antes) soma um cold-start caro (carregar o modelo de português) a
-    // cada foto, o que em ambiente serverless comia boa parte do orçamento de 60s da
-    // função e ajudava a estourar o timeout com 2+ comprovantes sem legenda reconhecida.
+    for (const msg of mensagens) {
+      const msgId = msg.key.id;
+      if (!msgId) continue;
+
+      const [existente] = await sql`SELECT id FROM "WhatsappComprovante" WHERE "mensagemWhatsappId" = ${msgId}`;
+      if (existente) { jaExistiam++; continue; }
+
+      const caption = msg.message?.imageMessage?.caption || "";
+      const valorOcr = extrairValor(caption);
+      const timestampSeg = typeof msg.messageTimestamp === "number" ? msg.messageTimestamp : Number(msg.messageTimestamp);
+      const dataEnvio = new Date(timestampSeg * 1000);
+
+      const [comprovante] = await sql`
+        INSERT INTO "WhatsappComprovante"
+          (id, "mensagemWhatsappId", "grupoId", remetente, "dataHoraEnvio", "textoLegenda", "valorOcr", status)
+        VALUES
+          (gen_random_uuid()::text, ${msgId}, ${grupoJid}, ${msg.pushName || null}, ${dataEnvio.toISOString()}, ${caption}, ${valorOcr}, 'pendente')
+        RETURNING *
+      `;
+      comprovantesNovos.push(comprovante);
+      if (valorOcr === null) paraOcr.push({ msg, comprovanteId: comprovante.id });
+    }
+    await log(`depois de gravar os novos — ${comprovantesNovos.length} novo(s), ${jaExistiam} já existia(m), ${paraOcr.length} precisam de OCR`);
+
+    // 2b. OCR só pra um número limitado de imagens por execução, pra nunca estourar o
+    // orçamento de 60s — as que sobrarem já estão salvas (passo acima), só ficam sem valor
+    // reconhecido automaticamente até o usuário preencher na tela "Comprovantes do WhatsApp
+    // sem resolver" (não tem como tentar de novo sozinho numa sincronização futura: a
+    // mensagem original do WhatsApp só existe em memória durante ESTA execução).
+    const MAX_OCR_POR_EXECUCAO = 4;
+    const paraProcessar = paraOcr.slice(0, MAX_OCR_POR_EXECUCAO);
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
-
     try {
-      for (const msg of mensagens) {
-        const msgId = msg.key.id;
-        if (!msgId) continue;
-
-        const [existente] = await sql`SELECT id FROM "WhatsappComprovante" WHERE "mensagemWhatsappId" = ${msgId}`;
-        if (existente) { jaExistiam++; continue; }
-
-        const caption = msg.message?.imageMessage?.caption || "";
-        let valorOcr: number | null = extrairValor(caption);
-        let textoOcr: string | null = null;
-
-        if (valorOcr === null) {
-          try {
-            const buffer = await downloadMediaMessage(msg, "buffer", {});
-            if (!worker) worker = await createWorker("por");
-            const { data } = await worker.recognize(buffer);
-            valorOcr = extrairValor(data.text);
-            textoOcr = data.text;
-          } catch (err) {
-            console.error("[whatsapp/sincronizar] Erro no OCR:", err);
-          }
+      for (const { msg, comprovanteId } of paraProcessar) {
+        try {
+          const buffer = await downloadMediaMessage(msg, "buffer", {});
+          if (!worker) worker = await createWorker("por");
+          const { data } = await worker.recognize(buffer);
+          const valorOcr = extrairValor(data.text);
+          await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW() WHERE id = ${comprovanteId}`;
+          const item = comprovantesNovos.find((c) => c.id === comprovanteId);
+          if (item) { item.valorOcr = valorOcr; item.textoOcr = data.text; }
+        } catch (err) {
+          console.error("[whatsapp/sincronizar] Erro no OCR:", err);
         }
-
-        const timestampSeg = typeof msg.messageTimestamp === "number" ? msg.messageTimestamp : Number(msg.messageTimestamp);
-        const dataEnvio = new Date(timestampSeg * 1000);
-
-        const [comprovante] = await sql`
-          INSERT INTO "WhatsappComprovante"
-            (id, "mensagemWhatsappId", "grupoId", remetente, "dataHoraEnvio", "textoLegenda", "valorOcr", "textoOcr", "dataHoraOcr", status)
-          VALUES
-            (gen_random_uuid()::text, ${msgId}, ${grupoJid}, ${msg.pushName || null}, ${dataEnvio.toISOString()}, ${caption}, ${valorOcr}, ${textoOcr}, NOW(), 'pendente')
-          RETURNING *
-        `;
-        comprovantesNovos.push(comprovante);
       }
     } finally {
       if (worker) await worker.terminate();
     }
-    await log(`depois do OCR/gravação dos novos — ${comprovantesNovos.length} novo(s), ${jaExistiam} já existia(m)`);
+    await log(`depois do OCR — ${paraProcessar.length} processada(s) de ${paraOcr.length} pendente(s) de OCR`);
 
     // 3. Roda o match pra TODO comprovante ainda pendente (não só os capturados agora) —
     // um comprovante de uma sincronização anterior, cuja transação bancária correspondente
