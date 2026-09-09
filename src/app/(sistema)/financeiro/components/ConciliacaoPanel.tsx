@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, Sparkles, CreditCard } from "lucide-react";
+import { CheckCircle2, ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, Sparkles, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
 import type {
   ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, Agendamento,
 } from "@/lib/financeiro-data";
@@ -36,7 +36,7 @@ const ITENS_POR_PAGINA = 10;
 // banco e fica visível até o usuário resolver cada um: editar o valor e tentar vincular de
 // novo na hora, marcar manualmente como compra no cartão (sem depender de reenviar a foto
 // com a legenda certa), ou ignorar.
-function ComprovantesPendentesSection({ refreshTrigger, onResolvido }: { refreshTrigger: number; onResolvido: () => void }) {
+function ComprovantesPendentesSection({ refreshTrigger, onResolvido, onCountChange }: { refreshTrigger: number; onResolvido: () => void; onCountChange: (n: number) => void }) {
   const [itens, setItens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +44,9 @@ function ComprovantesPendentesSection({ refreshTrigger, onResolvido }: { refresh
     setLoading(true);
     try {
       const res = await fetch("/api/financeiro/whatsapp/comprovantes");
-      setItens(res.ok ? await res.json() : []);
+      const data = res.ok ? await res.json() : [];
+      setItens(data);
+      onCountChange(data.length);
     } finally {
       setLoading(false);
     }
@@ -55,7 +57,7 @@ function ComprovantesPendentesSection({ refreshTrigger, onResolvido }: { refresh
   if (loading || itens.length === 0) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <div id="secao-comprovantes" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
         <MessageCircle size={15} /> Comprovantes do WhatsApp sem resolver ({itens.length})
       </div>
@@ -209,7 +211,7 @@ function ComprovanteCard({ item, onResolvido }: { item: any; onResolvido: () => 
 // ── Fatura do Cartão de Crédito: compras acumuladas (marcadas manualmente como "cartao" no
 // WhatsApp) esperando o dia em que a fatura inteira aparece como UMA saída no extrato. Nunca
 // dá baixa sozinho — só sugere e espera confirmação de um clique.
-function FaturaCartaoSection({ refreshTrigger, onConciliado }: { refreshTrigger: number; onConciliado: () => void }) {
+function FaturaCartaoSection({ refreshTrigger, onConciliado, onCountChange }: { refreshTrigger: number; onConciliado: () => void; onCountChange: (info: { pendentes: number; sugestoes: number; somaPendentes: number }) => void }) {
   const [pendentes, setPendentes] = useState<any[]>([]);
   const [sugestoes, setSugestoes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,8 +223,11 @@ function FaturaCartaoSection({ refreshTrigger, onConciliado }: { refreshTrigger:
     try {
       const res = await fetch("/api/financeiro/cartao-credito/sugestoes");
       const data = await res.json();
-      setPendentes(data.pendentes || []);
-      setSugestoes(data.sugestoes || []);
+      const pend = data.pendentes || [];
+      const sug = data.sugestoes || [];
+      setPendentes(pend);
+      setSugestoes(sug);
+      onCountChange({ pendentes: pend.length, sugestoes: sug.length, somaPendentes: pend.reduce((acc: number, c: any) => acc + c.valorParcela, 0) });
     } finally {
       setLoading(false);
     }
@@ -253,7 +258,7 @@ function FaturaCartaoSection({ refreshTrigger, onConciliado }: { refreshTrigger:
   }, {});
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <div id="secao-fatura" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
         <CreditCard size={15} /> Fatura do Cartão de Crédito
       </div>
@@ -414,6 +419,79 @@ function DetalhesSincronizacao({ detalhesSicoob, detalhesWhatsapp, detalhesRegra
   );
 }
 
+// ── Visão geral no topo: antes o único jeito de saber "tem algo pra fazer?" era rolar a
+// tela inteira e ler as 5 seções uma por uma. Agora é um olhar só — cada indicador é mudo
+// (cor neutra) quando zero e ganha destaque dourado quando >0, e clicar rola até a seção.
+function BarraEstadoGeral({ pendentesConciliacao, comprovantesSemResolver, faturaCartao }: {
+  pendentesConciliacao: number;
+  comprovantesSemResolver: number;
+  faturaCartao: { pendentes: number; sugestoes: number; somaPendentes: number };
+}) {
+  const itens = [
+    { id: "secao-pendentes", label: "Pendentes de conciliação", valor: pendentesConciliacao },
+    { id: "secao-comprovantes", label: "Comprovantes sem resolver", valor: comprovantesSemResolver },
+    { id: "secao-fatura", label: "Fatura do cartão acumulada", valor: faturaCartao.pendentes, extra: faturaCartao.somaPendentes > 0 ? brl(faturaCartao.somaPendentes) : undefined },
+  ];
+  return (
+    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+      {itens.map(it => (
+        <a key={it.id} href={`#${it.id}`}
+          style={{
+            display: "flex", flexDirection: "column", gap: "0.15rem", padding: "0.6rem 1.1rem", borderRadius: "0.6rem",
+            textDecoration: "none", minWidth: 150,
+            background: it.valor > 0 ? "rgba(212,175,140,0.08)" : "var(--color-surface-2)",
+            border: `1px solid ${it.valor > 0 ? "var(--color-gold)" : "var(--color-border)"}`,
+          }}>
+          <span style={{ fontSize: "1.35rem", fontWeight: 800, color: it.valor > 0 ? "var(--color-gold)" : "var(--color-muted)" }}>{it.valor}</span>
+          <span style={{ fontSize: "0.72rem", color: "var(--color-muted)" }}>{it.label}{it.extra ? ` · ${it.extra}` : ""}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// ── Resultado da última sincronização — antes uma frase única cheia de números ("0
+// transações novas, 0 conciliadas... 0 comprovantes novos...") que, quando tudo dava zero
+// (nada de novo desde a última vez), parecia erro em vez de sucesso. Agora 3 estados
+// visuais bem diferentes: nada novo (neutro), resolvido sozinho (verde, em chips por
+// sistema) e precisa de atenção (dourado, com link direto pra seção).
+function ResumoSincronizacao({ sicoob, whatsapp }: { sicoob: any; whatsapp: any }) {
+  if (!sicoob && !whatsapp) return null;
+
+  const novos = (sicoob?.novos || 0) + (whatsapp?.novos || 0);
+  const resolvidos = (sicoob?.autoConciliados || 0) + (whatsapp?.vinculados || 0) + (whatsapp?.cartaoRegistrado || 0);
+  const atencao = whatsapp?.semCorrespondencia || 0;
+
+  if (novos === 0 && resolvidos === 0 && atencao === 0) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.7rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-muted)", fontSize: "0.85rem" }}>
+        <CheckCircle2 size={16} /> Tudo em dia — nenhuma novidade desde a última sincronização.
+      </div>
+    );
+  }
+
+  const chip = (texto: string) => (
+    <span className="badge" style={{ background: "rgba(46,204,113,0.1)", color: "var(--color-success)", border: "1px solid var(--color-success)", padding: "0.4rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
+      {texto}
+    </span>
+  );
+
+  return (
+    <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+      {sicoob && chip(`Sicoob · ${sicoob.novos} nova${sicoob.novos === 1 ? "" : "s"} · ${sicoob.autoConciliados} conciliada${sicoob.autoConciliados === 1 ? "" : "s"}`)}
+      {whatsapp && chip(`WhatsApp · ${whatsapp.novos} novo${whatsapp.novos === 1 ? "" : "s"} · ${whatsapp.vinculados} vinculado${whatsapp.vinculados === 1 ? "" : "s"}${whatsapp.cartaoRegistrado ? ` · ${whatsapp.cartaoRegistrado} de cartão` : ""}`)}
+      {atencao > 0 && (
+        <a href="#secao-comprovantes" style={{
+          background: "rgba(212,175,140,0.15)", color: "var(--color-gold)", border: "1px solid var(--color-gold)",
+          padding: "0.4rem 0.75rem", borderRadius: "999px", fontSize: "0.78rem", textDecoration: "none", fontWeight: 700,
+        }}>
+          {atencao} precisa{atencao === 1 ? "" : "m"} da sua atenção →
+        </a>
+      )}
+    </div>
+  );
+}
+
 export default function ConciliacaoPanel() {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [contatos, setContatos] = useState<Contato[]>([]);
@@ -430,10 +508,19 @@ export default function ConciliacaoPanel() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState<"" | "sicoob" | "whatsapp">("");
-  const [resumoSync, setResumoSync] = useState<string | null>(null);
+  // Resultado bruto de cada sistema, separado — o componente ResumoSincronizacao decide a
+  // hierarquia visual (nada novo / resolvido / precisa atenção) em vez de uma frase única.
+  const [resultadoSicoob, setResultadoSicoob] = useState<any | null>(null);
+  const [resultadoWhatsapp, setResultadoWhatsapp] = useState<any | null>(null);
   const [erroSync, setErroSync] = useState<string | null>(null);
+  // Mensagem simples só pras ações secundárias (aplicar regra em massa) — não faz parte do
+  // resumo estruturado da sincronização principal.
+  const [mensagemAcao, setMensagemAcao] = useState<string | null>(null);
   const [aplicandoRegra, setAplicandoRegra] = useState(false);
   const [aplicandoRegraSaida, setAplicandoRegraSaida] = useState(false);
+  const [automacaoAberta, setAutomacaoAberta] = useState(false);
+  const [comprovantesSemResolverCount, setComprovantesSemResolverCount] = useState(0);
+  const [faturaCartaoInfo, setFaturaCartaoInfo] = useState({ pendentes: 0, sugestoes: 0, somaPendentes: 0 });
   const [paginaPendentes, setPaginaPendentes] = useState(1);
   const [paginaConciliadas, setPaginaConciliadas] = useState(1);
   // Detalhe linha-a-linha da última sincronização/aplicação de regra — o resumo em texto
@@ -494,11 +581,11 @@ export default function ConciliacaoPanel() {
     if (!contaId) return;
     setSyncing(true);
     setErroSync(null);
-    setResumoSync(null);
+    setResultadoSicoob(null);
+    setResultadoWhatsapp(null);
     setDetalhesSicoob([]);
     setDetalhesWhatsapp([]);
 
-    let resumoSicoob = "";
     try {
       setSyncStep("sicoob");
       const res = await fetch(`/api/financeiro/contas-bancarias/${contaId}/sincronizar-sicoob`, {
@@ -508,7 +595,7 @@ export default function ConciliacaoPanel() {
       });
       const data = await lerRespostaJson(res);
       if (!res.ok) throw new Error(data.error);
-      resumoSicoob = `Sicoob: saldo ${brl(data.saldoSicoob)} — ${data.novos} transaç${data.novos === 1 ? "ão nova" : "ões novas"}, ${data.autoConciliados} conciliada${data.autoConciliados === 1 ? "" : "s"} automaticamente, ${data.pendentes} pendente${data.pendentes === 1 ? "" : "s"}.`;
+      setResultadoSicoob(data);
       setDetalhesSicoob(data.detalhes || []);
     } catch (err: any) {
       setErroSync(err.message || "Erro ao sincronizar com o Sicoob");
@@ -523,13 +610,10 @@ export default function ConciliacaoPanel() {
       const res = await fetch("/api/financeiro/whatsapp/sincronizar", { method: "POST" });
       const data = await lerRespostaJson(res);
       if (!res.ok) throw new Error(data.error);
-      setResumoSync(
-        `${resumoSicoob} WhatsApp: ${data.novos} comprovante${data.novos === 1 ? "" : "s"} novo${data.novos === 1 ? "" : "s"}, ${data.vinculados} vinculado${data.vinculados === 1 ? "" : "s"} automaticamente, ${data.cartaoRegistrado || 0} de cartão acumulado${data.cartaoRegistrado === 1 ? "" : "s"}, ${data.semCorrespondencia} sem correspondência ainda.`
-      );
+      setResultadoWhatsapp(data);
       setDetalhesWhatsapp(data.detalhes || []);
       setRefreshCartao(n => n + 1);
     } catch (err: any) {
-      setResumoSync(resumoSicoob);
       setErroSync(`Sicoob sincronizado, mas o WhatsApp falhou: ${err.message || "erro desconhecido"}`);
     } finally {
       setSyncing(false);
@@ -542,12 +626,12 @@ export default function ConciliacaoPanel() {
     if (!contaId) return;
     setAplicandoRegra(true);
     setErroSync(null);
-    setResumoSync(null);
+    setMensagemAcao(null);
     try {
       const res = await fetch(`/api/financeiro/contas-bancarias/${contaId}/aplicar-regra-entrada`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setResumoSync(`${data.aplicados} entrada${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente pela regra.`);
+      setMensagemAcao(`${data.aplicados} entrada${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente pela regra.`);
       await carregarTransacoes();
     } catch (err: any) {
       setErroSync(err.message || "Erro ao aplicar regra de entrada");
@@ -564,13 +648,13 @@ export default function ConciliacaoPanel() {
     if (!contaId) return;
     setAplicandoRegraSaida(true);
     setErroSync(null);
-    setResumoSync(null);
+    setMensagemAcao(null);
     setDetalhesRegraSaida([]);
     try {
       const res = await fetch(`/api/financeiro/contas-bancarias/${contaId}/aplicar-regras-saida`, { method: "POST" });
       const data = await lerRespostaJson(res);
       if (!res.ok) throw new Error(data.error);
-      setResumoSync(`${data.aplicados} saída${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente por regras aprendidas (${data.semRegra} sem regra reconhecida ainda).`);
+      setMensagemAcao(`${data.aplicados} saída${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente por regras aprendidas (${data.semRegra} sem regra reconhecida ainda).`);
       setDetalhesRegraSaida(data.detalhes || []);
       await carregarTransacoes();
     } catch (err: any) {
@@ -649,7 +733,7 @@ export default function ConciliacaoPanel() {
 
           <button className="btn btn-gold" onClick={handleSync} disabled={syncing} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {syncStep === "whatsapp" ? <MessageCircle size={16} /> : <Bot size={16} />}
-            {syncStep === "sicoob" ? "Sincronizando extrato..." : syncStep === "whatsapp" ? "Lendo comprovantes..." : "Sincronizar"}
+            {syncStep === "sicoob" ? "Sincronizando extrato..." : syncStep === "whatsapp" ? "Lendo comprovantes... (até 30s)" : "Sincronizar"}
           </button>
         </div>
       </div>
@@ -666,45 +750,63 @@ export default function ConciliacaoPanel() {
         </div>
       )}
 
-      {contaSelecionada?.regraEntradaAtiva && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button className="btn btn-ghost btn-sm" onClick={handleAplicarRegra} disabled={aplicandoRegra}>
-            <Wand2 size={13} /> {aplicandoRegra ? "Aplicando..." : "Aplicar regra de entrada às pendentes"}
-          </button>
-          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
-            Concilia de uma vez todas as entradas pendentes desta conta (de qualquer mês) usando a regra automática configurada.
-          </span>
-        </div>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-        <button className="btn btn-ghost btn-sm" onClick={handleAplicarRegraSaida} disabled={aplicandoRegraSaida}>
-          <Wand2 size={13} /> {aplicandoRegraSaida ? "Aplicando..." : "Aplicar regras aprendidas às pendentes (saída)"}
-        </button>
-        <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
-          Concilia de uma vez todas as saídas pendentes desta conta (de qualquer mês) que batem com um padrão já ensinado (ex: "lembrar esse padrão").
-        </span>
-      </div>
+      {/* VISÃO GERAL — um olhar só pra saber se tem algo pra fazer, sem rolar a tela inteira */}
+      <BarraEstadoGeral
+        pendentesConciliacao={pendentes.length}
+        comprovantesSemResolver={comprovantesSemResolverCount}
+        faturaCartao={faturaCartaoInfo}
+      />
 
       {erroSync && (
         <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.75rem 1rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>
           {erroSync}
         </div>
       )}
-      {resumoSync && !erroSync && (
-        <div style={{ background: "rgba(46,204,113,0.08)", border: "1px solid var(--color-success)", color: "var(--color-success)", padding: "0.75rem 1rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>
-          {resumoSync}
-        </div>
-      )}
+      <ResumoSincronizacao sicoob={resultadoSicoob} whatsapp={resultadoWhatsapp} />
+
+      {/* AUTOMAÇÃO — ações de aplicar regra em massa, recolhidas por padrão: não fazem parte
+          do fluxo principal (sincronizar), são pra quando o usuário quer forçar retroativo. */}
+      <div>
+        <button type="button" onClick={() => setAutomacaoAberta(v => !v)} className="btn btn-ghost btn-sm" style={{ color: "var(--color-muted)" }}>
+          {automacaoAberta ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Automação
+        </button>
+        {automacaoAberta && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginTop: "0.5rem", paddingLeft: "0.25rem" }}>
+            {contaSelecionada?.regraEntradaAtiva && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                <button className="btn btn-ghost btn-sm" onClick={handleAplicarRegra} disabled={aplicandoRegra}>
+                  <Wand2 size={13} /> {aplicandoRegra ? "Aplicando..." : "Aplicar regra de entrada às pendentes"}
+                </button>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+                  Concilia de uma vez todas as entradas pendentes desta conta (de qualquer mês) usando a regra automática configurada.
+                </span>
+              </div>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <button className="btn btn-ghost btn-sm" onClick={handleAplicarRegraSaida} disabled={aplicandoRegraSaida}>
+                <Wand2 size={13} /> {aplicandoRegraSaida ? "Aplicando..." : "Aplicar regras aprendidas às pendentes (saída)"}
+              </button>
+              <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+                Concilia de uma vez todas as saídas pendentes desta conta (de qualquer mês) que batem com um padrão já ensinado (ex: "lembrar esse padrão").
+              </span>
+            </div>
+            {mensagemAcao && (
+              <div style={{ background: "rgba(46,204,113,0.08)", border: "1px solid var(--color-success)", color: "var(--color-success)", padding: "0.6rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.82rem" }}>
+                {mensagemAcao}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <DetalhesSincronizacao detalhesSicoob={detalhesSicoob} detalhesWhatsapp={detalhesWhatsapp} detalhesRegraSaida={detalhesRegraSaida} />
 
-      <ComprovantesPendentesSection refreshTrigger={refreshCartao} onResolvido={() => { setRefreshCartao(n => n + 1); carregarTransacoes(); }} />
+      <ComprovantesPendentesSection refreshTrigger={refreshCartao} onResolvido={() => { setRefreshCartao(n => n + 1); carregarTransacoes(); }} onCountChange={setComprovantesSemResolverCount} />
 
-      <FaturaCartaoSection refreshTrigger={refreshCartao} onConciliado={() => carregarTransacoes()} />
+      <FaturaCartaoSection refreshTrigger={refreshCartao} onConciliado={() => carregarTransacoes()} onCountChange={setFaturaCartaoInfo} />
 
       {/* PENDENTES */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div id="secao-pendentes" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)" }}>
           Pendentes de conciliação ({pendentes.length})
         </div>
