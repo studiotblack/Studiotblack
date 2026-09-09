@@ -7,6 +7,13 @@ export const dynamic = "force-dynamic";
 // Tolerância de diferença de valor pra considerar "o mesmo pagamento" ao casar
 // automaticamente uma transação do extrato com uma conta a pagar/receber em aberto.
 const TOLERANCIA_VALOR = 0.01;
+// Sem isso, duas contas de valor igual (aluguel, salário, comissão — todas recorrentes com
+// o MESMO valor todo mês, e já existem assim neste sistema) podiam trocar de lugar: uma
+// transação de setembro dava baixa automática na conta de outubro só por coincidir o valor
+// e ela estar "mais perto" das outras candidatas. Como essa baixa é automática (sem
+// confirmação manual), o risco real é maior que o do match manual — 15 dias cobre atraso
+// de compensação bancária sem deixar meses de folga.
+const TOLERANCIA_DIAS = 15;
 
 // POST /api/financeiro/contas-bancarias/[id]/sincronizar-sicoob
 // Puxa saldo + extrato reais do Sicoob, salva as transações e tenta conciliar
@@ -100,6 +107,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         SELECT * FROM "LancamentoFinanceiro"
         WHERE tipo = ${tipoAgendamento}
           AND (valor - "valorPago") BETWEEN ${valor - TOLERANCIA_VALOR} AND ${valor + TOLERANCIA_VALOR}
+          AND ABS(COALESCE("dataVencimento"::date, ${data}::date) - ${data}::date) <= ${TOLERANCIA_DIAS}
         ORDER BY ABS("dataVencimento"::date - ${data}::date) ASC
         LIMIT 1
       `;

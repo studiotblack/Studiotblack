@@ -3,6 +3,13 @@ import type { Sql } from "@/lib/financeiro-db";
 // Tolerância de diferença de valor pra considerar "o mesmo pagamento" entre o que o OCR
 // leu no comprovante e o que consta no extrato bancário já importado.
 const TOLERANCIA_VALOR = 0.02;
+// Sem isso, o match pegava a transação de valor mais próximo em QUALQUER data — como esse
+// vínculo é automático (cria e já dá baixa no lançamento sozinho, sem confirmação manual),
+// bastava um valor coincidente pra grudar num comprovante de hoje numa transação de meses
+// atrás. Um comprovante do WhatsApp e a transação bancária correspondente sempre ficam
+// perto um do outro no tempo (o banco processa em no máximo alguns dias), então 15 dias já
+// é folga generosa pra atraso de compensação.
+const TOLERANCIA_DIAS = 15;
 
 export type ResultadoVinculo =
   | { status: "vinculado"; categoria: string | null; contato: string | null; valor: number }
@@ -36,6 +43,7 @@ export async function tentarVincularComprovante(sql: Sql, comp: any): Promise<Re
     SELECT * FROM "TransacaoBancariaImportada"
     WHERE tipo = 'saida' AND status = 'pendente'
       AND valor BETWEEN ${comp.valorOcr - TOLERANCIA_VALOR} AND ${comp.valorOcr + TOLERANCIA_VALOR}
+      AND ABS(data::date - ${dataComp}::date) <= ${TOLERANCIA_DIAS}
     ORDER BY ABS(data::date - ${dataComp}::date) ASC
     LIMIT 1
   `;

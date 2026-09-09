@@ -51,6 +51,10 @@ export async function GET(request: NextRequest) {
           AND t.tipo = 'saida'
           AND t.status = 'pendente'
           AND wc."valorOcr" BETWEEN t.valor - 0.02 AND t.valor + 0.02
+          -- Mesma tolerância de 15 dias usada no vínculo automático (vincular-comprovante.ts)
+          -- — sem isso, um comprovante velho de meses atrás virava "PALPITE" de uma transação
+          -- de hoje só por coincidência de valor.
+          AND ABS(wc."dataHoraEnvio"::date - t.data::date) <= 15
         ORDER BY ABS(wc."dataHoraEnvio"::date - t.data::date)
         LIMIT 1
       ) comp ON true
