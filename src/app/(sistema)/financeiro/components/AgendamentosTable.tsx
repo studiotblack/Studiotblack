@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Check, Search, Trash2, Pencil, Repeat, ChevronDown, ChevronUp, Square, CheckSquare } from "lucide-react";
+import { Plus, Check, Search, Trash2, Pencil, Repeat, ChevronDown, ChevronUp, Square, CheckSquare, Link2 } from "lucide-react";
 import type { Agendamento, TipoAgendamento, StatusAgendamento, CategoriaFinanceira, CentroCusto, ContaBancaria, Contato, BucketAgendamento } from "@/lib/financeiro-data";
 import { statusAgendamento, bucketAgendamento, diasEmAtraso, BUCKET_ORDEM, BUCKET_LABELS, STATUS_LABELS, STATUS_COLORS } from "@/lib/financeiro-data";
 import AgendamentoForm from "./AgendamentoForm";
@@ -14,6 +14,15 @@ const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curren
 const fmtData = (d: string | null | undefined) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "—";
 
 type StatusFiltroUI = "naoQuitados" | StatusAgendamento | "todos";
+
+interface MatchInfo {
+  agendamentoId: string;
+  transacaoId: string;
+  transacaoValor: number;
+  transacaoData: string;
+  transacaoDescricao: string | null;
+  transacaoDescricaoComplementar: string | null;
+}
 
 export default function AgendamentosTable() {
   const [tipo, setTipo] = useState<TipoAgendamento>("pagar");
@@ -30,6 +39,8 @@ export default function AgendamentosTable() {
   const [dataFim, setDataFim] = useState("");
 
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [matches, setMatches] = useState<Map<string, MatchInfo>>(new Map());
+  const [confirmandoMatch, setConfirmandoMatch] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
   const [centros, setCentros] = useState<CentroCusto[]>([]);
   const [contas, setContas] = useState<ContaBancaria[]>([]);
@@ -66,8 +77,13 @@ export default function AgendamentosTable() {
       if (contatoId) params.set("contatoId", contatoId);
       if (dataInicio) params.set("dataInicio", dataInicio);
       if (dataFim) params.set("dataFim", dataFim);
-      const res = await fetch(`/api/financeiro/agendamentos?${params.toString()}`);
+      const [res, resMatches] = await Promise.all([
+        fetch(`/api/financeiro/agendamentos?${params.toString()}`),
+        fetch(`/api/financeiro/agendamentos/matches?tipo=${tipo}`),
+      ]);
       setAgendamentos(res.ok ? await res.json() : []);
+      const matchesArr: MatchInfo[] = resMatches.ok ? await resMatches.json() : [];
+      setMatches(new Map(matchesArr.map(m => [m.agendamentoId, m])));
     } catch (err) {
       console.error("Erro ao carregar agendamentos:", err);
     } finally {
@@ -76,6 +92,27 @@ export default function AgendamentosTable() {
   }, [tipo, statusFiltro, categoriaId, centroCustoId, contaBancariaId, contatoId, dataInicio, dataFim]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Confirma o match sugerido: reaproveita a mesma rota que a tela de Conciliação Bancária
+  // usa pra vincular manualmente uma transação a um agendamento existente — nunca dá baixa
+  // sozinho sem esse clique.
+  const confirmarMatch = async (m: MatchInfo) => {
+    if (!confirm(`Vincular a transação de ${brl(m.transacaoValor)} (${fmtData(m.transacaoData)}) a este agendamento e dar baixa?`)) return;
+    setConfirmandoMatch(m.agendamentoId);
+    try {
+      const res = await fetch(`/api/financeiro/transacoes-bancarias/${m.transacaoId}/conciliar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lancamentoId: m.agendamentoId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      carregar();
+    } catch (err: any) {
+      alert(err.message || "Erro ao confirmar match");
+    } finally {
+      setConfirmandoMatch(null);
+    }
+  };
   // Trocar de Pagar/Receber troca o universo inteiro de linhas — uma seleção antiga não
   // faz mais sentido nesse contexto novo.
   useEffect(() => { setSelecionados(new Set()); }, [tipo]);
@@ -249,7 +286,8 @@ export default function AgendamentosTable() {
             ) : grupos.map(({ bucket, itens }) => (
               <FragmentGrupo key={bucket} bucket={bucket} itens={itens} tipo={tipo}
                 selecionados={selecionados} toggleSelecionado={toggleSelecionado}
-                onBaixa={setBaixaAlvo} onEditar={abrirEdicao} onExcluir={excluir} />
+                onBaixa={setBaixaAlvo} onEditar={abrirEdicao} onExcluir={excluir}
+                matches={matches} confirmandoMatch={confirmandoMatch} onConfirmarMatch={confirmarMatch} />
             ))}
           </tbody>
         </table>
@@ -270,7 +308,7 @@ export default function AgendamentosTable() {
 // ── Um grupo (balde de vencimento) inteiro: cabeçalho com contagem/subtotal + as linhas.
 // "Vencidos" ganha destaque vermelho — é o único grupo que representa urgência de verdade;
 // os outros são só organização.
-function FragmentGrupo({ bucket, itens, tipo, selecionados, toggleSelecionado, onBaixa, onEditar, onExcluir }: {
+function FragmentGrupo({ bucket, itens, tipo, selecionados, toggleSelecionado, onBaixa, onEditar, onExcluir, matches, confirmandoMatch, onConfirmarMatch }: {
   bucket: BucketAgendamento;
   itens: (Agendamento & { status: StatusAgendamento })[];
   tipo: TipoAgendamento;
@@ -279,6 +317,9 @@ function FragmentGrupo({ bucket, itens, tipo, selecionados, toggleSelecionado, o
   onBaixa: (a: Agendamento) => void;
   onEditar: (a: Agendamento) => void;
   onExcluir: (id: string) => void;
+  matches: Map<string, MatchInfo>;
+  confirmandoMatch: string | null;
+  onConfirmarMatch: (m: MatchInfo) => void;
 }) {
   const vencidos = bucket === "vencido";
   const subtotal = itens.reduce((acc, a) => acc + (a.valor - a.valorPago), 0);
@@ -325,6 +366,21 @@ function FragmentGrupo({ bucket, itens, tipo, selecionados, toggleSelecionado, o
             <span className="badge" style={{ background: `${STATUS_COLORS[a.status]}22`, color: STATUS_COLORS[a.status], border: `1px solid ${STATUS_COLORS[a.status]}55` }}>
               {STATUS_LABELS[a.status]}
             </span>
+            {matches.has(a.id) && (() => {
+              const m = matches.get(a.id)!;
+              return (
+                <button
+                  type="button"
+                  onClick={() => onConfirmarMatch(m)}
+                  disabled={confirmandoMatch === a.id}
+                  title={`Saída do banco compatível: ${brl(m.transacaoValor)} em ${fmtData(m.transacaoData)} — ${m.transacaoDescricaoComplementar || m.transacaoDescricao || "sem descrição"}. Clique pra vincular e dar baixa.`}
+                  className="badge"
+                  style={{ marginLeft: "0.4rem", background: "rgba(46,204,113,0.12)", color: "var(--color-success)", border: "1px solid var(--color-success)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.2rem" }}
+                >
+                  <Link2 size={10} /> {confirmandoMatch === a.id ? "..." : "Match"}
+                </button>
+              );
+            })()}
           </td>
           <td style={{ textAlign: "right", fontWeight: 700 }}>{brl(a.valor)}</td>
           <td style={{ textAlign: "right", color: "var(--color-muted)" }}>{brl(a.valorPago)}</td>
