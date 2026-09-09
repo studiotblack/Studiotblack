@@ -468,8 +468,11 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
             {brl(saldoConsolidado)}
           </h2>
           <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
-            {saldoPorConta.length} conta{saldoPorConta.length !== 1 ? "s" : ""} somada{saldoPorConta.length !== 1 ? "s" : ""}
+            {saldoPorConta.length === 1 ? saldoPorConta[0].nome : `${saldoPorConta.length} contas somadas`}
           </span>
+          {saldoPorConta.length === 1 && saldoPorConta[0].saldoReal && (
+            <span style={{ fontSize: "0.65rem", color: "var(--color-success)" }}>● Saldo real (Sicoob)</span>
+          )}
         </div>
 
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
@@ -498,25 +501,28 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
         </div>
       </div>
 
-      {/* ── Saldo por conta bancária ─────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem" }}>
-        {saldoPorConta.map(c => (
-          <div key={c.id} className="kpi-card">
-            <span style={{ fontSize: "0.75rem", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-              <Landmark size={12} /> {c.nome}
-            </span>
-            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "4px 0 0 0", color: c.saldoAtual >= 0 ? "var(--color-cream)" : "var(--color-danger)" }}>
-              {brl(c.saldoAtual)}
-            </h2>
-            {c.saldoReal && <span style={{ fontSize: "0.65rem", color: "var(--color-success)" }}>● Saldo real (Sicoob)</span>}
-          </div>
-        ))}
-        {contas.length === 0 && (
-          <div className="card" style={{ color: "var(--color-muted)", fontSize: "0.85rem" }}>
-            Nenhuma conta bancária cadastrada ainda — cadastre em Cadastros → Contas Bancárias.
-          </div>
-        )}
-      </div>
+      {/* ── Saldo por conta bancária — só faz sentido com 2+ contas; com 1 só, é a mesma
+           informação do card "Saldo em Caixa Hoje" logo acima, repetida à toa. ──────── */}
+      {saldoPorConta.length > 1 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem" }}>
+          {saldoPorConta.map(c => (
+            <div key={c.id} className="kpi-card">
+              <span style={{ fontSize: "0.75rem", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                <Landmark size={12} /> {c.nome}
+              </span>
+              <h2 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "4px 0 0 0", color: c.saldoAtual >= 0 ? "var(--color-cream)" : "var(--color-danger)" }}>
+                {brl(c.saldoAtual)}
+              </h2>
+              {c.saldoReal && <span style={{ fontSize: "0.65rem", color: "var(--color-success)" }}>● Saldo real (Sicoob)</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {contas.length === 0 && (
+        <div className="card" style={{ color: "var(--color-muted)", fontSize: "0.85rem" }}>
+          Nenhuma conta bancária cadastrada ainda — cadastre em Cadastros → Contas Bancárias.
+        </div>
+      )}
 
       {/* ── Linha 3: Cruzamento Financeiro × Performance ─────────────────────── */}
       <div className="divider-text">Financeiro × Performance</div>
