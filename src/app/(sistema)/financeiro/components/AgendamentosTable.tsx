@@ -41,6 +41,7 @@ export default function AgendamentosTable() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [matches, setMatches] = useState<Map<string, MatchInfo>>(new Map());
   const [confirmandoMatch, setConfirmandoMatch] = useState<string | null>(null);
+  const [matchAlvo, setMatchAlvo] = useState<MatchInfo | null>(null);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
   const [centros, setCentros] = useState<CentroCusto[]>([]);
   const [contas, setContas] = useState<ContaBancaria[]>([]);
@@ -93,11 +94,12 @@ export default function AgendamentosTable() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  // Confirma o match sugerido: reaproveita a mesma rota que a tela de Conciliação Bancária
-  // usa pra vincular manualmente uma transação a um agendamento existente — nunca dá baixa
-  // sozinho sem esse clique.
-  const confirmarMatch = async (m: MatchInfo) => {
-    if (!confirm(`Vincular a transação de ${brl(m.transacaoValor)} (${fmtData(m.transacaoData)}) a este agendamento e dar baixa?`)) return;
+  // Match sugerido: abre o modal de confirmação (em vez do confirm() nativo do navegador,
+  // fora do padrão visual do resto do sistema) — a vinculação em si só acontece depois do
+  // clique em "Confirmar" no modal, nunca dá baixa sozinho.
+  const confirmarMatch = (m: MatchInfo) => setMatchAlvo(m);
+
+  const executarMatch = async (m: MatchInfo) => {
     setConfirmandoMatch(m.agendamentoId);
     try {
       const res = await fetch(`/api/financeiro/transacoes-bancarias/${m.transacaoId}/conciliar`, {
@@ -106,6 +108,7 @@ export default function AgendamentosTable() {
         body: JSON.stringify({ lancamentoId: m.agendamentoId }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
+      setMatchAlvo(null);
       carregar();
     } catch (err: any) {
       alert(err.message || "Erro ao confirmar match");
@@ -295,6 +298,26 @@ export default function AgendamentosTable() {
 
       <AgendamentoForm isOpen={showForm} onClose={fecharForm} onSaved={carregar} tipoInicial={tipo} editando={editando} />
       <BaixaModal agendamento={baixaAlvo} onClose={() => setBaixaAlvo(null)} onSaved={carregar} />
+      {matchAlvo && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 420 }}>
+            <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--color-border)" }}>
+              <h2 style={{ fontSize: "1.05rem", fontWeight: 600, margin: 0 }}>Confirmar vínculo</h2>
+            </div>
+            <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <p style={{ fontSize: "0.9rem", color: "var(--color-cream)", margin: 0, lineHeight: 1.5 }}>
+                Vincular a transação de <strong>{brl(matchAlvo.transacaoValor)}</strong> ({fmtData(matchAlvo.transacaoData)}) a este agendamento e dar baixa?
+              </p>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setMatchAlvo(null)}>Cancelar</button>
+                <button type="button" className="btn btn-gold" disabled={confirmandoMatch === matchAlvo.agendamentoId} onClick={() => executarMatch(matchAlvo)}>
+                  {confirmandoMatch === matchAlvo.agendamentoId ? "Vinculando..." : "Confirmar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showBaixaLote && (
         <BaixaEmLoteModal agendamentos={selecionadosComSaldo} onClose={() => setShowBaixaLote(false)} onSaved={() => { setSelecionados(new Set()); carregar(); }} />
       )}

@@ -3,10 +3,14 @@ import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 
 export const dynamic = "force-dynamic";
 
-// Mesma tolerância de valor usada em ConciliacaoPanel.tsx (agendamentosCompativeis) pra
-// sugerir o match no sentido contrário (transação -> agendamento) — aqui é o mesmo cálculo,
-// só que partindo do agendamento pra achar a transação bancária compatível.
+// Mesma tolerância de valor e data usada em ConciliacaoPanel.tsx (agendamentosCompativeis)
+// pra sugerir o match no sentido contrário (transação -> agendamento) — aqui é o mesmo
+// cálculo, só que partindo do agendamento pra achar a transação bancária compatível.
 const TOLERANCIA_VALOR = 5;
+// Sem isso, uma conta de setembro/2026 podia "casar" com uma transação de novembro/2025 só
+// porque o valor batia — o valor sozinho não basta, tem que ser perto da data também (o
+// pagamento real de uma conta acontece perto do vencimento, não meses/anos de distância).
+const TOLERANCIA_DIAS = 45;
 
 // GET /api/financeiro/agendamentos/matches?tipo=pagar
 // Pra cada agendamento em aberto do tipo pedido, acha a transação bancária pendente (saída
@@ -36,6 +40,7 @@ export async function GET(request: NextRequest) {
         ON t.tipo = ${tipoTransacao}
         AND t.status = 'pendente'
         AND t.valor BETWEEN (l.valor - l."valorPago") - ${TOLERANCIA_VALOR} AND (l.valor - l."valorPago") + ${TOLERANCIA_VALOR}
+        AND ABS(t.data::date - COALESCE(l."dataVencimento", t.data)::date) <= ${TOLERANCIA_DIAS}
       WHERE l.tipo = ${tipo} AND l."valorPago" < l.valor
       ORDER BY l.id,
         ABS(t.valor - (l.valor - l."valorPago")) ASC,

@@ -674,12 +674,21 @@ export default function ConciliacaoPanel() {
   // resolve isso na sincronização; o que sobra pendente aqui raramente bate perfeitinho,
   // então uma tolerância pequena pra revisão manual é o suficiente).
   const TOLERANCIA_SUGESTAO = 5;
+  // Valor sozinho não basta: sem limite de data, uma conta de setembro/2026 aparecia como
+  // sugestão pra uma transação de novembro/2025 só porque o valor batia por coincidência.
+  const TOLERANCIA_DIAS_SUGESTAO = 45;
   const agendamentosCompativeis = (tx: TransacaoBancariaImportada) => {
     const tipoAlvo = tx.tipo === "entrada" ? "receber" : "pagar";
+    const dataTx = new Date(tx.data).getTime();
     return agendamentos
       .filter(a => a.tipo === tipoAlvo)
       .filter(a => statusAgendamento(a) !== "pago")
       .filter(a => Math.abs((a.valor - a.valorPago) - tx.valor) <= TOLERANCIA_SUGESTAO)
+      .filter(a => {
+        const dataRef = a.dataVencimento ? new Date(a.dataVencimento).getTime() : dataTx;
+        const diasDiff = Math.abs(dataTx - dataRef) / (1000 * 60 * 60 * 24);
+        return diasDiff <= TOLERANCIA_DIAS_SUGESTAO;
+      })
       .sort((a, b) => Math.abs((a.valor - a.valorPago) - tx.valor) - Math.abs((b.valor - b.valorPago) - tx.valor));
   };
 
