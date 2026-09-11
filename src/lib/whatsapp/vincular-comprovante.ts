@@ -1,4 +1,5 @@
 import type { Sql } from "@/lib/financeiro-db";
+import { DESCRICOES_GENERICAS_BANCO } from "@/lib/regra-conciliacao";
 
 // Tolerância de diferença de valor pra considerar "o mesmo pagamento" entre o que o OCR
 // leu no comprovante e o que consta no extrato bancário já importado.
@@ -58,8 +59,9 @@ export async function tentarVincularComprovante(sql: Sql, comp: any): Promise<Re
   const complementarLower = (transacao.descricaoComplementar || "").toLowerCase();
   const [regra] = await sql`
     SELECT * FROM "RegraConciliacaoBancaria"
-    WHERE ${descricaoLower} LIKE '%' || "padraoDescricao" || '%'
-       OR ${complementarLower} LIKE '%' || "padraoDescricao" || '%'
+    WHERE (${descricaoLower} LIKE '%' || "padraoDescricao" || '%'
+       OR ${complementarLower} LIKE '%' || "padraoDescricao" || '%')
+       AND "padraoDescricao" <> ALL(${DESCRICOES_GENERICAS_BANCO})
     ORDER BY LENGTH("padraoDescricao") DESC
     LIMIT 1
   `;

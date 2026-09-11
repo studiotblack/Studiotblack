@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
+import { DESCRICOES_GENERICAS_BANCO } from "@/lib/regra-conciliacao";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +45,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         FROM "RegraConciliacaoBancaria" r
         JOIN "Contato" c ON c.id = r."contatoId"
         LEFT JOIN "CategoriaFinanceira" cat ON cat.id = r."categoriaId"
-        WHERE ${descricaoLower} LIKE '%' || r."padraoDescricao" || '%'
-           OR ${complementarLower} LIKE '%' || r."padraoDescricao" || '%'
+        WHERE (${descricaoLower} LIKE '%' || r."padraoDescricao" || '%'
+           OR ${complementarLower} LIKE '%' || r."padraoDescricao" || '%')
+           AND r."padraoDescricao" <> ALL(${DESCRICOES_GENERICAS_BANCO})
         ORDER BY LENGTH(r."padraoDescricao") DESC
         LIMIT 1
       `;

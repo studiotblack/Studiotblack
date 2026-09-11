@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
+import { regraEhGenericaDemais } from "@/lib/regra-conciliacao";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,16 @@ export async function POST(request: NextRequest) {
     const b = await request.json();
     if (!b.padraoDescricao || !b.contatoId) {
       return NextResponse.json({ error: "padraoDescricao e contatoId são obrigatórios" }, { status: 400 });
+    }
+    // "déb.tit.compe efetivado", "pix emitido outra if" etc. são rótulos genéricos que o
+    // próprio banco usa pra QUALQUER transação de um tipo inteiro — nunca identificam uma
+    // contraparte específica. Aprender uma regra em cima só desse texto já causou dano real:
+    // recategorizou automaticamente uma compra completamente diferente só por coincidência
+    // de rótulo. Ver src/lib/regra-conciliacao.ts.
+    if (regraEhGenericaDemais(b.padraoDescricao)) {
+      return NextResponse.json({
+        error: `"${b.padraoDescricao}" é um rótulo genérico do banco (usado em várias transações não relacionadas), não identifica esse pagamento específico — não dá pra confiar nele pra reconhecer automaticamente pagamentos futuros.`,
+      }, { status: 400 });
     }
     const [row] = await sql`
       INSERT INTO "RegraConciliacaoBancaria" (id, "padraoDescricao", "contatoId", "categoriaId", "centroCustoId", descricao)
