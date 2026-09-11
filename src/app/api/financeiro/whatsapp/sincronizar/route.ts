@@ -89,16 +89,31 @@ export async function POST() {
     }
     await log(`depois de gravar os novos — ${comprovantesNovos.length} novo(s), ${jaExistiam} já existia(m), ${paraOcr.length} precisam de OCR`);
 
-    // 2b. OCR só pra um número limitado de imagens por execução, pra nunca estourar o
-    // orçamento de 60s — as que sobrarem já estão salvas (passo acima), só ficam sem valor
-    // reconhecido automaticamente até o usuário preencher na tela "Comprovantes do WhatsApp
-    // sem resolver" (não tem como tentar de novo sozinho numa sincronização futura: a
-    // mensagem original do WhatsApp só existe em memória durante ESTA execução).
+    // Orçamento de tempo pro que falta rodar (OCR + loop de match) — sem isso, o
+    // MAX_OCR_POR_EXECUCAO abaixo não protege nada: já vimos em produção uma execução só
+    // com a conexão do WhatsApp consumir ~23s, e o Tesseract sozinho (cold start do worker
+    // + reconhecimento) estourar os ~37s restantes processando UMA imagem só, matando a
+    // função no limite duro de 60s da Vercel (o cliente recebe um 504 com corpo que não é
+    // JSON, sem nenhum log daqui pra frente). 45s deixa ~15s de folga real pro resto rodar
+    // e a resposta ser serializada — cada loop abaixo checa esse relógio a cada iteração e
+    // para de propósito, devolvendo uma resposta 200 válida com o que deu tempo de fazer,
+    // em vez de arriscar ser morto sem aviso.
+    const TEMPO_LIMITE_MS = 45_000;
+    const tempoEsgotado = () => Date.now() - inicio > TEMPO_LIMITE_MS;
+
+    // 2b. OCR só pra um número limitado de imagens por execução — as que sobrarem já estão
+    // salvas (passo acima), só ficam sem valor reconhecido automaticamente até o usuário
+    // preencher na tela "Comprovantes do WhatsApp sem resolver" (não tem como tentar de novo
+    // sozinho numa sincronização futura: a mensagem original do WhatsApp só existe em
+    // memória durante ESTA execução).
     const MAX_OCR_POR_EXECUCAO = 4;
     const paraProcessar = paraOcr.slice(0, MAX_OCR_POR_EXECUCAO);
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
+    let ocrProcessadas = 0;
+    let ocrParouPorTempo = false;
     try {
       for (const { msg, comprovanteId } of paraProcessar) {
+        if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
         try {
           const buffer = await downloadMediaMessage(msg, "buffer", {});
           if (!worker) worker = await createWorker("por");
@@ -107,6 +122,7 @@ export async function POST() {
           await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW() WHERE id = ${comprovanteId}`;
           const item = comprovantesNovos.find((c) => c.id === comprovanteId);
           if (item) { item.valorOcr = valorOcr; item.textoOcr = data.text; }
+          ocrProcessadas++;
         } catch (err) {
           console.error("[whatsapp/sincronizar] Erro no OCR:", err);
         }
@@ -114,7 +130,7 @@ export async function POST() {
     } finally {
       if (worker) await worker.terminate();
     }
-    await log(`depois do OCR — ${paraProcessar.length} processada(s) de ${paraOcr.length} pendente(s) de OCR`);
+    await log(`depois do OCR — ${ocrProcessadas} processada(s) de ${paraProcessar.length}${ocrParouPorTempo ? " (parou por orçamento de tempo)" : ""}`);
 
     // 3. Roda o match pra TODO comprovante ainda pendente (não só os capturados agora) —
     // um comprovante de uma sincronização anterior, cuja transação bancária correspondente
@@ -125,6 +141,7 @@ export async function POST() {
     let vinculados = 0;
     let semCorrespondencia = 0;
     let cartaoRegistrado = 0;
+    let matchParouPorTempo = false;
 
     // Lista detalhada do que rolou com cada comprovante — sem isso, o resumo só dizia "1
     // vinculado, 1 sem correspondência" sem dizer QUAL comprovante, com QUE valor/legenda,
@@ -132,6 +149,7 @@ export async function POST() {
     const detalhes: Array<{ legenda: string | null; valor: number | null; dataEnvio: string; status: string; categoria: string | null; contato: string | null }> = [];
 
     for (const comp of comprovantesPendentes) {
+      if (tempoEsgotado()) { matchParouPorTempo = true; break; }
       // Compra no cartão de crédito, marcada manualmente pelo usuário (legenda com "cartao")
       // — nunca vai bater 1:1 com uma transação bancária (a fatura só debita em uma saída só,
       // somando várias compras, lá na frente), então em vez de tentar o match normal, acumula
@@ -195,7 +213,7 @@ export async function POST() {
       }
     }
 
-    await log("fim do loop de match — respondendo");
+    await log(`fim do loop de match${matchParouPorTempo ? " (parou por orçamento de tempo)" : ""} — respondendo`);
     return NextResponse.json({
       ok: true,
       mensagensLidas: mensagens.length,
@@ -205,6 +223,10 @@ export async function POST() {
       semCorrespondencia,
       cartaoRegistrado,
       detalhes,
+      // Sinaliza que sobrou trabalho pra próxima sincronização (OCR ou match cortados pelo
+      // orçamento de tempo) — sem isso, o usuário não tem como saber que "deu certo, mas
+      // incompleto" e não "travou nada".
+      pausadoPorTempo: ocrParouPorTempo || matchParouPorTempo,
     });
   } catch (error: any) {
     console.error("[POST /api/financeiro/whatsapp/sincronizar]", error);

@@ -461,8 +461,9 @@ function ResumoSincronizacao({ sicoob, whatsapp }: { sicoob: any; whatsapp: any 
   const novos = (sicoob?.novos || 0) + (whatsapp?.novos || 0);
   const resolvidos = (sicoob?.autoConciliados || 0) + (whatsapp?.vinculados || 0) + (whatsapp?.cartaoRegistrado || 0);
   const atencao = whatsapp?.semCorrespondencia || 0;
+  const pausado = !!whatsapp?.pausadoPorTempo;
 
-  if (novos === 0 && resolvidos === 0 && atencao === 0) {
+  if (novos === 0 && resolvidos === 0 && atencao === 0 && !pausado) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.7rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-muted)", fontSize: "0.85rem" }}>
         <CheckCircle2 size={16} /> Tudo em dia — nenhuma novidade desde a última sincronização.
@@ -487,6 +488,14 @@ function ResumoSincronizacao({ sicoob, whatsapp }: { sicoob: any; whatsapp: any 
         }}>
           {atencao} precisa{atencao === 1 ? "" : "m"} da sua atenção →
         </a>
+      )}
+      {pausado && (
+        <span
+          title="O OCR ou o pareamento de comprovantes demorou demais e a sincronização parou de propósito antes do limite de tempo — o que sobrou continua pendente e será retomado na próxima sincronização."
+          style={{ background: "var(--color-surface-2)", color: "var(--color-muted)", border: "1px solid var(--color-border)", padding: "0.4rem 0.75rem", borderRadius: "999px", fontSize: "0.78rem" }}
+        >
+          Parte ficou pra próxima sincronização (tempo esgotado)
+        </span>
       )}
     </div>
   );
