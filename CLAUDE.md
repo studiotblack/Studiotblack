@@ -34,6 +34,19 @@ tolerância de data (15 dias pra ações automáticas, 45 dias pra sugestões co
 confirmação manual — o "Match" do Contas a Pagar e o `agendamentosCompativeis`
 da Conciliação Bancária).
 
+**Mesma regra vale pra "regra aprendida" (`RegraConciliacaoBancaria`) — nunca
+casar por rótulo genérico do banco.** Descrições como "déb.tit.compe
+efetivado", "pix emitido outra if" são rótulos de TIPO de transação que o
+próprio Sicoob usa pra qualquer liquidação/pix, não identificam nenhuma
+contraparte específica. Uma regra aprendida uma vez em cima de um rótulo
+desses recategoriza (e concilia sozinho, sem confirmação) toda transação
+futura do mesmo tipo — já aconteceu de verdade (uma compra de lixeira
+elétrica "roubou" a transação de uma lavagem de toalhas completamente sem
+relação). Denylist desses rótulos em `src/lib/regra-conciliacao.ts`,
+aplicado tanto na hora de aprender a regra (POST /regras-conciliacao) quanto
+em toda leitura (sync automático do Sicoob, "aplicar regras" manual,
+vínculo do WhatsApp).
+
 **WhatsApp (Baileys) só entrega cada mensagem UMA vez** — não tem como "pedir
 de novo" depois. Se a função for morta pelo timeout da Vercel (60s) antes de
 salvar uma mensagem no banco, ela some pra sempre. Por isso
