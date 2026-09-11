@@ -54,6 +54,10 @@ export default function AgendamentosTable() {
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [showBaixaLote, setShowBaixaLote] = useState(false);
   const [showCategorizarLote, setShowCategorizarLote] = useState(false);
+  const [excluirAlvoId, setExcluirAlvoId] = useState<string | null>(null);
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
+  const [confirmandoExcluirLote, setConfirmandoExcluirLote] = useState(false);
+  const [excluindoLote, setExcluindoLote] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -120,11 +124,20 @@ export default function AgendamentosTable() {
   // faz mais sentido nesse contexto novo.
   useEffect(() => { setSelecionados(new Set()); }, [tipo]);
 
-  const excluir = async (id: string) => {
-    if (!confirm("Excluir este agendamento? (só é possível se não tiver nenhuma baixa registrada)")) return;
-    const res = await fetch(`/api/financeiro/agendamentos/${id}`, { method: "DELETE" });
-    if (!res.ok) alert((await res.json()).error || "Erro ao excluir");
-    carregar();
+  // Excluir (individual e em lote) também abre modal temático em vez do confirm() nativo
+  // — mesmo espírito da confirmação de Match acima.
+  const excluir = (id: string) => setExcluirAlvoId(id);
+
+  const executarExclusao = async (id: string) => {
+    setExcluindoId(id);
+    try {
+      const res = await fetch(`/api/financeiro/agendamentos/${id}`, { method: "DELETE" });
+      if (!res.ok) alert((await res.json()).error || "Erro ao excluir");
+      setExcluirAlvoId(null);
+      carregar();
+    } finally {
+      setExcluindoId(null);
+    }
   };
 
   const abrirNovo = () => { setEditando(null); setShowForm(true); };
@@ -171,16 +184,23 @@ export default function AgendamentosTable() {
   const agendamentosSelecionados = agendamentos.filter(a => selecionados.has(a.id));
   const selecionadosComSaldo = agendamentosSelecionados.filter(a => a.valor - a.valorPago > 0.009);
 
-  const excluirSelecionados = async () => {
-    if (!confirm(`Excluir ${selecionados.size} agendamento(s) selecionado(s)? (só os sem baixa registrada serão excluídos)`)) return;
-    let ok = 0, falhas: string[] = [];
-    for (const a of agendamentosSelecionados) {
-      const res = await fetch(`/api/financeiro/agendamentos/${a.id}`, { method: "DELETE" });
-      if (res.ok) ok++; else falhas.push(`${a.descricao}: ${(await res.json()).error || "erro"}`);
+  const excluirSelecionados = () => setConfirmandoExcluirLote(true);
+
+  const executarExclusaoLote = async () => {
+    setExcluindoLote(true);
+    try {
+      let ok = 0, falhas: string[] = [];
+      for (const a of agendamentosSelecionados) {
+        const res = await fetch(`/api/financeiro/agendamentos/${a.id}`, { method: "DELETE" });
+        if (res.ok) ok++; else falhas.push(`${a.descricao}: ${(await res.json()).error || "erro"}`);
+      }
+      setSelecionados(new Set());
+      setConfirmandoExcluirLote(false);
+      carregar();
+      if (falhas.length > 0) alert(`${ok} excluído(s). ${falhas.length} não puderam ser excluídos:\n${falhas.join("\n")}`);
+    } finally {
+      setExcluindoLote(false);
     }
-    setSelecionados(new Set());
-    carregar();
-    if (falhas.length > 0) alert(`${ok} excluído(s). ${falhas.length} não puderam ser excluídos:\n${falhas.join("\n")}`);
   };
 
   return (
@@ -312,6 +332,51 @@ export default function AgendamentosTable() {
                 <button type="button" className="btn btn-ghost" onClick={() => setMatchAlvo(null)}>Cancelar</button>
                 <button type="button" className="btn btn-gold" disabled={confirmandoMatch === matchAlvo.agendamentoId} onClick={() => executarMatch(matchAlvo)}>
                   {confirmandoMatch === matchAlvo.agendamentoId ? "Vinculando..." : "Confirmar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {excluirAlvoId && (() => {
+        const alvo = agendamentos.find(a => a.id === excluirAlvoId);
+        return (
+          <div className="modal-overlay">
+            <div className="modal-box" style={{ maxWidth: 420 }}>
+              <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--color-border)" }}>
+                <h2 style={{ fontSize: "1.05rem", fontWeight: 600, margin: 0 }}>Excluir agendamento</h2>
+              </div>
+              <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <p style={{ fontSize: "0.9rem", color: "var(--color-cream)", margin: 0, lineHeight: 1.5 }}>
+                  Excluir {alvo ? <>"<strong>{alvo.descricao}</strong>"</> : "este agendamento"}? Só é possível se não tiver
+                  nenhuma baixa registrada.
+                </p>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+                  <button type="button" className="btn btn-ghost" onClick={() => setExcluirAlvoId(null)}>Cancelar</button>
+                  <button type="button" className="btn btn-gold" disabled={excluindoId === excluirAlvoId} onClick={() => executarExclusao(excluirAlvoId)}>
+                    {excluindoId === excluirAlvoId ? "Excluindo..." : "Excluir"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {confirmandoExcluirLote && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 420 }}>
+            <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--color-border)" }}>
+              <h2 style={{ fontSize: "1.05rem", fontWeight: 600, margin: 0 }}>Excluir selecionados</h2>
+            </div>
+            <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <p style={{ fontSize: "0.9rem", color: "var(--color-cream)", margin: 0, lineHeight: 1.5 }}>
+                Excluir {selecionados.size} agendamento{selecionados.size === 1 ? "" : "s"} selecionado{selecionados.size === 1 ? "" : "s"}?
+                Só os sem baixa registrada serão excluídos.
+              </p>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setConfirmandoExcluirLote(false)}>Cancelar</button>
+                <button type="button" className="btn btn-gold" disabled={excluindoLote} onClick={executarExclusaoLote}>
+                  {excluindoLote ? "Excluindo..." : "Excluir"}
                 </button>
               </div>
             </div>
