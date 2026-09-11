@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createWorker } from "tesseract.js";
+import path from "node:path";
 import { downloadMediaMessage, type WAMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
@@ -13,6 +14,16 @@ export const dynamic = "force-dynamic";
 // ~30s que o coletarMensagensDoGrupo já leva só esperando o backlog do WhatsApp — a
 // função nunca tinha chance de terminar, o que também ajuda a explicar o "trava".
 export const maxDuration = 60;
+
+// Sem "langPath" explícito, o tesseract.js baixa o modelo de idioma (~8MB) de um CDN
+// externo (jsdelivr) TODA VEZ que cria o worker — foi isso, não o reconhecimento em si,
+// que consumia 30-40s e matava a função pelo limite de 60s da Vercel (confirmado: todo
+// comprovante pendente tinha textoOcr NULO, ou seja, o OCR nunca chegava a terminar nem
+// uma vez). Apontar pro pacote @tesseract.js-data/por já instalado localmente elimina
+// essa rede por completo — mas como esse caminho só existe como string aqui (nunca é
+// importado via require/import), precisa do outputFileTracingIncludes em next.config.ts
+// pra Vercel incluir esses arquivos no deploy; senão o build "esquece" deles.
+const TESSERACT_LANG_PATH = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "por", "4.0.0_best_int");
 
 // POST /api/financeiro/whatsapp/sincronizar
 // Lê os comprovantes novos do grupo do WhatsApp configurado, tenta ler o valor de cada
@@ -116,7 +127,7 @@ export async function POST() {
         if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
         try {
           const buffer = await downloadMediaMessage(msg, "buffer", {});
-          if (!worker) worker = await createWorker("por");
+          if (!worker) worker = await createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" });
           const { data } = await worker.recognize(buffer);
           const valorOcr = extrairValor(data.text);
           await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW() WHERE id = ${comprovanteId}`;

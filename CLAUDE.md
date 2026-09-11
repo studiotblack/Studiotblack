@@ -48,6 +48,20 @@ de tempo direto no Postgres durante a sincronização — sobrevive mesmo se o
 processo for morto no meio da execução, ao contrário de `console.log`
 bufferizado que pode não chegar a tempo no agregador de logs.
 
+**`tesseract.js` sem `langPath` explícito baixa o modelo de idioma (~8MB) de
+um CDN externo (jsdelivr) TODA VEZ que cria o worker** — nenhuma função
+serverless (sem disco persistente) se beneficia do cache do pacote. Era a
+causa real de vários "504" na sincronização do WhatsApp: o download sozinho
+consumia 30-40s do orçamento de 60s da função, sem nenhuma relação com o
+tamanho da imagem ou a qualidade do OCR. Confirmado batendo a tabela
+`SyncDiagnostico` (o log parava sempre logo depois de "gravar os novos",
+nunca chegava em "depois do OCR") contra o pacote `@tesseract.js-data/por`
+instalado localmente — `createWorker` caiu de 30-40s pra ~500ms apontando
+`langPath` pro pacote local. Como esse caminho só existe como string (nunca
+é `require`/`import`), precisa do `outputFileTracingIncludes` em
+`next.config.ts` também — senão o rastreamento de arquivos da Vercel não
+inclui o pacote no deploy e o `langPath` aponta pro vazio em produção.
+
 ## Convenções de UI já estabelecidas
 
 - **Nunca usar `confirm()`/`alert()` nativos do navegador** — fora do padrão
