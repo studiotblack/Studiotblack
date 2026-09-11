@@ -38,23 +38,29 @@ const ITENS_POR_PAGINA = 10;
 // com a legenda certa), ou ignorar.
 function ComprovantesPendentesSection({ refreshTrigger, onResolvido, onCountChange }: { refreshTrigger: number; onResolvido: () => void; onCountChange: (n: number) => void }) {
   const [itens, setItens] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // "carregado" (não "loading") — sem essa distinção, TODA atualização da lista (inclusive
+  // as disparadas pelos próprios cards, tipo "salvar valor e tentar vincular" sem achar
+  // correspondência) escondia a seção inteira por um instante enquanto recarregava. Como
+  // cada <ComprovanteCard> é desmontado quando a seção vira `null`, isso apagava o estado
+  // local de TODOS os cards junto — inclusive a mensagem de erro que o card acabou de
+  // mostrar ("Salvo, mas ainda sem correspondência..."), fazendo parecer que nada aconteceu.
+  // Só esconde a seção antes do primeiro carregamento; depois disso, atualiza em silêncio.
+  const [carregado, setCarregado] = useState(false);
 
   const carregar = async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/financeiro/whatsapp/comprovantes");
       const data = res.ok ? await res.json() : [];
       setItens(data);
       onCountChange(data.length);
     } finally {
-      setLoading(false);
+      setCarregado(true);
     }
   };
 
   useEffect(() => { carregar(); }, [refreshTrigger]);
 
-  if (loading || itens.length === 0) return null;
+  if (!carregado || itens.length === 0) return null;
 
   return (
     <div id="secao-comprovantes" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -214,12 +220,14 @@ function ComprovanteCard({ item, onResolvido }: { item: any; onResolvido: () => 
 function FaturaCartaoSection({ refreshTrigger, onConciliado, onCountChange }: { refreshTrigger: number; onConciliado: () => void; onCountChange: (info: { pendentes: number; sugestoes: number; somaPendentes: number }) => void }) {
   const [pendentes, setPendentes] = useState<any[]>([]);
   const [sugestoes, setSugestoes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Mesmo cuidado do ComprovantesPendentesSection logo acima: só esconde a seção antes do
+  // primeiro carregamento, nunca de novo depois — senão toda atualização em segundo plano
+  // (ex: depois de confirmar uma fatura) desmonta e remonta a seção inteira à toa.
+  const [carregado, setCarregado] = useState(false);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [erro, setErro] = useState("");
 
   const carregar = async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/financeiro/cartao-credito/sugestoes");
       const data = await res.json();
@@ -229,7 +237,7 @@ function FaturaCartaoSection({ refreshTrigger, onConciliado, onCountChange }: { 
       setSugestoes(sug);
       onCountChange({ pendentes: pend.length, sugestoes: sug.length, somaPendentes: pend.reduce((acc: number, c: any) => acc + c.valorParcela, 0) });
     } finally {
-      setLoading(false);
+      setCarregado(true);
     }
   };
 
@@ -250,7 +258,7 @@ function FaturaCartaoSection({ refreshTrigger, onConciliado, onCountChange }: { 
     }
   };
 
-  if (loading || (pendentes.length === 0 && sugestoes.length === 0)) return null;
+  if (!carregado || (pendentes.length === 0 && sugestoes.length === 0)) return null;
 
   const porMes = pendentes.reduce((acc: Record<string, any[]>, c: any) => {
     (acc[c.mesReferencia] ||= []).push(c);
