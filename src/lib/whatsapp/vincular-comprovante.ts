@@ -40,7 +40,7 @@ export async function tentarVincularComprovante(sql: Sql, comp: any): Promise<Re
   }
 
   const dataComp = new Date(comp.dataHoraEnvio).toISOString().slice(0, 10);
-  const [transacao] = await sql`
+  let [transacao] = await sql`
     SELECT * FROM "TransacaoBancariaImportada"
     WHERE tipo = 'saida' AND status = 'pendente'
       AND valor BETWEEN ${comp.valorOcr - TOLERANCIA_VALOR} AND ${comp.valorOcr + TOLERANCIA_VALOR}
@@ -48,6 +48,33 @@ export async function tentarVincularComprovante(sql: Sql, comp: any): Promise<Re
     ORDER BY ABS(data::date - ${dataComp}::date) ASC
     LIMIT 1
   `;
+
+  // Sem transação pendente — mas pode já ter sido "roubada" por uma regra aprendida
+  // automática (fornecedor recorrente, ex: um Marketplace) antes do comprovante ter a
+  // chance. Acontece porque o OCR só resolve o valor DEPOIS (às vezes bem depois — o
+  // usuário corrige na mão dias mais tarde), então no momento em que o extrato do Sicoob
+  // chegou, o comprovante ainda não tinha valor nenhum pra proteger a transação. Se achar
+  // uma transação já conciliada SÓ por regra automática (nunca uma conciliação manual real)
+  // com o mesmo valor/data, desfaz esse vínculo genérico e usa a transação aqui — o
+  // comprovante traz o item específico da compra, sempre mais correto que o nome do
+  // fornecedor aprendido.
+  let lancamentoRegraParaDesfazer: string | null = null;
+  if (!transacao) {
+    const [candidata] = await sql`
+      SELECT t.* FROM "TransacaoBancariaImportada" t
+      JOIN "Baixa" b ON b."lancamentoId" = t."lancamentoId"
+      WHERE t.tipo = 'saida' AND t.status = 'conciliado'
+        AND t.valor BETWEEN ${comp.valorOcr - TOLERANCIA_VALOR} AND ${comp.valorOcr + TOLERANCIA_VALOR}
+        AND ABS(t.data::date - ${dataComp}::date) <= ${TOLERANCIA_DIAS}
+        AND b.observacao ILIKE '%regra%aprendida%'
+      ORDER BY ABS(t.data::date - ${dataComp}::date) ASC
+      LIMIT 1
+    `;
+    if (candidata) {
+      lancamentoRegraParaDesfazer = candidata.lancamentoId;
+      transacao = candidata;
+    }
+  }
   if (!transacao) {
     return { status: "sem_correspondencia", motivo: "nenhuma transação bancária com esse valor/data" };
   }
@@ -76,6 +103,15 @@ export async function tentarVincularComprovante(sql: Sql, comp: any): Promise<Re
   }
 
   await sql.begin(async (sql) => {
+    // Se essa transação estava presa num lançamento genérico criado só por regra
+    // automática, desmancha esse vínculo primeiro (limpa os dependentes antes, já que o
+    // lançamento antigo só pode ser removido depois que a transação apontar pro novo).
+    if (lancamentoRegraParaDesfazer) {
+      await sql`DELETE FROM "Baixa" WHERE "lancamentoId" = ${lancamentoRegraParaDesfazer}`;
+      await sql`DELETE FROM "LancamentoFinanceiroCategoria" WHERE "lancamentoId" = ${lancamentoRegraParaDesfazer}`;
+      await sql`DELETE FROM "LancamentoFinanceiroCentroCusto" WHERE "lancamentoId" = ${lancamentoRegraParaDesfazer}`;
+    }
+
     const [novoLancamento] = await sql`
       INSERT INTO "LancamentoFinanceiro"
         (tipo, "contatoId", valor, "valorPago", "dataVencimento", "dataCompetencia", descricao, "contaBancariaId")
@@ -106,6 +142,10 @@ export async function tentarVincularComprovante(sql: Sql, comp: any): Promise<Re
     await sql`
       UPDATE "WhatsappComprovante" SET status = 'vinculado', "transacaoBancariaId" = ${transacao.id} WHERE id = ${comp.id}
     `;
+
+    if (lancamentoRegraParaDesfazer) {
+      await sql`DELETE FROM "LancamentoFinanceiro" WHERE id = ${lancamentoRegraParaDesfazer}`;
+    }
   });
 
   const [contatoNome] = await sql`SELECT nome FROM "Contato" WHERE id = ${contatoId}`;
