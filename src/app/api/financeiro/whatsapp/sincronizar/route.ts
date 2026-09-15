@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createWorker } from "tesseract.js";
 import path from "node:path";
+import fs from "node:fs";
 import { downloadMediaMessage, type WAMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
@@ -136,12 +137,24 @@ export async function POST() {
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     let ocrProcessadas = 0;
     let ocrParouPorTempo = false;
+
+    // Confirmado (build local): o arquivo do modelo de português ESTÁ no manifesto de
+    // rastreamento de arquivos da rota (.nft.json), então outputFileTracingIncludes está
+    // funcionando. Mas createWorker ainda estava travando (>10s) em produção mesmo assim —
+    // preciso saber SE é porque o caminho monta errado no ambiente da Vercel (process.cwd()
+    // pode resolver diferente lá) ou se é só o cold start do worker_thread sendo genuinamente
+    // mais lento que no meu ambiente local. Esse log tira a dúvida na próxima execução real,
+    // em vez de eu continuar mudando código às cegas.
+    if (paraProcessar.length > 0) {
+      const arquivoModelo = path.join(TESSERACT_LANG_PATH, "por.traineddata.gz");
+      await log(`diagnóstico langPath — cwd: ${process.cwd()} | langPath existe: ${fs.existsSync(TESSERACT_LANG_PATH)} | arquivo do modelo existe: ${fs.existsSync(arquivoModelo)}`);
+    }
     try {
       for (const { msg, comprovanteId } of paraProcessar) {
         if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
         try {
           const buffer = await comTimeout(downloadMediaMessage(msg, "buffer", {}), 15_000, "download da mídia do WhatsApp travou (>15s)");
-          if (!worker) worker = await comTimeout(createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" }), 10_000, "criação do worker do Tesseract travou (>10s)");
+          if (!worker) worker = await comTimeout(createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" }), 20_000, "criação do worker do Tesseract travou (>20s)");
           const { data } = await comTimeout(worker.recognize(buffer), 15_000, "reconhecimento OCR travou (>15s)");
           const valorOcr = extrairValor(data.text);
           await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW() WHERE id = ${comprovanteId}`;
