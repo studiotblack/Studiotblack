@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createWorker } from "tesseract.js";
 import path from "node:path";
-import fs from "node:fs";
 import { downloadMediaMessage, type WAMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
@@ -75,6 +74,18 @@ export async function POST() {
       return NextResponse.json({ error: "WhatsApp ainda não pareado. Rode o script de pareamento primeiro." }, { status: 400 });
     }
 
+    // Confirmado em produção (log "langPath existe: true, arquivo do modelo existe: true"):
+    // o arquivo do modelo NÃO é o problema — é o próprio createWorker (criar o worker_thread
+    // + inicializar o núcleo WASM do Tesseract) que é genuinamente lento na CPU mais
+    // limitada da Vercel (>20s, contra ~500ms no meu ambiente local). Como a conexão do
+    // WhatsApp logo abaixo já leva uns 22-24s SÓ ESPERANDO (não é CPU-bound), inicia o
+    // worker aqui, EM PARALELO, antes de saber se vai ter algo pra fazer OCR — as duas
+    // esperas lentas se sobrepõem em vez de somar, então quando o loop de OCR precisar do
+    // worker (lá na frente), ele já está pronto ou bem mais perto disso. Se no fim não
+    // precisar (nenhum comprovante novo sem valor), só descarta.
+    const workerPromise = createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" })
+      .catch((err) => { console.error("[whatsapp/sincronizar] Erro ao pré-aquecer worker do Tesseract:", err); return null; });
+
     // 1. Conecta e coleta as mensagens de imagem novas do grupo
     await log("antes de conectar no WhatsApp");
     const mensagens = await coletarMensagensDoGrupo(sql, grupoJid, log);
@@ -138,23 +149,25 @@ export async function POST() {
     let ocrProcessadas = 0;
     let ocrParouPorTempo = false;
 
-    // Confirmado (build local): o arquivo do modelo de português ESTÁ no manifesto de
-    // rastreamento de arquivos da rota (.nft.json), então outputFileTracingIncludes está
-    // funcionando. Mas createWorker ainda estava travando (>10s) em produção mesmo assim —
-    // preciso saber SE é porque o caminho monta errado no ambiente da Vercel (process.cwd()
-    // pode resolver diferente lá) ou se é só o cold start do worker_thread sendo genuinamente
-    // mais lento que no meu ambiente local. Esse log tira a dúvida na próxima execução real,
-    // em vez de eu continuar mudando código às cegas.
-    if (paraProcessar.length > 0) {
-      const arquivoModelo = path.join(TESSERACT_LANG_PATH, "por.traineddata.gz");
-      await log(`diagnóstico langPath — cwd: ${process.cwd()} | langPath existe: ${fs.existsSync(TESSERACT_LANG_PATH)} | arquivo do modelo existe: ${fs.existsSync(arquivoModelo)}`);
+    if (paraProcessar.length === 0) {
+      // Ninguém precisa do worker pré-aquecido nessa execução — descarta em segundo plano
+      // (sem bloquear a resposta) em vez de deixar um worker_thread pendurado à toa.
+      workerPromise.then((w) => w?.terminate()).catch(() => {});
     }
     try {
       for (const { msg, comprovanteId } of paraProcessar) {
         if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
         try {
           const buffer = await comTimeout(downloadMediaMessage(msg, "buffer", {}), 15_000, "download da mídia do WhatsApp travou (>15s)");
-          if (!worker) worker = await comTimeout(createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" }), 20_000, "criação do worker do Tesseract travou (>20s)");
+          if (!worker) {
+            // Já foi pedido pra começar lá atrás (em paralelo com a conexão do WhatsApp) —
+            // o tempo restante do orçamento geral é a única espera de verdade daqui, não
+            // mais os 20s inteiros: se o worker já ficou pronto durante a espera do
+            // WhatsApp, essa await resolve na hora.
+            const tempoRestante = Math.max(1_000, TEMPO_LIMITE_MS - (Date.now() - inicio));
+            worker = await comTimeout(workerPromise, tempoRestante, `worker do Tesseract não ficou pronto a tempo (>${Math.round(tempoRestante / 1000)}s restantes)`);
+            if (!worker) throw new Error("worker do Tesseract falhou ao inicializar (veja log de erro acima)");
+          }
           const { data } = await comTimeout(worker.recognize(buffer), 15_000, "reconhecimento OCR travou (>15s)");
           const valorOcr = extrairValor(data.text);
           await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW() WHERE id = ${comprovanteId}`;
