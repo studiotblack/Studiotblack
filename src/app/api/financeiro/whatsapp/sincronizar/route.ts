@@ -25,6 +25,20 @@ export const maxDuration = 60;
 // pra Vercel incluir esses arquivos no deploy; senão o build "esquece" deles.
 const TESSERACT_LANG_PATH = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "por", "4.0.0_best_int");
 
+// Nenhuma chamada de rede/CPU externa (baixar a mídia do WhatsApp, criar o worker do
+// Tesseract, rodar o reconhecimento) tinha um teto de tempo próprio — o orçamento de
+// TEMPO_LIMITE_MS abaixo só é checado ENTRE itens do loop, então se uma dessas chamadas
+// travar de verdade no meio (ex: CDN de mídia do WhatsApp lenta/sem resposta), a função
+// fica presa nela até o limite duro de 60s da Vercel, do mesmo jeito que o download do
+// modelo do Tesseract travava antes. Corrida contra um timeout garante que NENHUMA
+// chamada individual consiga travar a função inteira, não importa o motivo.
+function comTimeout<T>(promise: Promise<T>, ms: number, mensagem: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(mensagem)), ms)),
+  ]);
+}
+
 // POST /api/financeiro/whatsapp/sincronizar
 // Lê os comprovantes novos do grupo do WhatsApp configurado, tenta ler o valor de cada
 // imagem via OCR, casa com uma transação de SAÍDA ainda pendente na Conciliação Bancária
@@ -126,16 +140,18 @@ export async function POST() {
       for (const { msg, comprovanteId } of paraProcessar) {
         if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
         try {
-          const buffer = await downloadMediaMessage(msg, "buffer", {});
-          if (!worker) worker = await createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" });
-          const { data } = await worker.recognize(buffer);
+          const buffer = await comTimeout(downloadMediaMessage(msg, "buffer", {}), 15_000, "download da mídia do WhatsApp travou (>15s)");
+          if (!worker) worker = await comTimeout(createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" }), 10_000, "criação do worker do Tesseract travou (>10s)");
+          const { data } = await comTimeout(worker.recognize(buffer), 15_000, "reconhecimento OCR travou (>15s)");
           const valorOcr = extrairValor(data.text);
           await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW() WHERE id = ${comprovanteId}`;
           const item = comprovantesNovos.find((c) => c.id === comprovanteId);
           if (item) { item.valorOcr = valorOcr; item.textoOcr = data.text; }
           ocrProcessadas++;
+          await log(`OCR ${comprovanteId} concluído — valor: ${valorOcr}`);
         } catch (err) {
           console.error("[whatsapp/sincronizar] Erro no OCR:", err);
+          await log(`OCR ${comprovanteId} falhou — ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     } finally {
