@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
 
   const origem = new URL(request.url).origin;
   const resultado: any = { sicoob: [], whatsapp: null };
+  // Repassa o mesmo header pras chamadas internas — o middleware de sessão bloqueia
+  // qualquer /api/financeiro/* sem cookie de login OU esse bearer (ver src/middleware.ts).
+  const headersCron: Record<string, string> = cronSecret ? { authorization: `Bearer ${cronSecret}` } : {};
 
   const sql = getDb();
   try {
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
       try {
         const res = await fetch(`${origem}/api/financeiro/contas-bancarias/${conta.id}/sincronizar-sicoob`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...headersCron },
           body: JSON.stringify({}),
         });
         const data = await res.json().catch(() => ({}));
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const res = await fetch(`${origem}/api/financeiro/whatsapp/sincronizar`, { method: "POST" });
+    const res = await fetch(`${origem}/api/financeiro/whatsapp/sincronizar`, { method: "POST", headers: headersCron });
     resultado.whatsapp = { ok: res.ok, ...(await res.json().catch(() => ({}))) };
   } catch (err: any) {
     resultado.whatsapp = { ok: false, error: err?.message };

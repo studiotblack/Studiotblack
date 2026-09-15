@@ -294,6 +294,8 @@ export async function ensureFinanceiroTables(sql: Sql) {
   `;
   // JID do grupo do WhatsApp de onde vêm os comprovantes de saída pra conciliação automática
   await sql`ALTER TABLE "MetaFinanceira" ADD COLUMN IF NOT EXISTS "whatsappGrupoJid" TEXT`;
+  // JID do grupo do WhatsApp que recebe o aviso semanal de contas a pagar vencidas/da semana
+  await sql`ALTER TABLE "MetaFinanceira" ADD COLUMN IF NOT EXISTS "whatsappGrupoAvisosJid" TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS "Transferencia" (
