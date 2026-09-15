@@ -140,6 +140,28 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       // (ex: usuário conciliou "Sabesp" manualmente uma vez e marcou "lembrar esse padrão"),
       // cria e já baixa o lançamento sozinho, sem precisar repetir a conciliação manual.
       if (tipo === "saida") {
+        // ANTES de aplicar a regra, checa se tem um comprovante do WhatsApp ainda pendente
+        // esperando exatamente esse valor/data — se tiver, deixa essa transação livre pro
+        // passo de vinculação do WhatsApp pegar (roda logo depois, no mesmo clique de
+        // "Sincronizar"). Já aconteceu mais de uma vez, com o mesmo fornecedor recorrente:
+        // a regra "rouba" a transação antes do comprovante ter a chance, e o comprovante
+        // fica pra sempre "sem correspondência" mesmo a transação existindo — a regra só
+        // traz o nome genérico do fornecedor aprendido, o comprovante traz o item real da
+        // compra, então o comprovante merece prioridade quando os dois disputam a mesma
+        // transação.
+        const [comprovanteEsperando] = await sql`
+          SELECT id FROM "WhatsappComprovante"
+          WHERE status = 'pendente' AND "valorOcr" IS NOT NULL
+            AND "valorOcr" BETWEEN ${valor - 0.02} AND ${valor + 0.02}
+            AND ABS("dataHoraEnvio"::date - ${data}::date) <= 15
+          LIMIT 1
+        `;
+        if (comprovanteEsperando) {
+          pendentes++;
+          detalhes.push({ data, valor, tipo, descricao, status: "pendente (comprovante do WhatsApp aguardando esse valor/data)", categoria: null });
+          continue;
+        }
+
         // Checa tanto a descrição genérica quanto a complementar — é nela que mora o
         // nome/documento da contraparte do Pix, o que de fato identifica "o mesmo lugar"
         // entre pagamentos (a descrição sozinha, tipo "PIX EMITIDO OUTRA IF", é igual pra

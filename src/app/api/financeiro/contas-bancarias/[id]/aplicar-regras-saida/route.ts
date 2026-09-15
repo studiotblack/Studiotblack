@@ -38,6 +38,18 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     const detalhes: Array<{ data: string; valor: number; descricao: string; contato: string; categoria: string | null }> = [];
 
     for (const t of pendentes) {
+      // Mesmo cuidado do sync automático do Sicoob: se tem um comprovante do WhatsApp
+      // pendente esperando esse valor/data, deixa essa transação livre pra ele — a regra só
+      // traz o nome genérico do fornecedor, o comprovante traz o item real da compra.
+      const [comprovanteEsperando] = await sql`
+        SELECT id FROM "WhatsappComprovante"
+        WHERE status = 'pendente' AND "valorOcr" IS NOT NULL
+          AND "valorOcr" BETWEEN ${t.valor - 0.02} AND ${t.valor + 0.02}
+          AND ABS("dataHoraEnvio"::date - ${t.data}::date) <= 15
+        LIMIT 1
+      `;
+      if (comprovanteEsperando) { continue; }
+
       const descricaoLower = (t.descricao || "").toLowerCase();
       const complementarLower = (t.descricaoComplementar || "").toLowerCase();
       const [regra] = await sql`
