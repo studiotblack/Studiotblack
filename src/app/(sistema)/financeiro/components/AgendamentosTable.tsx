@@ -32,6 +32,7 @@ export default function AgendamentosTable() {
   const [busca, setBusca] = useState("");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [categoriaId, setCategoriaId] = useState("");
+  const [semCategoria, setSemCategoria] = useState(false);
   const [centroCustoId, setCentroCustoId] = useState("");
   const [contaBancariaId, setContaBancariaId] = useState("");
   const [contatoId, setContatoId] = useState("");
@@ -152,8 +153,9 @@ export default function AgendamentosTable() {
         if (statusFiltro === "naoQuitados") return a.status !== "pago";
         return a.status === statusFiltro;
       })
-      .filter(a => !busca || a.descricao.toLowerCase().includes(busca.toLowerCase()) || a.contatoNome?.toLowerCase().includes(busca.toLowerCase()));
-  }, [agendamentos, statusFiltro, busca]);
+      .filter(a => !busca || a.descricao.toLowerCase().includes(busca.toLowerCase()) || a.contatoNome?.toLowerCase().includes(busca.toLowerCase()))
+      .filter(a => !semCategoria || !a.categoriaNome);
+  }, [agendamentos, statusFiltro, busca, semCategoria]);
 
   const grupos = useMemo(() => {
     const mapa = new Map<BucketAgendamento, typeof filtrados>();
@@ -229,6 +231,10 @@ export default function AgendamentosTable() {
           <option value="pago">Quitado</option>
           <option value="todos">Todos os status</option>
         </select>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", color: "var(--color-cream-dim)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          <input type="checkbox" checked={semCategoria} onChange={e => setSemCategoria(e.target.checked)} />
+          Só sem categoria
+        </label>
         <button onClick={() => setFiltrosAbertos(v => !v)} className="btn btn-ghost btn-sm">
           Mais filtros {filtrosAbertos ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </button>
