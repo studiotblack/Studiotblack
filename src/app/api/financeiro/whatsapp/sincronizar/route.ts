@@ -138,27 +138,53 @@ export async function POST() {
     const TEMPO_LIMITE_MS = 45_000;
     const tempoEsgotado = () => Date.now() - inicio > TEMPO_LIMITE_MS;
 
-    // 2b. OCR só pra um número limitado de imagens por execução — as que sobrarem já estão
-    // salvas (passo acima), só ficam sem valor reconhecido automaticamente até o usuário
-    // preencher na tela "Comprovantes do WhatsApp sem resolver" (não tem como tentar de novo
-    // sozinho numa sincronização futura: a mensagem original do WhatsApp só existe em
-    // memória durante ESTA execução).
+    // 2b. Baixa e guarda os BYTES da imagem de cada comprovante novo que precisa de OCR —
+    // ANTES de tentar reconhecer o valor. Sem isso, o buffer só existia na memória desta
+    // execução: se o OCR estourasse o orçamento de tempo (createWorker do Tesseract é
+    // genuinamente instável na Vercel — já vimos de ~2s a mais de 40s pra ficar pronto,
+    // no mesmo tipo de execução), a imagem se perdia pra sempre, porque o WhatsApp só
+    // entrega cada mensagem uma vez. Guardando o buffer assim que baixa, uma sincronização
+    // futura pode tentar de novo pra qualquer comprovante pendente com imagem salva — não
+    // fica mais preso pra sempre só porque o worker não esquentou a tempo dessa vez.
+    let downloadParouPorTempo = false;
+    let imagensBaixadas = 0;
+    for (const { msg, comprovanteId } of paraOcr) {
+      if (tempoEsgotado()) { downloadParouPorTempo = true; break; }
+      try {
+        const buffer = await comTimeout(downloadMediaMessage(msg, "buffer", {}), 15_000, "download da mídia do WhatsApp travou (>15s)");
+        await sql`UPDATE "WhatsappComprovante" SET "imagemBuffer" = ${buffer as Buffer} WHERE id = ${comprovanteId}`;
+        imagensBaixadas++;
+      } catch (err) {
+        console.error("[whatsapp/sincronizar] Erro ao baixar imagem:", err);
+        await log(`download da imagem ${comprovanteId} falhou — ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    await log(`depois de baixar imagens — ${imagensBaixadas} de ${paraOcr.length}${downloadParouPorTempo ? " (parou por orçamento de tempo)" : ""}`);
+
+    // 2c. OCR só pra um número limitado de comprovantes por execução — busca direto no
+    // banco (não só os coletados agora) pra incluir backlog de execuções anteriores que
+    // tinham imagem salva mas não deu tempo/o worker não ficou pronto. Prioriza os mais
+    // antigos primeiro, pra nenhum ficar esperando pra sempre.
     const MAX_OCR_POR_EXECUCAO = 4;
-    const paraProcessar = paraOcr.slice(0, MAX_OCR_POR_EXECUCAO);
+    const candidatosOcr = await sql`
+      SELECT id, "imagemBuffer" FROM "WhatsappComprovante"
+      WHERE status = 'pendente' AND "valorOcr" IS NULL AND "imagemBuffer" IS NOT NULL
+      ORDER BY "dataHoraEnvio" ASC
+      LIMIT ${MAX_OCR_POR_EXECUCAO}
+    `;
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     let ocrProcessadas = 0;
     let ocrParouPorTempo = false;
 
-    if (paraProcessar.length === 0) {
+    if (candidatosOcr.length === 0) {
       // Ninguém precisa do worker pré-aquecido nessa execução — descarta em segundo plano
       // (sem bloquear a resposta) em vez de deixar um worker_thread pendurado à toa.
       workerPromise.then((w) => w?.terminate()).catch(() => {});
     }
     try {
-      for (const { msg, comprovanteId } of paraProcessar) {
+      for (const cand of candidatosOcr) {
         if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
         try {
-          const buffer = await comTimeout(downloadMediaMessage(msg, "buffer", {}), 15_000, "download da mídia do WhatsApp travou (>15s)");
           if (!worker) {
             // Já foi pedido pra começar lá atrás (em paralelo com a conexão do WhatsApp) —
             // o tempo restante do orçamento geral é a única espera de verdade daqui, não
@@ -168,22 +194,24 @@ export async function POST() {
             worker = await comTimeout(workerPromise, tempoRestante, `worker do Tesseract não ficou pronto a tempo (>${Math.round(tempoRestante / 1000)}s restantes)`);
             if (!worker) throw new Error("worker do Tesseract falhou ao inicializar (veja log de erro acima)");
           }
-          const { data } = await comTimeout(worker.recognize(buffer), 15_000, "reconhecimento OCR travou (>15s)");
+          const { data } = await comTimeout(worker.recognize(cand.imagemBuffer as Buffer), 15_000, "reconhecimento OCR travou (>15s)");
           const valorOcr = extrairValor(data.text);
-          await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW() WHERE id = ${comprovanteId}`;
-          const item = comprovantesNovos.find((c) => c.id === comprovanteId);
+          // Sucesso: limpa o buffer guardado — não precisa mais dele, e não faz sentido
+          // acumular imagem no banco além do necessário pra tentar de novo.
+          await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW(), "imagemBuffer" = NULL WHERE id = ${cand.id}`;
+          const item = comprovantesNovos.find((c) => c.id === cand.id);
           if (item) { item.valorOcr = valorOcr; item.textoOcr = data.text; }
           ocrProcessadas++;
-          await log(`OCR ${comprovanteId} concluído — valor: ${valorOcr}`);
+          await log(`OCR ${cand.id} concluído — valor: ${valorOcr}`);
         } catch (err) {
           console.error("[whatsapp/sincronizar] Erro no OCR:", err);
-          await log(`OCR ${comprovanteId} falhou — ${err instanceof Error ? err.message : String(err)}`);
+          await log(`OCR ${cand.id} falhou — ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     } finally {
       if (worker) await worker.terminate();
     }
-    await log(`depois do OCR — ${ocrProcessadas} processada(s) de ${paraProcessar.length}${ocrParouPorTempo ? " (parou por orçamento de tempo)" : ""}`);
+    await log(`depois do OCR — ${ocrProcessadas} processada(s) de ${candidatosOcr.length}${ocrParouPorTempo ? " (parou por orçamento de tempo)" : ""}`);
 
     // 3. Roda o match pra TODO comprovante ainda pendente (não só os capturados agora) —
     // um comprovante de uma sincronização anterior, cuja transação bancária correspondente
@@ -279,7 +307,7 @@ export async function POST() {
       // Sinaliza que sobrou trabalho pra próxima sincronização (OCR ou match cortados pelo
       // orçamento de tempo) — sem isso, o usuário não tem como saber que "deu certo, mas
       // incompleto" e não "travou nada".
-      pausadoPorTempo: ocrParouPorTempo || matchParouPorTempo,
+      pausadoPorTempo: downloadParouPorTempo || ocrParouPorTempo || matchParouPorTempo,
     });
   } catch (error: any) {
     console.error("[POST /api/financeiro/whatsapp/sincronizar]", error);

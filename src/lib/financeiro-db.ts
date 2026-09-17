@@ -251,6 +251,14 @@ export async function ensureFinanceiroTables(sql: Sql) {
   // depois, no momento de decidir se é uma compra no cartão (o valor em si já foi extraído
   // na hora, mas o texto completo não ficava salvo em lugar nenhum antes disso).
   await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "textoOcr" TEXT`;
+  // Bytes da imagem, guardados assim que baixados do WhatsApp — ANTES de tentar o OCR.
+  // Sem isso, o buffer só existia na memória da execução: se o OCR estourasse o orçamento
+  // de tempo (createWorker do Tesseract é instável na Vercel — já vimos de 2s a mais de
+  // 40s pra ficar pronto), a imagem se perdia pra sempre, porque o WhatsApp só entrega cada
+  // mensagem uma vez (não tem como "pedir de novo"). Guardando o buffer logo que baixa,
+  // uma sincronização futura pode tentar o OCR de novo — limpo (setado NULL) depois que o
+  // OCR resolve o valor com sucesso, pra não acumular imagem sem necessidade.
+  await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "imagemBuffer" BYTEA`;
 
   // Parcelas de compras no cartão de crédito, marcadas manualmente (legenda "cartao" no
   // comprovante) — ficam acumuladas aqui até a fatura inteira (soma de várias) aparecer
