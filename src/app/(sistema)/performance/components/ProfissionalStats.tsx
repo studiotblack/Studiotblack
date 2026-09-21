@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { User, Scissors, DollarSign, Percent, Target, TrendingUp } from "lucide-react";
 import {
-  DesempenhoProfissional, getProfissionaisUnicos, catalogoServicos, catalogoProdutos, TaxaOcupacaoImportada, normalizeProfName
+  DesempenhoProfissional, getProfissionaisUnicos, catalogoServicos, TaxaOcupacaoImportada, normalizeProfName, isProduto
 } from "@/lib/performance-data";
 import { ConfigMetasType } from "./ConfigMetas";
 
@@ -89,8 +89,6 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
     return data.filter(d => d.profissional === selectedProf);
   }, [data, selectedProf]);
 
-  const nomeProdutos = useMemo(() => new Set(catalogoProdutos.map(p => p.nome.toLowerCase())), []);
-
   // Todos os meses com dados (comissão ou ocupação) para este profissional, do mais recente ao mais antigo
   const mesesDisponiveis = useMemo(() => {
     const normalizedProf = normalizeProfName(selectedProf);
@@ -126,9 +124,6 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
     return profData.filter(d => parseMesAno(d.data) === selectedMesAno);
   }, [profData, selectedMesAno]);
 
-  // Classificação simples: produto = item cujo nome consta no catálogo de produtos; todo o resto é serviço
-  const isProduto = (item: string) => nomeProdutos.has(item.toLowerCase().trim());
-
   // Mês anterior ao selecionado (pra comparação nos cartões e no gráfico semanal) — mesma
   // lógica de cálculo do mês atual, só que aplicada aos dados desse mês anterior.
   const previousMesAno = useMemo(() => {
@@ -162,7 +157,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
     const cortesRealizados = rows.filter(d => d.item.toLowerCase().includes("corte")).length;
     const servicosExtras = rows.filter(d => !d.item.toLowerCase().includes("corte") && !!catalogoServicos[d.item]).length;
     const conversaoExtra = (servicosExtras / clientesUnicos) * 100;
-    const produtosVendidos = rows.filter(d => nomeProdutos.has(d.item.toLowerCase()) || (!catalogoServicos[d.item] && !d.item.toLowerCase().includes("corte"))).length;
+    const produtosVendidos = rows.filter(d => isProduto(d.item)).length;
     const conversaoProduto = (produtosVendidos / clientesUnicos) * 100;
     const ticketMedioCliente = rows.length === 0 ? 0 : faturado / clientesUnicos;
     const servicosPorCliente = rows.length === 0 ? 0 : totalServicos / clientesUnicos;
@@ -198,7 +193,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
   const conversaoExtra = (servicosExtras / clientesUnicos) * 100;
   
   // Produtos = estão no catálogo de produtos (busca pelo nome)
-  const produtosVendidos = currentMonthData.filter(d => nomeProdutos.has(d.item.toLowerCase()) || (!catalogoServicos[d.item] && !d.item.toLowerCase().includes("corte"))).length;
+  const produtosVendidos = currentMonthData.filter(d => isProduto(d.item)).length;
   const conversaoProduto = (produtosVendidos / clientesUnicos) * 100;
   
   const ticketMedioCliente = faturado / clientesUnicos;
@@ -385,7 +380,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
 
   // Top Produtos deste profissional
   const topProdutosProf = useMemo(() => {
-    const produtosData = profData.filter(d => nomeProdutos.has(d.item.toLowerCase()) || (!catalogoServicos[d.item] && !d.item.toLowerCase().includes("corte")));
+    const produtosData = profData.filter(d => isProduto(d.item));
     const contagem: Record<string, { valor: number, qtd: number }> = {};
     produtosData.forEach(d => {
       if (!contagem[d.item]) contagem[d.item] = { valor: 0, qtd: 0 };
@@ -396,7 +391,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
       .map(([name, val]) => ({ name, Faturado: val.valor, Quantidade: val.qtd }))
       .sort((a, b) => b.Faturado - a.Faturado)
       .slice(0, 5);
-  }, [profData, nomeProdutos]);
+  }, [profData]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {

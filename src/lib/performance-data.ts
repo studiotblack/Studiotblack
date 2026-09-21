@@ -41,7 +41,7 @@ export const catalogoServicos: Record<string, { tempo: number; comissao: number;
   "Avaliação/Mechas ( FEMININA )": { tempo: 20, comissao: 0.35, preco: 550 },
   "Avaliação/Mechas ( MASCULINA)": { tempo: 20, comissao: 0.35, preco: 300 },
   "Avaliação/Tratamento Capilar ( Masculina e Feminina )": { tempo: 20, comissao: 0.40, preco: 0 },
-  "Avaliaçõa/Coloração retoque de raiz": { tempo: 20, comissao: 0.35, preco: 160 },
+  "Avaliação/Coloração retoque de raiz": { tempo: 20, comissao: 0.35, preco: 160 },
   "Barba": { tempo: 40, comissao: 0.35, preco: 60 },
   "Barba e depilação": { tempo: 40, comissao: 0.35, preco: 90 },
   "Brown Lamination": { tempo: 80, comissao: 0.60, preco: 120 },
@@ -361,5 +361,22 @@ export const getTotalComissao = (data: DesempenhoProfissional[]) => {
 
 const nomeProdutosSet = new Set(catalogoProdutos.map(p => p.nome.toLowerCase()));
 
-// Classifica um item de venda como Produto (vs Serviço) — mesmo critério usado em ProfissionalStats.tsx
-export const isProduto = (item: string): boolean => nomeProdutosSet.has((item || "").toLowerCase().trim());
+// O AppBarber às vezes exporta o mesmo serviço com espaçamento diferente entre uma venda e
+// outra (ex: "Taperedcut  Primeira Vez" com espaço duplo) — comparando por chave normalizada
+// (colapsando espaços) em vez do nome exato, essas variações continuam batendo com o catálogo.
+const normalizarNomeItem = (s: string) => (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+const nomesServicosNormalizados = new Set(Object.keys(catalogoServicos).map(normalizarNomeItem));
+
+// Classifica um item de venda como Produto (vs Serviço). Além do catálogo oficial de produtos,
+// trata como produto qualquer item que não bata (nem exato, nem por espaçamento) com o catálogo
+// de serviços e não pareça um corte — sem esse fallback, um produto novo vendido no AppBarber
+// (ainda sem entrada em catalogoProdutos) tinha a comissão contada como se fosse serviço até
+// alguém lembrar de cadastrar o produto aqui. Foi exatamente isso que aconteceu com "Mousse
+// Raise" e "ÓLEO SÉRUM WS" em setembro/2026: a comissão de produtos do Henrique apareceu R$41
+// menor no sistema do que no relatório do AppBarber, porque nenhum dos dois estava no catálogo.
+export const isProduto = (item: string): boolean => {
+  const nome = normalizarNomeItem(item);
+  if (nomeProdutosSet.has(nome)) return true;
+  if (nomesServicosNormalizados.has(nome)) return false;
+  return !nome.includes("corte");
+};

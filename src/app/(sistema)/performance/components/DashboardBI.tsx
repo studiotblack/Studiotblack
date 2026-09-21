@@ -9,7 +9,7 @@ import { Target, TrendingUp, DollarSign, Users, Award, Ticket, Percent } from "l
 import {
   DesempenhoProfissional, getProfissionaisUnicos,
   getServicosMaisRealizados, getTotalFaturado, getTotalComissao,
-  catalogoServicos, TaxaOcupacaoImportada, catalogoProdutos, normalizeProfName
+  TaxaOcupacaoImportada, normalizeProfName, isProduto
 } from "@/lib/performance-data";
 import { ConfigMetasType } from "./ConfigMetas";
 
@@ -142,17 +142,14 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
 
   // Evolução Histórica de Serviços x Produtos x Comissões Mês a Mês
   const evolucaoServicosProdutosMensal = useMemo(() => {
-    const nomeProdutos = new Set(catalogoProdutos.map(p => p.nome.toLowerCase()));
-    const isProd = (item: string) => nomeProdutos.has(item.toLowerCase().trim());
-    
     const records: Record<string, { servicos: number, produtos: number, comissao: number }> = {};
     data.forEach(d => {
       const parts = d.data.split(" ")[0].split("/");
       if (parts.length >= 3) {
         const mesAno = `${parts[1]}/${parts[2]}`;
         if (!records[mesAno]) records[mesAno] = { servicos: 0, produtos: 0, comissao: 0 };
-        
-        if (isProd(d.item)) {
+
+        if (isProduto(d.item)) {
           records[mesAno].produtos += d.valorBruto;
         } else {
           records[mesAno].servicos += d.valorBruto;
@@ -194,8 +191,7 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
   }, [ocupacao]);
 
   const topProdutos = useMemo(() => {
-    const nomeProdutos = new Set(catalogoProdutos.map(p => p.nome.toLowerCase()));
-    const produtosData = filteredData.filter(d => nomeProdutos.has(d.item.toLowerCase()) || (!catalogoServicos[d.item] && !d.item.toLowerCase().includes("corte")));
+    const produtosData = filteredData.filter(d => isProduto(d.item));
     
     const contagem: Record<string, { valor: number, qtd: number }> = {};
     produtosData.forEach(d => {
