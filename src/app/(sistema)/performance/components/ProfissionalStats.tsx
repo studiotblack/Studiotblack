@@ -43,6 +43,18 @@ interface ProfissionalStatsProps {
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// Pequeno número de comparação embaixo do valor principal de um cartão — só aparece quando
+// o mês anterior tem dados de verdade (senão "Mês anterior: R$0,00" passaria a impressão
+// errada de que o profissional não faturou nada, quando na real é que não tem registro).
+const MesAnteriorLabel = ({ valor, formatar, mostrar }: { valor: number; formatar: (v: number) => string; mostrar: boolean }) => {
+  if (!mostrar) return null;
+  return (
+    <div style={{ fontSize: "0.7rem", color: "var(--color-muted)", marginTop: "0.35rem" }}>
+      Mês anterior: {formatar(valor)}
+    </div>
+  );
+};
+
 const renderPieSliceLabel = (props: any) => {
   const { cx, cy, midAngle, outerRadius, percent } = props;
   const RADIAN = Math.PI / 180;
@@ -117,6 +129,52 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
   // Classificação simples: produto = item cujo nome consta no catálogo de produtos; todo o resto é serviço
   const isProduto = (item: string) => nomeProdutos.has(item.toLowerCase().trim());
 
+  // Mês anterior ao selecionado (pra comparação nos cartões e no gráfico semanal) — mesma
+  // lógica de cálculo do mês atual, só que aplicada aos dados desse mês anterior.
+  const previousMesAno = useMemo(() => {
+    if (!selectedMesAno) return "";
+    const [m, y] = selectedMesAno.split("/").map(Number);
+    const d = new Date(y, m - 2, 1); // m é 1-indexado; m-2 cai no mês anterior
+    return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  }, [selectedMesAno]);
+
+  const previousMonthData = useMemo(() => {
+    if (!previousMesAno) return [];
+    return profData.filter(d => parseMesAno(d.data) === previousMesAno);
+  }, [profData, previousMesAno]);
+
+  const temDadosMesAnterior = previousMonthData.length > 0;
+
+  const computeStats = (rows: DesempenhoProfissional[]) => {
+    const servicosRows = rows.filter(d => !isProduto(d.item));
+    const produtosRows = rows.filter(d => isProduto(d.item));
+    const faturadoServicos = servicosRows.reduce((acc, curr) => acc + curr.valorBruto, 0);
+    const faturadoProdutos = produtosRows.reduce((acc, curr) => acc + curr.valorBruto, 0);
+    const faturado = faturadoServicos + faturadoProdutos;
+    const comissaoServicos = servicosRows.reduce((acc, curr) => acc + curr.valorComissao, 0);
+    const comissaoProdutos = produtosRows.reduce((acc, curr) => acc + curr.valorComissao, 0);
+    const comissao = comissaoServicos + comissaoProdutos;
+    const totalServicos = rows.length;
+    const ticketMedio = totalServicos > 0 ? faturado / totalServicos : 0;
+    const clientesUnicos = Array.from(
+      new Set(rows.filter(d => d.cliente && d.cliente !== "Cliente Avulso").map(d => d.cliente.trim().toLowerCase()))
+    ).length || 1;
+    const cortesRealizados = rows.filter(d => d.item.toLowerCase().includes("corte")).length;
+    const servicosExtras = rows.filter(d => !d.item.toLowerCase().includes("corte") && !!catalogoServicos[d.item]).length;
+    const conversaoExtra = (servicosExtras / clientesUnicos) * 100;
+    const produtosVendidos = rows.filter(d => nomeProdutos.has(d.item.toLowerCase()) || (!catalogoServicos[d.item] && !d.item.toLowerCase().includes("corte"))).length;
+    const conversaoProduto = (produtosVendidos / clientesUnicos) * 100;
+    const ticketMedioCliente = rows.length === 0 ? 0 : faturado / clientesUnicos;
+    const servicosPorCliente = rows.length === 0 ? 0 : totalServicos / clientesUnicos;
+    return {
+      faturadoServicos, faturadoProdutos, faturado, comissaoServicos, comissaoProdutos, comissao, ticketMedio,
+      clientesUnicos: rows.length === 0 ? 0 : clientesUnicos, cortesRealizados, conversaoExtra, produtosVendidos, conversaoProduto,
+      ticketMedioCliente, servicosPorCliente,
+    };
+  };
+
+  const statsAnterior = useMemo(() => computeStats(previousMonthData), [previousMonthData]);
+
   const faturadoServicos = currentMonthData.filter(d => !isProduto(d.item)).reduce((acc, curr) => acc + curr.valorBruto, 0);
   const faturadoProdutos = currentMonthData.filter(d => isProduto(d.item)).reduce((acc, curr) => acc + curr.valorBruto, 0);
   const faturado = faturadoServicos + faturadoProdutos;
@@ -185,46 +243,55 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
   const ganhoPotencial = taxaOcupacao > 0 ? faturado / taxaOcupacao : faturado;
   const comissaoPotencial = taxaOcupacao > 0 ? comissao / taxaOcupacao : comissao;
 
-  // Quebra por Semana do Mês (Serviços x Produtos)
+  // Quebra por Semana do Mês (Serviços x Produtos) — inclui o mês anterior como barras mais
+  // apagadas ao lado, pra comparação direta sem precisar trocar de gráfico.
   const dadosPorSemana = useMemo(() => {
-    const semanas: Record<string, { servicos: number, produtos: number, qteServicos: number, qteProdutos: number }> = {
+    const criarSemanas = () => ({
       "Semana 1 (01-07)": { servicos: 0, produtos: 0, qteServicos: 0, qteProdutos: 0 },
       "Semana 2 (08-14)": { servicos: 0, produtos: 0, qteServicos: 0, qteProdutos: 0 },
       "Semana 3 (15-21)": { servicos: 0, produtos: 0, qteServicos: 0, qteProdutos: 0 },
       "Semana 4 (22+)": { servicos: 0, produtos: 0, qteServicos: 0, qteProdutos: 0 },
+    });
+    const preencherSemanas = (rows: DesempenhoProfissional[]) => {
+      const semanas = criarSemanas();
+      rows.forEach(d => {
+        if (!d.data) return;
+        const dayStr = d.data.split(" ")[0]; // DD/MM/YYYY
+        const parts = dayStr.split("/");
+        if (parts.length >= 1) {
+          const day = parseInt(parts[0], 10);
+          let key: keyof typeof semanas = "Semana 4 (22+)";
+          if (day <= 7) key = "Semana 1 (01-07)";
+          else if (day <= 14) key = "Semana 2 (08-14)";
+          else if (day <= 21) key = "Semana 3 (15-21)";
+
+          const prod = isProduto(d.item);
+          if (prod) {
+            semanas[key].produtos += d.valorBruto;
+            semanas[key].qteProdutos += 1;
+          } else {
+            semanas[key].servicos += d.valorBruto;
+            semanas[key].qteServicos += 1;
+          }
+        }
+      });
+      return semanas;
     };
 
-    currentMonthData.forEach(d => {
-      if (!d.data) return;
-      const dayStr = d.data.split(" ")[0]; // DD/MM/YYYY
-      const parts = dayStr.split("/");
-      if (parts.length >= 1) {
-        const day = parseInt(parts[0], 10);
-        let key = "Semana 4 (22+)";
-        if (day <= 7) key = "Semana 1 (01-07)";
-        else if (day <= 14) key = "Semana 2 (08-14)";
-        else if (day <= 21) key = "Semana 3 (15-21)";
+    const semanasAtual = preencherSemanas(currentMonthData);
+    const semanasAnterior = preencherSemanas(previousMonthData);
 
-        const prod = isProduto(d.item);
-        if (prod) {
-          semanas[key].produtos += d.valorBruto;
-          semanas[key].qteProdutos += 1;
-        } else {
-          semanas[key].servicos += d.valorBruto;
-          semanas[key].qteServicos += 1;
-        }
-      }
-    });
-
-    return Object.entries(semanas).map(([nome, vals]) => ({
+    return Object.entries(semanasAtual).map(([nome, vals]) => ({
       name: nome.split(" ")[0] + " " + nome.split(" ")[1], // ex: "Semana 1"
       labelCompleto: nome,
       "Serviços (R$)": vals.servicos,
       "Produtos (R$)": vals.produtos,
       "QtdServiços": vals.qteServicos,
       "QtdProdutos": vals.qteProdutos,
+      "Serviços (mês ant.)": semanasAnterior[nome as keyof typeof semanasAnterior].servicos,
+      "Produtos (mês ant.)": semanasAnterior[nome as keyof typeof semanasAnterior].produtos,
     }));
-  }, [currentMonthData, isProduto]);
+  }, [currentMonthData, previousMonthData, isProduto]);
 
   // Evolução Diária (simulando, como só temos algumas datas, agrupamos por dia)
   const evolucaoDiaria = useMemo(() => {
@@ -402,6 +469,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Total Gerado (Bruto)</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-gold)" }}>{brl(faturado)}</div>
+          <MesAnteriorLabel valor={statsAnterior.faturado} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Total Gerado (Serviços)</div>
@@ -411,6 +479,7 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
               {faltaServicosCard <= 0 ? "Meta Atingida! 🎉" : `(Faltam ${brl(faltaServicosCard)} para a meta)`}
             </div>
           )}
+          <MesAnteriorLabel valor={statsAnterior.faturadoServicos} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Total Gerado (Produtos)</div>
@@ -420,22 +489,27 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
               {faltaProdutosCard <= 0 ? "Meta Atingida! 🎉" : `(Faltam ${brl(faltaProdutosCard)} para a meta)`}
             </div>
           )}
+          <MesAnteriorLabel valor={statsAnterior.faturadoProdutos} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Comissão (Serviços)</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-success)" }}>{brl(comissaoServicos)}</div>
+          <MesAnteriorLabel valor={statsAnterior.comissaoServicos} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Comissão (Produtos)</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-success)" }}>{brl(comissaoProdutos)}</div>
+          <MesAnteriorLabel valor={statsAnterior.comissaoProdutos} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Comissão (Total)</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-success)" }}>{brl(comissao)}</div>
+          <MesAnteriorLabel valor={statsAnterior.comissao} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Ticket Médio (Serviço)</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-info)" }}>{brl(ticketMedio)}</div>
+          <MesAnteriorLabel valor={statsAnterior.ticketMedio} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card-gold" style={{ textAlign: "center" }}>
           <div style={{ color: "var(--color-gold)", fontSize: "0.85rem", marginBottom: "0.5rem", fontWeight: 600 }}>Ritmo Necessário / Dia Útil</div>
@@ -470,28 +544,34 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
         <div className="card" style={{ textAlign: "center", borderTop: "3px solid var(--color-info)" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Clientes Atendidos</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-cream)" }}>{profData.length === 0 ? 0 : clientesUnicos}</div>
+          <MesAnteriorLabel valor={statsAnterior.clientesUnicos} formatar={(v) => String(v)} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center", borderTop: "3px solid var(--color-gold)" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Cortes Realizados</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-cream)" }}>{cortesRealizados}</div>
+          <MesAnteriorLabel valor={statsAnterior.cortesRealizados} formatar={(v) => String(v)} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center", borderTop: "3px solid var(--color-gold-dim)" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Ticket Médio / Cliente</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-gold-bright)" }}>{profData.length === 0 ? brl(0) : brl(ticketMedioCliente)}</div>
+          <MesAnteriorLabel valor={statsAnterior.ticketMedioCliente} formatar={brl} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center", borderTop: "3px solid var(--color-success)" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Conversão Extra</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-success)" }}>{profData.length === 0 ? 0 : conversaoExtra.toFixed(1)}%</div>
           <div style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{servicosExtras} extras realizados</div>
+          <MesAnteriorLabel valor={statsAnterior.conversaoExtra} formatar={(v) => `${v.toFixed(1)}%`} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center", borderTop: "3px solid var(--color-danger)" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Conversão Produtos</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "var(--color-danger)" }}>{profData.length === 0 ? 0 : conversaoProduto.toFixed(1)}%</div>
           <div style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{produtosVendidos} produtos vendidos</div>
+          <MesAnteriorLabel valor={statsAnterior.conversaoProduto} formatar={(v) => `${v.toFixed(1)}%`} mostrar={temDadosMesAnterior} />
         </div>
         <div className="card" style={{ textAlign: "center", borderTop: "3px solid #8e44ad" }}>
           <div style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>Serviços / Cliente</div>
           <div style={{ fontSize: "1.75rem", fontWeight: "bold", color: "#9b59b6" }}>{profData.length === 0 ? 0 : servicosPorCliente.toFixed(2)}</div>
+          <MesAnteriorLabel valor={statsAnterior.servicosPorCliente} formatar={(v) => v.toFixed(2)} mostrar={temDadosMesAnterior} />
         </div>
       </div>
 
@@ -701,7 +781,10 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
           <div>
             <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0 }}>Faturamento Semanal: Serviços x Produtos ({selectedMesAno})</h3>
-            <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "4px 0 0 0" }}>Comparativo do faturamento gerado por semana do mês</p>
+            <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "4px 0 0 0" }}>
+              Comparativo do faturamento gerado por semana do mês
+              {temDadosMesAnterior && ` — barras claras são ${previousMesAno} (mês anterior)`}
+            </p>
           </div>
         </div>
         <div style={{ width: '100%', height: 280 }}>
@@ -712,9 +795,15 @@ export default function ProfissionalStats({ data, ocupacao, metas, initialSelect
               <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: "10px" }} />
+              {temDadosMesAnterior && (
+                <Bar dataKey="Serviços (mês ant.)" fill="#d4af8c" fillOpacity={0.3} radius={[4, 4, 0, 0]} maxBarSize={45} />
+              )}
               <Bar dataKey="Serviços (R$)" fill="#d4af8c" radius={[4, 4, 0, 0]} maxBarSize={45}
                 label={{ position: 'top', fontSize: 10, fill: '#d4af8c', formatter: (v: any) => v > 0 ? `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '' }}
               />
+              {temDadosMesAnterior && (
+                <Bar dataKey="Produtos (mês ant.)" fill="#3498db" fillOpacity={0.3} radius={[4, 4, 0, 0]} maxBarSize={45} />
+              )}
               <Bar dataKey="Produtos (R$)" fill="#3498db" radius={[4, 4, 0, 0]} maxBarSize={45}
                 label={{ position: 'top', fontSize: 10, fill: '#3498db', formatter: (v: any) => v > 0 ? `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '' }}
               />
