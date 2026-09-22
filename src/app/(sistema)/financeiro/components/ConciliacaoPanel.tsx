@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, Sparkles, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowRightLeft, Bot, Link2, Wand2, MessageCircle, ChevronDown, ChevronUp } from "lucide-react";
 import type {
   ContaBancaria, Contato, CategoriaFinanceira, CentroCusto, Agendamento,
 } from "@/lib/financeiro-data";
-import { statusAgendamento, extrairContraparte } from "@/lib/financeiro-data";
+import { statusAgendamento } from "@/lib/financeiro-data";
 import type { TransacaoBancariaImportada } from "@/lib/financeiro-data";
-import CategoriaCombobox from "./CategoriaCombobox";
+import ResultadoSincronizacao from "./conciliacao/ResultadoSincronizacao";
+import FilaPendencias from "./conciliacao/FilaPendencias";
+import ListaConciliadas from "./conciliacao/ListaConciliadas";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtData = (d?: string | null) => d ? new Date(d + "T12:00:00").toLocaleDateString("pt-BR") : "sem vencimento";
 
 // A sincronização do WhatsApp pode demorar (conecta, escuta um tempo, roda OCR) — se algum
 // proxy/gateway na frente do servidor cortar a conexão por demorar demais, a resposta que
@@ -29,485 +30,6 @@ async function lerRespostaJson(res: Response): Promise<any> {
 }
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-const ITENS_POR_PAGINA = 10;
-
-// ── Comprovantes do WhatsApp que ainda precisam de ação — diferente do resumo da última
-// sincronização (que só mostra o que aconteceu e some ao recarregar), essa lista vem do
-// banco e fica visível até o usuário resolver cada um: editar o valor e tentar vincular de
-// novo na hora, marcar manualmente como compra no cartão (sem depender de reenviar a foto
-// com a legenda certa), ou ignorar.
-function ComprovantesPendentesSection({ refreshTrigger, onResolvido, onCountChange }: { refreshTrigger: number; onResolvido: () => void; onCountChange: (n: number) => void }) {
-  const [itens, setItens] = useState<any[]>([]);
-  // "carregado" (não "loading") — sem essa distinção, TODA atualização da lista (inclusive
-  // as disparadas pelos próprios cards, tipo "salvar valor e tentar vincular" sem achar
-  // correspondência) escondia a seção inteira por um instante enquanto recarregava. Como
-  // cada <ComprovanteCard> é desmontado quando a seção vira `null`, isso apagava o estado
-  // local de TODOS os cards junto — inclusive a mensagem de erro que o card acabou de
-  // mostrar ("Salvo, mas ainda sem correspondência..."), fazendo parecer que nada aconteceu.
-  // Só esconde a seção antes do primeiro carregamento; depois disso, atualiza em silêncio.
-  const [carregado, setCarregado] = useState(false);
-
-  const carregar = async () => {
-    try {
-      const res = await fetch("/api/financeiro/whatsapp/comprovantes");
-      const data = res.ok ? await res.json() : [];
-      setItens(data);
-      onCountChange(data.length);
-    } finally {
-      setCarregado(true);
-    }
-  };
-
-  useEffect(() => { carregar(); }, [refreshTrigger]);
-
-  if (!carregado || itens.length === 0) return null;
-
-  return (
-    <div id="secao-comprovantes" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-        <MessageCircle size={15} /> Comprovantes do WhatsApp sem resolver ({itens.length})
-      </div>
-      {itens.map((item) => (
-        <ComprovanteCard key={item.id} item={item} onResolvido={() => { carregar(); onResolvido(); }} />
-      ))}
-    </div>
-  );
-}
-
-function ComprovanteCard({ item, onResolvido }: { item: any; onResolvido: () => void }) {
-  const [modo, setModo] = useState<"" | "valor" | "cartao">("");
-  const [valor, setValor] = useState(item.valorOcr ? String(item.valorOcr) : "");
-  const [parcelas, setParcelas] = useState("1");
-  const [valorParcela, setValorParcela] = useState(item.valorOcr ? String(item.valorOcr) : "");
-  const [saving, setSaving] = useState(false);
-  const [erro, setErro] = useState("");
-  const [resultado, setResultado] = useState<string | null>(null);
-
-  const ehErroCartao = item.status === "erro_cartao";
-
-  const salvarValor = async () => {
-    const v = parseFloat(valor.replace(",", "."));
-    if (!v || v <= 0) { setErro("Digite um valor válido."); return; }
-    setSaving(true);
-    setErro("");
-    try {
-      const res = await fetch(`/api/financeiro/whatsapp/comprovantes/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ valorOcr: v }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      if (data.resultado?.status === "vinculado") {
-        setResultado(`Vinculado! ${brl(data.resultado.valor)}${data.resultado.contato ? ` — ${data.resultado.contato}` : ""}`);
-        setTimeout(onResolvido, 1200);
-      } else {
-        setErro(`Salvo, mas ainda sem correspondência (${data.resultado?.motivo || "sem transação compatível"}).`);
-        onResolvido();
-      }
-    } catch (err: any) {
-      setErro(err.message || "Erro ao salvar valor");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const marcarCartao = async () => {
-    const n = parseInt(parcelas, 10) || 1;
-    const v = parseFloat(valorParcela.replace(",", "."));
-    if (!v || v <= 0) { setErro("Digite o valor da parcela."); return; }
-    setSaving(true);
-    setErro("");
-    try {
-      const res = await fetch(`/api/financeiro/whatsapp/comprovantes/${item.id}/marcar-cartao`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parcelas: n, valorParcela: v }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      onResolvido();
-    } catch (err: any) {
-      setErro(err.message || "Erro ao marcar como cartão");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const ignorar = async () => {
-    setSaving(true);
-    setErro("");
-    try {
-      const res = await fetch(`/api/financeiro/whatsapp/comprovantes/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ignorar: true }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      onResolvido();
-    } catch (err: any) {
-      setErro(err.message || "Erro ao ignorar");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="card" style={{ padding: "0.9rem 1.1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-        <div>
-          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{new Date(item.dataHoraEnvio).toLocaleString("pt-BR")}</span>
-          <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-cream)", margin: "0.15rem 0 0 0" }}>
-            {item.textoLegenda || <em style={{ color: "var(--color-muted)", fontWeight: 400 }}>sem legenda</em>}
-          </p>
-          <p style={{ fontSize: "0.78rem", color: ehErroCartao ? "var(--color-gold)" : "var(--color-danger)", margin: "0.2rem 0 0 0" }}>
-            {ehErroCartao
-              ? "Marcado como cartão, mas não deu pra ler o valor/parcela sozinho — preencha abaixo."
-              : item.valorOcr
-                ? `Valor lido: ${brl(item.valorOcr)} — nenhuma transação bancária bateu com esse valor/data ainda.`
-                : "Não consegui ler nenhum valor nessa imagem (nem na legenda, nem no OCR)."}
-          </p>
-        </div>
-        <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--color-cream-dim)", whiteSpace: "nowrap" }}>
-          {item.valorOcr ? brl(item.valorOcr) : "—"}
-        </span>
-      </div>
-
-      {erro && <div style={{ marginTop: "0.6rem", fontSize: "0.78rem", color: "var(--color-danger)" }}>{erro}</div>}
-      {resultado && <div style={{ marginTop: "0.6rem", fontSize: "0.78rem", color: "var(--color-success)" }}>{resultado}</div>}
-
-      {!modo && (
-        <div style={{ display: "flex", gap: "1rem", marginTop: "0.75rem" }}>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("valor")}>Corrigir valor e tentar vincular</button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("cartao")}>Marcar como compra no cartão</button>
-          <button type="button" onClick={ignorar} disabled={saving} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer", fontSize: "0.78rem", textDecoration: "underline" }}>
-            Ignorar
-          </button>
-        </div>
-      )}
-
-      {modo === "valor" && (
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", marginTop: "0.75rem", flexWrap: "wrap" }}>
-          <div style={{ minWidth: 160 }}>
-            <label className="form-label">Valor correto</label>
-            <input type="text" value={valor} onChange={e => setValor(e.target.value)} placeholder="ex: 105,36" />
-          </div>
-          <button type="button" className="btn btn-gold btn-sm" onClick={salvarValor} disabled={saving}>{saving ? "..." : "Salvar e tentar vincular"}</button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("")} disabled={saving}>Cancelar</button>
-        </div>
-      )}
-
-      {modo === "cartao" && (
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", marginTop: "0.75rem", flexWrap: "wrap" }}>
-          <div style={{ minWidth: 100 }}>
-            <label className="form-label">Parcelas</label>
-            <input type="number" min={1} max={24} value={parcelas} onChange={e => setParcelas(e.target.value)} />
-          </div>
-          <div style={{ minWidth: 160 }}>
-            <label className="form-label">Valor de cada parcela</label>
-            <input type="text" value={valorParcela} onChange={e => setValorParcela(e.target.value)} placeholder="ex: 105,36" />
-          </div>
-          <button type="button" className="btn btn-gold btn-sm" onClick={marcarCartao} disabled={saving}>{saving ? "..." : "Confirmar"}</button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setModo("")} disabled={saving}>Cancelar</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Fatura do Cartão de Crédito: compras acumuladas (marcadas manualmente como "cartao" no
-// WhatsApp) esperando o dia em que a fatura inteira aparece como UMA saída no extrato. Nunca
-// dá baixa sozinho — só sugere e espera confirmação de um clique.
-function FaturaCartaoSection({ refreshTrigger, onConciliado, onCountChange }: { refreshTrigger: number; onConciliado: () => void; onCountChange: (info: { pendentes: number; sugestoes: number; somaPendentes: number }) => void }) {
-  const [pendentes, setPendentes] = useState<any[]>([]);
-  const [sugestoes, setSugestoes] = useState<any[]>([]);
-  // Mesmo cuidado do ComprovantesPendentesSection logo acima: só esconde a seção antes do
-  // primeiro carregamento, nunca de novo depois — senão toda atualização em segundo plano
-  // (ex: depois de confirmar uma fatura) desmonta e remonta a seção inteira à toa.
-  const [carregado, setCarregado] = useState(false);
-  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
-  const [erro, setErro] = useState("");
-
-  const carregar = async () => {
-    try {
-      const res = await fetch("/api/financeiro/cartao-credito/sugestoes");
-      const data = await res.json();
-      const pend = data.pendentes || [];
-      const sug = data.sugestoes || [];
-      setPendentes(pend);
-      setSugestoes(sug);
-      onCountChange({ pendentes: pend.length, sugestoes: sug.length, somaPendentes: pend.reduce((acc: number, c: any) => acc + c.valorParcela, 0) });
-    } finally {
-      setCarregado(true);
-    }
-  };
-
-  useEffect(() => { carregar(); }, [refreshTrigger]);
-
-  const confirmar = async (transacaoId: string) => {
-    setConfirmandoId(transacaoId);
-    setErro("");
-    try {
-      const res = await fetch(`/api/financeiro/cartao-credito/sugestoes/${transacaoId}/confirmar`, { method: "POST" });
-      if (!res.ok) throw new Error((await res.json()).error);
-      await carregar();
-      onConciliado();
-    } catch (err: any) {
-      setErro(err.message || "Erro ao confirmar fatura");
-    } finally {
-      setConfirmandoId(null);
-    }
-  };
-
-  if (!carregado || (pendentes.length === 0 && sugestoes.length === 0)) return null;
-
-  const porMes = pendentes.reduce((acc: Record<string, any[]>, c: any) => {
-    (acc[c.mesReferencia] ||= []).push(c);
-    return acc;
-  }, {});
-
-  return (
-    <div id="secao-fatura" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-        <CreditCard size={15} /> Fatura do Cartão de Crédito
-      </div>
-
-      {erro && (
-        <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.6rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>{erro}</div>
-      )}
-
-      {sugestoes.map((s) => (
-        <div key={s.transacaoId} className="card" style={{ padding: "1rem 1.25rem", border: "1px solid var(--color-gold)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "0.6rem" }}>
-            <div>
-              <p style={{ fontWeight: 700, color: "var(--color-cream)", margin: 0 }}>
-                Fatura de {new Date(s.dataTransacao + "T12:00:00").toLocaleDateString("pt-BR")}: {brl(s.valorTransacao)}
-              </p>
-              <p style={{ fontSize: "0.78rem", color: "var(--color-muted)", margin: "0.15rem 0 0 0" }}>
-                = soma de {s.compras.length} compra{s.compras.length === 1 ? "" : "s"} acumulada{s.compras.length === 1 ? "" : "s"} ({brl(s.somaCompras)})
-              </p>
-            </div>
-            <button type="button" className="btn btn-gold btn-sm" onClick={() => confirmar(s.transacaoId)} disabled={confirmandoId === s.transacaoId}>
-              {confirmandoId === s.transacaoId ? "Confirmando..." : "Confirmar baixa"}
-            </button>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-            {s.compras.map((c: any) => (
-              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--color-cream-dim)" }}>
-                <span>{c.descricao || "sem legenda"} {c.parcelaTotal > 1 && `(parcela ${c.parcelaNumero}/${c.parcelaTotal})`}</span>
-                <span>{brl(c.valorParcela)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-
-      {Object.keys(porMes).length > 0 && (
-        <div className="card" style={{ padding: "0.75rem 1rem" }}>
-          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
-            Acumulado, aguardando fatura ({pendentes.length})
-          </h4>
-          {Object.entries(porMes).map(([mes, compras]) => (
-            <div key={mes} style={{ marginBottom: "0.5rem" }}>
-              <span style={{ fontSize: "0.75rem", color: "var(--color-gold)", fontWeight: 700 }}>{mes}</span>
-              {compras.map((c: any) => (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--color-cream-dim)", padding: "0.15rem 0" }}>
-                  <span>{c.descricao || "sem legenda"} {c.parcelaTotal > 1 && `(parcela ${c.parcelaNumero}/${c.parcelaTotal})`} {c.contaNome ? `· ${c.contaNome}` : ""}</span>
-                  <span>{brl(c.valorParcela)}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Paginação simples client-side (a lista inteira já vem do fetch do mês/ano/conta
-// selecionados — não precisa de mais uma chamada à API, só corta o array em fatias).
-function Paginador({ pagina, totalPaginas, onMudar }: { pagina: number; totalPaginas: number; onMudar: (p: number) => void }) {
-  if (totalPaginas <= 1) return null;
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.75rem", padding: "0.5rem 0" }}>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onMudar(pagina - 1)} disabled={pagina <= 1}>
-        Anterior
-      </button>
-      <span style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>Página {pagina} de {totalPaginas}</span>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onMudar(pagina + 1)} disabled={pagina >= totalPaginas}>
-        Próxima
-      </button>
-    </div>
-  );
-}
-
-// ── Lista linha-a-linha do que a última sincronização/aplicação de regra realmente fez —
-// data, valor, descrição, categoria e o que aconteceu com cada uma. Sem isso o resumo em
-// texto ("17 novas, 12 conciliadas") não dava pra conferir de verdade.
-function DetalhesSincronizacao({ detalhesSicoob, detalhesWhatsapp, detalhesRegraSaida }: {
-  detalhesSicoob: any[];
-  detalhesWhatsapp: any[];
-  detalhesRegraSaida: any[];
-}) {
-  if (detalhesSicoob.length === 0 && detalhesWhatsapp.length === 0 && detalhesRegraSaida.length === 0) return null;
-
-  const corStatus = (status: string) => {
-    if (status.startsWith("conciliado")) return "var(--color-success)";
-    if (status === "vinculado") return "var(--color-success)";
-    if (status === "pendente") return "var(--color-muted)";
-    return "var(--color-danger)";
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {detalhesSicoob.length > 0 && (
-        <div className="card" style={{ padding: "0.75rem 1rem" }}>
-          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
-            Extrato Sicoob — {detalhesSicoob.length} transaç{detalhesSicoob.length === 1 ? "ão" : "ões"} processada{detalhesSicoob.length === 1 ? "" : "s"}
-          </h4>
-          <div style={{ maxHeight: 280, overflowY: "auto" }}>
-            {detalhesSicoob.map((d, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.3rem 0", borderBottom: "1px solid var(--color-border)", fontSize: "0.78rem" }}>
-                <span style={{ color: "var(--color-muted)", width: 78, flexShrink: 0 }}>{fmtData(d.data)}</span>
-                <span style={{ flex: 1, color: "var(--color-cream)" }}>
-                  {d.descricao}
-                  {d.categoria && <span style={{ color: "var(--color-gold)" }}> · {d.categoria}</span>}
-                </span>
-                <span style={{ width: 90, textAlign: "right", color: d.tipo === "entrada" ? "var(--color-success)" : "var(--color-danger)" }}>
-                  {d.tipo === "entrada" ? "+" : "-"}{brl(d.valor)}
-                </span>
-                <span style={{ width: 190, textAlign: "right", color: corStatus(d.status), fontSize: "0.72rem" }}>{d.status}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {detalhesWhatsapp.length > 0 && (
-        <div className="card" style={{ padding: "0.75rem 1rem" }}>
-          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
-            Comprovantes WhatsApp — {detalhesWhatsapp.length} processado{detalhesWhatsapp.length === 1 ? "" : "s"}
-          </h4>
-          <div style={{ maxHeight: 280, overflowY: "auto" }}>
-            {detalhesWhatsapp.map((d, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.3rem 0", borderBottom: "1px solid var(--color-border)", fontSize: "0.78rem" }}>
-                <span style={{ color: "var(--color-muted)", width: 130, flexShrink: 0 }}>{new Date(d.dataEnvio).toLocaleString("pt-BR")}</span>
-                <span style={{ flex: 1, color: "var(--color-cream)" }}>
-                  {d.legenda || <em style={{ color: "var(--color-muted)" }}>sem legenda</em>}
-                  {d.categoria && <span style={{ color: "var(--color-gold)" }}> · {d.categoria}</span>}
-                  {d.contato && <span style={{ color: "var(--color-muted)" }}> ({d.contato})</span>}
-                </span>
-                <span style={{ width: 90, textAlign: "right" }}>{d.valor !== null ? brl(d.valor) : "—"}</span>
-                <span style={{ width: 260, textAlign: "right", color: corStatus(d.status), fontSize: "0.72rem" }}>{d.status}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {detalhesRegraSaida.length > 0 && (
-        <div className="card" style={{ padding: "0.75rem 1rem" }}>
-          <h4 style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.5rem" }}>
-            Regras aprendidas aplicadas — {detalhesRegraSaida.length} conciliada{detalhesRegraSaida.length === 1 ? "" : "s"}
-          </h4>
-          <div style={{ maxHeight: 280, overflowY: "auto" }}>
-            {detalhesRegraSaida.map((d, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.3rem 0", borderBottom: "1px solid var(--color-border)", fontSize: "0.78rem" }}>
-                <span style={{ color: "var(--color-muted)", width: 78, flexShrink: 0 }}>{fmtData(d.data)}</span>
-                <span style={{ flex: 1, color: "var(--color-cream)" }}>
-                  {d.descricao} <span style={{ color: "var(--color-muted)" }}>({d.contato})</span>
-                  {d.categoria && <span style={{ color: "var(--color-gold)" }}> · {d.categoria}</span>}
-                </span>
-                <span style={{ width: 90, textAlign: "right", color: "var(--color-danger)" }}>-{brl(d.valor)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Visão geral no topo: antes o único jeito de saber "tem algo pra fazer?" era rolar a
-// tela inteira e ler as 5 seções uma por uma. Agora é um olhar só — cada indicador é mudo
-// (cor neutra) quando zero e ganha destaque dourado quando >0, e clicar rola até a seção.
-function BarraEstadoGeral({ pendentesConciliacao, comprovantesSemResolver, faturaCartao }: {
-  pendentesConciliacao: number;
-  comprovantesSemResolver: number;
-  faturaCartao: { pendentes: number; sugestoes: number; somaPendentes: number };
-}) {
-  const itens = [
-    { id: "secao-pendentes", label: "Pendentes de conciliação", valor: pendentesConciliacao },
-    { id: "secao-comprovantes", label: "Comprovantes sem resolver", valor: comprovantesSemResolver },
-    { id: "secao-fatura", label: "Fatura do cartão acumulada", valor: faturaCartao.pendentes, extra: faturaCartao.somaPendentes > 0 ? brl(faturaCartao.somaPendentes) : undefined },
-  ];
-  return (
-    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-      {itens.map(it => (
-        <a key={it.id} href={`#${it.id}`}
-          style={{
-            display: "flex", flexDirection: "column", gap: "0.15rem", padding: "0.6rem 1.1rem", borderRadius: "0.6rem",
-            textDecoration: "none", minWidth: 150,
-            background: it.valor > 0 ? "rgba(212,175,140,0.08)" : "var(--color-surface-2)",
-            border: `1px solid ${it.valor > 0 ? "var(--color-gold)" : "var(--color-border)"}`,
-          }}>
-          <span style={{ fontSize: "1.35rem", fontWeight: 800, color: it.valor > 0 ? "var(--color-gold)" : "var(--color-muted)" }}>{it.valor}</span>
-          <span style={{ fontSize: "0.72rem", color: "var(--color-muted)" }}>{it.label}{it.extra ? ` · ${it.extra}` : ""}</span>
-        </a>
-      ))}
-    </div>
-  );
-}
-
-// ── Resultado da última sincronização — antes uma frase única cheia de números ("0
-// transações novas, 0 conciliadas... 0 comprovantes novos...") que, quando tudo dava zero
-// (nada de novo desde a última vez), parecia erro em vez de sucesso. Agora 3 estados
-// visuais bem diferentes: nada novo (neutro), resolvido sozinho (verde, em chips por
-// sistema) e precisa de atenção (dourado, com link direto pra seção).
-function ResumoSincronizacao({ sicoob, whatsapp }: { sicoob: any; whatsapp: any }) {
-  if (!sicoob && !whatsapp) return null;
-
-  const novos = (sicoob?.novos || 0) + (whatsapp?.novos || 0);
-  const resolvidos = (sicoob?.autoConciliados || 0) + (whatsapp?.vinculados || 0) + (whatsapp?.cartaoRegistrado || 0);
-  const atencao = whatsapp?.semCorrespondencia || 0;
-  const pausado = !!whatsapp?.pausadoPorTempo;
-
-  if (novos === 0 && resolvidos === 0 && atencao === 0 && !pausado) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.7rem 1rem", borderRadius: "0.5rem", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-muted)", fontSize: "0.85rem" }}>
-        <CheckCircle2 size={16} /> Tudo em dia — nenhuma novidade desde a última sincronização.
-      </div>
-    );
-  }
-
-  const chip = (texto: string) => (
-    <span className="badge" style={{ background: "rgba(46,204,113,0.1)", color: "var(--color-success)", border: "1px solid var(--color-success)", padding: "0.4rem 0.75rem", fontSize: "0.78rem", fontWeight: 600 }}>
-      {texto}
-    </span>
-  );
-
-  return (
-    <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-      {sicoob && chip(`Sicoob · ${sicoob.novos} nova${sicoob.novos === 1 ? "" : "s"} · ${sicoob.autoConciliados} conciliada${sicoob.autoConciliados === 1 ? "" : "s"}`)}
-      {whatsapp && chip(`WhatsApp · ${whatsapp.novos} novo${whatsapp.novos === 1 ? "" : "s"} · ${whatsapp.vinculados} vinculado${whatsapp.vinculados === 1 ? "" : "s"}${whatsapp.cartaoRegistrado ? ` · ${whatsapp.cartaoRegistrado} de cartão` : ""}`)}
-      {atencao > 0 && (
-        <a href="#secao-comprovantes" style={{
-          background: "rgba(212,175,140,0.15)", color: "var(--color-gold)", border: "1px solid var(--color-gold)",
-          padding: "0.4rem 0.75rem", borderRadius: "999px", fontSize: "0.78rem", textDecoration: "none", fontWeight: 700,
-        }}>
-          {atencao} precisa{atencao === 1 ? "" : "m"} da sua atenção →
-        </a>
-      )}
-      {pausado && (
-        <span
-          title="O OCR ou o pareamento de comprovantes demorou demais e a sincronização parou de propósito antes do limite de tempo — o que sobrou continua pendente e será retomado na próxima sincronização."
-          style={{ background: "var(--color-surface-2)", color: "var(--color-muted)", border: "1px solid var(--color-border)", padding: "0.4rem 0.75rem", borderRadius: "999px", fontSize: "0.78rem" }}
-        >
-          Parte ficou pra próxima sincronização (tempo esgotado)
-        </span>
-      )}
-    </div>
-  );
-}
 
 export default function ConciliacaoPanel() {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
@@ -525,28 +47,17 @@ export default function ConciliacaoPanel() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState<"" | "sicoob" | "whatsapp">("");
-  // Resultado bruto de cada sistema, separado — o componente ResumoSincronizacao decide a
-  // hierarquia visual (nada novo / resolvido / precisa atenção) em vez de uma frase única.
   const [resultadoSicoob, setResultadoSicoob] = useState<any | null>(null);
   const [resultadoWhatsapp, setResultadoWhatsapp] = useState<any | null>(null);
   const [erroSync, setErroSync] = useState<string | null>(null);
-  // Mensagem simples só pras ações secundárias (aplicar regra em massa) — não faz parte do
-  // resumo estruturado da sincronização principal.
   const [mensagemAcao, setMensagemAcao] = useState<string | null>(null);
   const [aplicandoRegra, setAplicandoRegra] = useState(false);
   const [aplicandoRegraSaida, setAplicandoRegraSaida] = useState(false);
   const [automacaoAberta, setAutomacaoAberta] = useState(false);
-  const [comprovantesSemResolverCount, setComprovantesSemResolverCount] = useState(0);
-  const [faturaCartaoInfo, setFaturaCartaoInfo] = useState({ pendentes: 0, sugestoes: 0, somaPendentes: 0 });
-  const [paginaPendentes, setPaginaPendentes] = useState(1);
-  const [paginaConciliadas, setPaginaConciliadas] = useState(1);
-  // Detalhe linha-a-linha da última sincronização/aplicação de regra — o resumo em texto
-  // ("17 novas, 12 conciliadas") não dizia QUAIS, DE QUANDO ou QUE CATEGORIA, então nada dava
-  // pra conferir de verdade. Fica visível até a próxima ação, não precisa abrir/fechar nada.
   const [detalhesSicoob, setDetalhesSicoob] = useState<any[]>([]);
   const [detalhesWhatsapp, setDetalhesWhatsapp] = useState<any[]>([]);
   const [detalhesRegraSaida, setDetalhesRegraSaida] = useState<any[]>([]);
-  const [refreshCartao, setRefreshCartao] = useState(0);
+  const [refreshFila, setRefreshFila] = useState(0);
 
   const contasConectadas = useMemo(() => contas.filter(c => !!c.sicoobClientId), [contas]);
   const contaSelecionada = contas.find(c => c.id === contaId);
@@ -588,7 +99,6 @@ export default function ConciliacaoPanel() {
   }, []);
 
   useEffect(() => { carregarTransacoes(); }, [contaId, mes, ano]);
-  useEffect(() => { setPaginaPendentes(1); setPaginaConciliadas(1); }, [contaId, mes, ano]);
 
   // Roda sempre nessa ordem: primeiro traz o extrato real do Sicoob (é dele que vêm as
   // transações bancárias), só depois lê os comprovantes do WhatsApp pra fazer o De/Para —
@@ -619,6 +129,7 @@ export default function ConciliacaoPanel() {
       setSyncing(false);
       setSyncStep("");
       await Promise.all([carregarCadastros(), carregarTransacoes()]);
+      setRefreshFila(n => n + 1);
       return;
     }
 
@@ -629,13 +140,13 @@ export default function ConciliacaoPanel() {
       if (!res.ok) throw new Error(data.error);
       setResultadoWhatsapp(data);
       setDetalhesWhatsapp(data.detalhes || []);
-      setRefreshCartao(n => n + 1);
     } catch (err: any) {
       setErroSync(`Sicoob sincronizado, mas o WhatsApp falhou: ${err.message || "erro desconhecido"}`);
     } finally {
       setSyncing(false);
       setSyncStep("");
       await Promise.all([carregarCadastros(), carregarTransacoes()]);
+      setRefreshFila(n => n + 1);
     }
   };
 
@@ -650,6 +161,7 @@ export default function ConciliacaoPanel() {
       if (!res.ok) throw new Error(data.error);
       setMensagemAcao(`${data.aplicados} entrada${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente pela regra.`);
       await carregarTransacoes();
+      setRefreshFila(n => n + 1);
     } catch (err: any) {
       setErroSync(err.message || "Erro ao aplicar regra de entrada");
     } finally {
@@ -674,6 +186,7 @@ export default function ConciliacaoPanel() {
       setMensagemAcao(`${data.aplicados} saída${data.aplicados === 1 ? "" : "s"} pendente${data.aplicados === 1 ? "" : "s"} conciliada${data.aplicados === 1 ? "" : "s"} automaticamente por regras aprendidas (${data.semRegra} sem regra reconhecida ainda).`);
       setDetalhesRegraSaida(data.detalhes || []);
       await carregarTransacoes();
+      setRefreshFila(n => n + 1);
     } catch (err: any) {
       setErroSync(err.message || "Erro ao aplicar regras de saída");
     } finally {
@@ -687,12 +200,10 @@ export default function ConciliacaoPanel() {
 
   // Só sugere bater com uma conta existente se o valor em aberto dela for parecido com o
   // da transação — sem isso a aba "Sugestão" listava as 21 contas a pagar em aberto pra
-  // qualquer PIX pequeno, sem nenhuma relação de valor (o auto-match por valor exato já
-  // resolve isso na sincronização; o que sobra pendente aqui raramente bate perfeitinho,
-  // então uma tolerância pequena pra revisão manual é o suficiente).
+  // qualquer PIX pequeno, sem nenhuma relação de valor. Valor sozinho não basta: sem limite
+  // de data, uma conta de setembro/2026 aparecia como sugestão pra uma transação de
+  // novembro/2025 só porque o valor batia por coincidência.
   const TOLERANCIA_SUGESTAO = 5;
-  // Valor sozinho não basta: sem limite de data, uma conta de setembro/2026 aparecia como
-  // sugestão pra uma transação de novembro/2025 só porque o valor batia por coincidência.
   const TOLERANCIA_DIAS_SUGESTAO = 45;
   const agendamentosCompativeis = (tx: TransacaoBancariaImportada) => {
     const tipoAlvo = tx.tipo === "entrada" ? "receber" : "pagar";
@@ -723,15 +234,10 @@ export default function ConciliacaoPanel() {
     );
   }
 
-  const totalPaginasPendentes = Math.max(1, Math.ceil(pendentes.length / ITENS_POR_PAGINA));
-  const pendentesPagina = pendentes.slice((paginaPendentes - 1) * ITENS_POR_PAGINA, paginaPendentes * ITENS_POR_PAGINA);
-  const totalPaginasConciliadas = Math.max(1, Math.ceil(conciliadas.length / ITENS_POR_PAGINA));
-  const conciliadasPagina = conciliadas.slice((paginaConciliadas - 1) * ITENS_POR_PAGINA, paginaConciliadas * ITENS_POR_PAGINA);
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: 980 }}>
 
-      {/* HEADER E CONTROLES */}
+      {/* CABEÇALHO */}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
         <div>
           <h2 style={{ fontSize: "1.25rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem", margin: 0 }}>
@@ -776,25 +282,44 @@ export default function ConciliacaoPanel() {
         </div>
       )}
 
-      {/* VISÃO GERAL — um olhar só pra saber se tem algo pra fazer, sem rolar a tela inteira */}
-      <BarraEstadoGeral
-        pendentesConciliacao={pendentes.length}
-        comprovantesSemResolver={comprovantesSemResolverCount}
-        faturaCartao={faturaCartaoInfo}
-      />
-
       {erroSync && (
         <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.75rem 1rem", borderRadius: "0.5rem", fontSize: "0.85rem" }}>
           {erroSync}
         </div>
       )}
-      <ResumoSincronizacao sicoob={resultadoSicoob} whatsapp={resultadoWhatsapp} />
+
+      <ResultadoSincronizacao
+        sicoob={resultadoSicoob} whatsapp={resultadoWhatsapp}
+        detalhesSicoob={detalhesSicoob} detalhesWhatsapp={detalhesWhatsapp} detalhesRegraSaida={detalhesRegraSaida}
+      />
+
+      <FilaPendencias
+        transacoesPendentes={pendentes}
+        agendamentosCompativeis={agendamentosCompativeis}
+        contatos={contatos}
+        categorias={categorias}
+        centros={centros}
+        refreshTrigger={refreshFila}
+        onResolvidoBanco={() => { carregarTransacoes(); carregarCadastros(); setRefreshFila(n => n + 1); }}
+        onCategoriaCriada={(nova) => setCategorias(prev => [...prev, nova])}
+      />
+
+      <ListaConciliadas
+        conciliadas={conciliadas}
+        categorias={categorias}
+        onSalvo={() => carregarTransacoes()}
+        onCategoriaCriada={(nova) => setCategorias(prev => [...prev, nova])}
+      />
+
+      {ignoradas.length > 0 && (
+        <p style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{ignoradas.length} transaç{ignoradas.length === 1 ? "ão ignorada" : "ões ignoradas"} neste período.</p>
+      )}
 
       {/* AUTOMAÇÃO — ações de aplicar regra em massa, recolhidas por padrão: não fazem parte
           do fluxo principal (sincronizar), são pra quando o usuário quer forçar retroativo. */}
       <div>
         <button type="button" onClick={() => setAutomacaoAberta(v => !v)} className="btn btn-ghost btn-sm" style={{ color: "var(--color-muted)" }}>
-          {automacaoAberta ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Automação
+          {automacaoAberta ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Automação avançada
         </button>
         {automacaoAberta && (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginTop: "0.5rem", paddingLeft: "0.25rem" }}>
@@ -823,415 +348,6 @@ export default function ConciliacaoPanel() {
             )}
           </div>
         )}
-      </div>
-
-      <DetalhesSincronizacao detalhesSicoob={detalhesSicoob} detalhesWhatsapp={detalhesWhatsapp} detalhesRegraSaida={detalhesRegraSaida} />
-
-      <ComprovantesPendentesSection refreshTrigger={refreshCartao} onResolvido={() => { setRefreshCartao(n => n + 1); carregarTransacoes(); }} onCountChange={setComprovantesSemResolverCount} />
-
-      <FaturaCartaoSection refreshTrigger={refreshCartao} onConciliado={() => carregarTransacoes()} onCountChange={setFaturaCartaoInfo} />
-
-      {/* PENDENTES */}
-      <div id="secao-pendentes" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <div style={{ fontSize: "0.8rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-muted)" }}>
-          Pendentes de conciliação ({pendentes.length})
-        </div>
-
-        {pendentes.length === 0 ? (
-          <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--color-success)" }}>
-            <CheckCircle2 size={40} style={{ margin: "0 auto 1rem auto" }} />
-            <p style={{ fontWeight: 700, fontSize: "1rem" }}>Tudo conciliado!</p>
-            <p style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>Nenhuma transação pendente neste período.</p>
-          </div>
-        ) : (
-          <>
-            {pendentesPagina.map(tx => (
-              <PendenteCard
-                key={tx.id}
-                tx={tx}
-                agendamentos={agendamentosCompativeis(tx)}
-                contatos={contatos}
-                categorias={categorias}
-                centros={centros}
-                onResolvido={() => { carregarTransacoes(); carregarCadastros(); }}
-                onCategoriaCriada={(nova) => setCategorias(prev => [...prev, nova])}
-              />
-            ))}
-            <Paginador pagina={paginaPendentes} totalPaginas={totalPaginasPendentes} onMudar={setPaginaPendentes} />
-          </>
-        )}
-      </div>
-
-      {/* CONCILIADAS */}
-      {conciliadas.length > 0 && (
-        <div className="card">
-          <h4 style={{ fontSize: "0.8rem", color: "var(--color-muted)", textTransform: "uppercase", fontWeight: 800, marginBottom: "0.75rem" }}>
-            Conciliadas ({conciliadas.length})
-          </h4>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-            {conciliadasPagina.map(tx => (
-              <ConciliadaRow
-                key={tx.id}
-                tx={tx}
-                categorias={categorias}
-                onSalvo={() => carregarTransacoes()}
-                onCategoriaCriada={(nova) => setCategorias(prev => [...prev, nova])}
-              />
-            ))}
-          </div>
-          <Paginador pagina={paginaConciliadas} totalPaginas={totalPaginasConciliadas} onMudar={setPaginaConciliadas} />
-        </div>
-      )}
-
-      {ignoradas.length > 0 && (
-        <p style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{ignoradas.length} transaç{ignoradas.length === 1 ? "ão ignorada" : "ões ignoradas"} neste período.</p>
-      )}
-    </div>
-  );
-}
-
-// ── Linha de uma transação já conciliada. Quando veio de um match automático do
-// WhatsApp sem categoria reconhecida (selinho verde), dá pra abrir e escolher a categoria
-// na mão — e "lembrar esse padrão bancário" (a contraparte do Pix, não a legenda da foto,
-// que muda a cada envio) pra da próxima vez que aparecer um pagamento pro MESMO lugar já
-// vir com contato e categoria certos sozinho, com ou sem foto nova no WhatsApp.
-function ConciliadaRow({ tx, categorias, onSalvo, onCategoriaCriada }: {
-  tx: TransacaoBancariaImportada;
-  categorias: CategoriaFinanceira[];
-  onSalvo: () => void;
-  onCategoriaCriada: (nova: CategoriaFinanceira) => void;
-}) {
-  const [aberto, setAberto] = useState(false);
-  const [categoriaId, setCategoriaId] = useState(tx.lancamentoCategoriaId || "");
-  const [lembrarPadrao, setLembrarPadrao] = useState(!tx.lancamentoCategoriaId);
-  const [padraoDescricao, setPadraoDescricao] = useState(
-    (extrairContraparte(tx.descricaoComplementar) || tx.descricao || "").toLowerCase().trim()
-  );
-  const [saving, setSaving] = useState(false);
-  const [erro, setErro] = useState("");
-
-  const semCategoria = !tx.lancamentoCategoriaId;
-  const temComprovante = tx.comprovanteWhatsappLegenda !== null && tx.comprovanteWhatsappLegenda !== undefined;
-
-  const salvar = async () => {
-    if (!categoriaId) { setErro("Selecione uma categoria."); return; }
-    setSaving(true);
-    setErro("");
-    try {
-      const res = await fetch(`/api/financeiro/transacoes-bancarias/${tx.id}/categorizar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoriaId }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-
-      if (lembrarPadrao && padraoDescricao.trim() && tx.lancamentoContatoId) {
-        await fetch("/api/financeiro/regras-conciliacao", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            padraoDescricao: padraoDescricao.trim(),
-            contatoId: tx.lancamentoContatoId,
-            categoriaId,
-            descricao: tx.comprovanteWhatsappLegenda || tx.lancamentoDescricao || tx.descricao,
-          }),
-        }).catch(() => {});
-      }
-
-      setAberto(false);
-      onSalvo();
-    } catch (err: any) {
-      setErro(err.message || "Erro ao salvar categoria");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ borderBottom: "1px solid var(--color-border)", fontSize: "0.8rem" }}>
-      <div style={{ display: "flex", alignItems: "center", padding: "0.4rem 0", opacity: 0.85 }}>
-        <div style={{ flex: 1, color: "var(--color-cream)", display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
-          {temComprovante && (
-            <span
-              title={`Conciliado a partir de um comprovante do WhatsApp: "${tx.comprovanteWhatsappLegenda || "sem legenda"}"`}
-              style={{
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                width: "18px", height: "18px", borderRadius: "50%",
-                background: "#25D366", color: "#fff", flexShrink: 0,
-              }}
-            >
-              <MessageCircle size={11} />
-            </span>
-          )}
-          {tx.descricao} {tx.lancamentoDescricao && <span style={{ color: "var(--color-muted)" }}>→ {tx.lancamentoDescricao}</span>}
-          {tx.lancamentoCategoriaNome ? (
-            <span style={{ color: "var(--color-gold)", fontSize: "0.72rem" }}>· {tx.lancamentoCategoriaNome}</span>
-          ) : (
-            <span style={{ color: "var(--color-danger)", fontSize: "0.72rem" }}>· sem categoria</span>
-          )}
-        </div>
-        <div style={{ width: "100px", textAlign: "right" }}>{tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}</div>
-        <button
-          type="button"
-          onClick={() => setAberto(a => !a)}
-          style={{ width: "90px", textAlign: "right", background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", color: semCategoria ? "var(--color-gold)" : "var(--color-success)" }}
-        >
-          {semCategoria ? "Categorizar" : "✔ Editar"}
-        </button>
-      </div>
-
-      {aberto && (
-        <div style={{ padding: "0.5rem 0 0.75rem 0", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {erro && <div style={{ color: "var(--color-danger)", fontSize: "0.75rem" }}>{erro}</div>}
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 220px", minWidth: 200 }}>
-              <label className="form-label">Categoria</label>
-              <CategoriaCombobox
-                categorias={categorias}
-                tipo={tx.tipo === "entrada" ? "entrada" : "saida"}
-                value={categoriaId}
-                onChange={setCategoriaId}
-                onCriada={onCategoriaCriada}
-              />
-            </div>
-            <button type="button" className="btn btn-gold btn-sm" onClick={salvar} disabled={saving}>
-              {saving ? "..." : "Salvar"}
-            </button>
-          </div>
-          {tx.lancamentoContatoId && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "var(--color-cream-dim)", cursor: "pointer" }}>
-                <input type="checkbox" checked={lembrarPadrao} onChange={e => setLembrarPadrao(e.target.checked)} style={{ width: "auto" }} />
-                Lembrar esse padrão bancário — próximos pagamentos pro mesmo lugar já vêm nessa categoria sozinhos
-              </label>
-              {lembrarPadrao && (
-                <input
-                  type="text" value={padraoDescricao} onChange={e => setPadraoDescricao(e.target.value)}
-                  placeholder="trecho da descrição do banco a reconhecer" style={{ fontSize: "0.8rem" }}
-                />
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Card de conciliação inline (sem modal) — cada transação pendente já mostra o
-// "palpite" (contato + categoria sugeridos, aprendidos de conciliações anteriores ou do
-// comprovante do WhatsApp) pré-preenchido, pronto pra confirmar com um clique só.
-function PendenteCard({ tx, agendamentos, contatos, categorias, centros, onResolvido, onCategoriaCriada }: {
-  tx: TransacaoBancariaImportada;
-  agendamentos: Agendamento[];
-  contatos: Contato[];
-  categorias: CategoriaFinanceira[];
-  centros: CentroCusto[];
-  onResolvido: () => void;
-  onCategoriaCriada: (nova: CategoriaFinanceira) => void;
-}) {
-  const temPalpite = !!(tx.contatoSugeridoId || tx.categoriaSugeridaId);
-  const temMatch = agendamentos.length > 0;
-  // Quando existe um palpite pronto (contato+categoria), já mostra "Nova transação" pré-
-  // preenchida — é mais rápido que forçar a escolher entre uma conta existente primeiro.
-  // Sem palpite mas com uma conta existente compatível, começa em "Sugestão" (bater com ela).
-  const [modo, setModo] = useState<"sugestao" | "novo">(temMatch && !temPalpite ? "sugestao" : "novo");
-  const [lancamentoId, setLancamentoId] = useState(agendamentos[0]?.id || "");
-  // Gasto pontual/avulso não devia obrigar escolher um contato específico na lista enorme
-  // de fornecedores cadastrados — sem sugestão de contato, já pré-preenche com o contato
-  // genérico "Gasto Pontual" (o usuário ainda pode trocar se quiser um contato de verdade).
-  const contatoGenerico = contatos.find(c => c.nome === "Gasto Pontual");
-  const [contatoId, setContatoId] = useState(tx.contatoSugeridoId || contatoGenerico?.id || "");
-  const [categoriaId, setCategoriaId] = useState(tx.categoriaSugeridaId || "");
-  const [centroCustoId, setCentroCustoId] = useState(tx.centroCustoSugeridoId || "");
-  const [descricao, setDescricao] = useState(tx.descricao || "");
-  const [lembrarPadrao, setLembrarPadrao] = useState(!tx.contatoSugeridoId);
-  // Prioriza a contraparte extraída da descrição complementar (nome/documento de quem
-  // recebeu o Pix) — é isso que se repete entre pagamentos pro MESMO lugar. A descrição
-  // genérica ("PIX EMITIDO OUTRA IF") é igual pra qualquer Pix e não reconhece ninguém.
-  const [padraoDescricao, setPadraoDescricao] = useState(
-    (extrairContraparte(tx.descricaoComplementar) || tx.descricao || "").toLowerCase().trim()
-  );
-  const [saving, setSaving] = useState(false);
-  const [erro, setErro] = useState("");
-
-  const confirmar = async () => {
-    setErro("");
-    if (modo === "sugestao" && !lancamentoId) { setErro("Selecione uma conta a pagar/receber."); return; }
-    if (modo === "novo" && !contatoId) { setErro("Selecione um contato."); return; }
-    setSaving(true);
-    try {
-      const body = modo === "sugestao"
-        ? { lancamentoId }
-        : { novoLancamento: { contatoId, categoriaId: categoriaId || undefined, centroCustoId: centroCustoId || undefined, descricao } };
-      const res = await fetch(`/api/financeiro/transacoes-bancarias/${tx.id}/conciliar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-
-      if (modo === "novo" && lembrarPadrao && padraoDescricao.trim()) {
-        await fetch("/api/financeiro/regras-conciliacao", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ padraoDescricao: padraoDescricao.trim(), contatoId, categoriaId: categoriaId || undefined, centroCustoId: centroCustoId || undefined, descricao }),
-        }).catch(() => {});
-      }
-
-      onResolvido();
-    } catch (err: any) {
-      setErro(err.message || "Erro ao conciliar");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const ignorar = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/financeiro/transacoes-bancarias/${tx.id}/conciliar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ignorar: true }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      onResolvido();
-    } catch (err: any) {
-      setErro(err.message || "Erro ao ignorar");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="card" style={{ position: "relative", padding: temPalpite ? "1.75rem 1.25rem 1rem" : "1rem 1.25rem" }}>
-      {temPalpite && (
-        <div style={{
-          position: "absolute", top: 0, right: 0, background: "var(--color-gold)", color: "var(--color-bg)",
-          fontSize: "0.65rem", fontWeight: 800, padding: "0.2rem 0.6rem",
-          borderTopRightRadius: "1rem", borderBottomLeftRadius: "0.5rem",
-          display: "flex", alignItems: "center", gap: "0.25rem",
-        }}>
-          <Sparkles size={11} /> PALPITE
-        </div>
-      )}
-
-      {/* Cabeçalho: data, descrição do banco, valor */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "0.75rem" }}>
-        <div>
-          <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{fmtData(tx.data)}</span>
-          <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-cream)", margin: "0.15rem 0 0 0" }}>{tx.descricao}</p>
-          {tx.descricaoComplementar && (
-            <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: "0.1rem 0 0 0" }}>{tx.descricaoComplementar}</p>
-          )}
-        </div>
-        <span style={{ fontWeight: 800, fontSize: "1.05rem", color: tx.tipo === "entrada" ? "var(--color-success)" : "var(--color-danger)", whiteSpace: "nowrap" }}>
-          {tx.tipo === "entrada" ? "+" : "-"}{brl(tx.valor)}
-        </span>
-      </div>
-
-      {(tx.contatoSugeridoNome || tx.categoriaSugeridaNome) && (
-        <div style={{ background: "rgba(212,175,140,0.08)", border: "1px solid var(--color-gold)", color: "var(--color-gold)", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", fontSize: "0.78rem", marginBottom: "0.75rem" }}>
-          {tx.contatoSugeridoNome && <>Reconhecido como <strong>{tx.contatoSugeridoNome}</strong>{tx.categoriaSugeridaNome ? " — " : ""}</>}
-          {tx.categoriaSugeridaNome && <>categoria <strong>{tx.categoriaSugeridaNome}</strong></>}
-          {tx.comprovanteLegenda && ` (comprovante WhatsApp: "${tx.comprovanteLegenda}")`}
-        </div>
-      )}
-
-      {erro && <div style={{ background: "rgba(231,76,60,0.1)", border: "1px solid var(--color-danger)", color: "var(--color-danger)", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", fontSize: "0.8rem", marginBottom: "0.75rem" }}>{erro}</div>}
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem", borderBottom: "1px solid var(--color-border)" }}>
-        {temMatch && (
-          <button type="button" onClick={() => setModo("sugestao")}
-            style={{
-              background: "none", border: "none", cursor: "pointer", padding: "0.4rem 0.6rem", fontSize: "0.8rem", fontWeight: 600,
-              color: modo === "sugestao" ? "var(--color-gold)" : "var(--color-muted)",
-              borderBottom: modo === "sugestao" ? "2px solid var(--color-gold)" : "2px solid transparent",
-            }}>
-            Sugestão ({agendamentos.length})
-          </button>
-        )}
-        <button type="button" onClick={() => setModo("novo")}
-          style={{
-            background: "none", border: "none", cursor: "pointer", padding: "0.4rem 0.6rem", fontSize: "0.8rem", fontWeight: 600,
-            color: modo === "novo" ? "var(--color-gold)" : "var(--color-muted)",
-            borderBottom: modo === "novo" ? "2px solid var(--color-gold)" : "2px solid transparent",
-          }}>
-          Nova transação
-        </button>
-      </div>
-
-      {/* Corpo */}
-      <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
-        {modo === "sugestao" ? (
-          <div style={{ flex: 1, minWidth: 260 }}>
-            <label className="form-label">Conta a {tx.tipo === "entrada" ? "receber" : "pagar"}</label>
-            <select value={lancamentoId} onChange={e => setLancamentoId(e.target.value)}>
-              {agendamentos.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.descricao} — {a.contatoNome} — {brl(a.valor - a.valorPago)} em aberto (venc. {fmtData(a.dataVencimento)})
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <>
-            <div style={{ flex: "1 1 200px", minWidth: 180 }}>
-              <label className="form-label">Contato</label>
-              <select value={contatoId} onChange={e => setContatoId(e.target.value)}>
-                <option value="">Selecione...</option>
-                {contatos.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: "1 1 220px", minWidth: 200 }}>
-              <label className="form-label">Categoria</label>
-              <CategoriaCombobox
-                categorias={categorias}
-                tipo={tx.tipo === "entrada" ? "entrada" : "saida"}
-                value={categoriaId}
-                onChange={setCategoriaId}
-                onCriada={onCategoriaCriada}
-                placeholder="Sem categoria"
-              />
-            </div>
-            <div style={{ flex: "1 1 200px", minWidth: 180 }}>
-              <label className="form-label">Descrição</label>
-              <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)} />
-            </div>
-          </>
-        )}
-        <button type="button" className="btn btn-gold" onClick={confirmar} disabled={saving} style={{ height: "2.5rem", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
-          {saving ? "..." : "OK"}
-        </button>
-      </div>
-
-      {modo === "novo" && (
-        <div style={{ marginTop: "0.6rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 200px", minWidth: 180 }}>
-              <label className="form-label">Centro de custo (opcional)</label>
-              <select value={centroCustoId} onChange={e => setCentroCustoId(e.target.value)}>
-                <option value="">Sem centro de custo</option>
-                {centros.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", color: "var(--color-cream-dim)", cursor: "pointer", marginTop: "1.2rem" }}>
-              <input type="checkbox" checked={lembrarPadrao} onChange={e => setLembrarPadrao(e.target.checked)} style={{ width: "auto" }} />
-              Lembrar esse padrão
-            </label>
-          </div>
-          {lembrarPadrao && (
-            <input type="text" value={padraoDescricao} onChange={e => setPadraoDescricao(e.target.value)} placeholder="trecho da descrição do banco a reconhecer, ex: sabesp" style={{ fontSize: "0.8rem" }} />
-          )}
-        </div>
-      )}
-
-      <div style={{ textAlign: "right", marginTop: "0.5rem" }}>
-        <button type="button" onClick={ignorar} disabled={saving} style={{ background: "none", border: "none", color: "var(--color-muted)", cursor: "pointer", fontSize: "0.75rem", textDecoration: "underline" }}>
-          Ignorar transação
-        </button>
       </div>
     </div>
   );
