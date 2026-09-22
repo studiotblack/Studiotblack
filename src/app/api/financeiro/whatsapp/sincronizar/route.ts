@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { createWorker } from "tesseract.js";
-import path from "node:path";
 import { downloadMediaMessage, type WAMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
@@ -15,28 +13,42 @@ export const dynamic = "force-dynamic";
 // função nunca tinha chance de terminar, o que também ajuda a explicar o "trava".
 export const maxDuration = 60;
 
-// Sem "langPath" explícito, o tesseract.js baixa o modelo de idioma (~8MB) de um CDN
-// externo (jsdelivr) TODA VEZ que cria o worker — foi isso, não o reconhecimento em si,
-// que consumia 30-40s e matava a função pelo limite de 60s da Vercel (confirmado: todo
-// comprovante pendente tinha textoOcr NULO, ou seja, o OCR nunca chegava a terminar nem
-// uma vez). Apontar pro pacote @tesseract.js-data/por já instalado localmente elimina
-// essa rede por completo — mas como esse caminho só existe como string aqui (nunca é
-// importado via require/import), precisa do outputFileTracingIncludes em next.config.ts
-// pra Vercel incluir esses arquivos no deploy; senão o build "esquece" deles.
-const TESSERACT_LANG_PATH = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "por", "4.0.0_best_int");
-
-// Nenhuma chamada de rede/CPU externa (baixar a mídia do WhatsApp, criar o worker do
-// Tesseract, rodar o reconhecimento) tinha um teto de tempo próprio — o orçamento de
-// TEMPO_LIMITE_MS abaixo só é checado ENTRE itens do loop, então se uma dessas chamadas
-// travar de verdade no meio (ex: CDN de mídia do WhatsApp lenta/sem resposta), a função
-// fica presa nela até o limite duro de 60s da Vercel, do mesmo jeito que o download do
-// modelo do Tesseract travava antes. Corrida contra um timeout garante que NENHUMA
-// chamada individual consiga travar a função inteira, não importa o motivo.
+// Nenhuma chamada de rede/CPU externa (baixar a mídia do WhatsApp, chamar a API de OCR)
+// tinha um teto de tempo próprio — o orçamento de TEMPO_LIMITE_MS abaixo só é checado
+// ENTRE itens do loop, então se uma dessas chamadas travar de verdade no meio (ex: rede
+// lenta/sem resposta), a função fica presa nela até o limite duro de 60s da Vercel. Corrida
+// contra um timeout garante que NENHUMA chamada individual consiga travar a função inteira.
 function comTimeout<T>(promise: Promise<T>, ms: number, mensagem: string): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(mensagem)), ms)),
   ]);
+}
+
+// OCR via API externa (OCR.space) em vez de rodar Tesseract.js dentro da função —
+// createWorker() do Tesseract provou ser genuinamente instável na CPU da Vercel (chegou a
+// levar mais de 40s pra ficar pronto, contra ~500ms local, mesmo já com o modelo de idioma
+// local e um pré-aquecimento em paralelo com a conexão do WhatsApp — nada disso resolveu de
+// verdade; confirmado em produção: 100% das tentativas recentes falharam por timeout). Uma
+// chamada HTTP não tem esse cold-start de CPU, então troca o problema inteiro de categoria.
+async function reconhecerTextoOcrSpace(buffer: Buffer): Promise<string> {
+  const apiKey = process.env.OCR_SPACE_API_KEY;
+  if (!apiKey) throw new Error("OCR_SPACE_API_KEY não configurada");
+
+  const form = new FormData();
+  form.append("apikey", apiKey);
+  form.append("language", "por");
+  form.append("OCREngine", "2");
+  form.append("scale", "true");
+  form.append("file", new Blob([new Uint8Array(buffer)]), "comprovante.jpg");
+
+  const res = await fetch("https://api.ocr.space/parse/image", { method: "POST", body: form });
+  const data = await res.json();
+  if (data.IsErroredOnProcessing) {
+    const msg = Array.isArray(data.ErrorMessage) ? data.ErrorMessage.join("; ") : (data.ErrorMessage || "erro desconhecido");
+    throw new Error(`OCR.space: ${msg}`);
+  }
+  return data.ParsedResults?.[0]?.ParsedText || "";
 }
 
 // POST /api/financeiro/whatsapp/sincronizar
@@ -73,18 +85,6 @@ export async function POST() {
     if (!sessaoPareada) {
       return NextResponse.json({ error: "WhatsApp ainda não pareado. Rode o script de pareamento primeiro." }, { status: 400 });
     }
-
-    // Confirmado em produção (log "langPath existe: true, arquivo do modelo existe: true"):
-    // o arquivo do modelo NÃO é o problema — é o próprio createWorker (criar o worker_thread
-    // + inicializar o núcleo WASM do Tesseract) que é genuinamente lento na CPU mais
-    // limitada da Vercel (>20s, contra ~500ms no meu ambiente local). Como a conexão do
-    // WhatsApp logo abaixo já leva uns 22-24s SÓ ESPERANDO (não é CPU-bound), inicia o
-    // worker aqui, EM PARALELO, antes de saber se vai ter algo pra fazer OCR — as duas
-    // esperas lentas se sobrepõem em vez de somar, então quando o loop de OCR precisar do
-    // worker (lá na frente), ele já está pronto ou bem mais perto disso. Se no fim não
-    // precisar (nenhum comprovante novo sem valor), só descarta.
-    const workerPromise = createWorker("por", undefined, { langPath: TESSERACT_LANG_PATH, cacheMethod: "none" })
-      .catch((err) => { console.error("[whatsapp/sincronizar] Erro ao pré-aquecer worker do Tesseract:", err); return null; });
 
     // 1. Conecta e coleta as mensagens de imagem novas do grupo
     await log("antes de conectar no WhatsApp");
@@ -163,53 +163,36 @@ export async function POST() {
 
     // 2c. OCR só pra um número limitado de comprovantes por execução — busca direto no
     // banco (não só os coletados agora) pra incluir backlog de execuções anteriores que
-    // tinham imagem salva mas não deu tempo/o worker não ficou pronto. Prioriza os mais
-    // antigos primeiro, pra nenhum ficar esperando pra sempre.
-    const MAX_OCR_POR_EXECUCAO = 4;
+    // tinham imagem salva mas não deu tempo/a API de OCR não respondeu. Prioriza os mais
+    // antigos primeiro, pra nenhum ficar esperando pra sempre. Era 4 na época do Tesseract
+    // (cada item podia levar >20s só pra iniciar o worker) — a API do OCR.space responde em
+    // segundos, então dá pra processar bem mais por execução sem estourar o orçamento.
+    const MAX_OCR_POR_EXECUCAO = 15;
     const candidatosOcr = await sql`
       SELECT id, "imagemBuffer" FROM "WhatsappComprovante"
       WHERE status = 'pendente' AND "valorOcr" IS NULL AND "imagemBuffer" IS NOT NULL
       ORDER BY "dataHoraEnvio" ASC
       LIMIT ${MAX_OCR_POR_EXECUCAO}
     `;
-    let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     let ocrProcessadas = 0;
     let ocrParouPorTempo = false;
 
-    if (candidatosOcr.length === 0) {
-      // Ninguém precisa do worker pré-aquecido nessa execução — descarta em segundo plano
-      // (sem bloquear a resposta) em vez de deixar um worker_thread pendurado à toa.
-      workerPromise.then((w) => w?.terminate()).catch(() => {});
-    }
-    try {
-      for (const cand of candidatosOcr) {
-        if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
-        try {
-          if (!worker) {
-            // Já foi pedido pra começar lá atrás (em paralelo com a conexão do WhatsApp) —
-            // o tempo restante do orçamento geral é a única espera de verdade daqui, não
-            // mais os 20s inteiros: se o worker já ficou pronto durante a espera do
-            // WhatsApp, essa await resolve na hora.
-            const tempoRestante = Math.max(1_000, TEMPO_LIMITE_MS - (Date.now() - inicio));
-            worker = await comTimeout(workerPromise, tempoRestante, `worker do Tesseract não ficou pronto a tempo (>${Math.round(tempoRestante / 1000)}s restantes)`);
-            if (!worker) throw new Error("worker do Tesseract falhou ao inicializar (veja log de erro acima)");
-          }
-          const { data } = await comTimeout(worker.recognize(cand.imagemBuffer as Buffer), 15_000, "reconhecimento OCR travou (>15s)");
-          const valorOcr = extrairValor(data.text);
-          // Sucesso: limpa o buffer guardado — não precisa mais dele, e não faz sentido
-          // acumular imagem no banco além do necessário pra tentar de novo.
-          await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${data.text}, "dataHoraOcr" = NOW(), "imagemBuffer" = NULL WHERE id = ${cand.id}`;
-          const item = comprovantesNovos.find((c) => c.id === cand.id);
-          if (item) { item.valorOcr = valorOcr; item.textoOcr = data.text; }
-          ocrProcessadas++;
-          await log(`OCR ${cand.id} concluído — valor: ${valorOcr}`);
-        } catch (err) {
-          console.error("[whatsapp/sincronizar] Erro no OCR:", err);
-          await log(`OCR ${cand.id} falhou — ${err instanceof Error ? err.message : String(err)}`);
-        }
+    for (const cand of candidatosOcr) {
+      if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
+      try {
+        const texto = await comTimeout(reconhecerTextoOcrSpace(cand.imagemBuffer as Buffer), 15_000, "OCR.space travou (>15s)");
+        const valorOcr = extrairValor(texto);
+        // Sucesso: limpa o buffer guardado — não precisa mais dele, e não faz sentido
+        // acumular imagem no banco além do necessário pra tentar de novo.
+        await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${texto}, "dataHoraOcr" = NOW(), "imagemBuffer" = NULL WHERE id = ${cand.id}`;
+        const item = comprovantesNovos.find((c) => c.id === cand.id);
+        if (item) { item.valorOcr = valorOcr; item.textoOcr = texto; }
+        ocrProcessadas++;
+        await log(`OCR ${cand.id} concluído — valor: ${valorOcr}`);
+      } catch (err) {
+        console.error("[whatsapp/sincronizar] Erro no OCR:", err);
+        await log(`OCR ${cand.id} falhou — ${err instanceof Error ? err.message : String(err)}`);
       }
-    } finally {
-      if (worker) await worker.terminate();
     }
     await log(`depois do OCR — ${ocrProcessadas} processada(s) de ${candidatosOcr.length}${ocrParouPorTempo ? " (parou por orçamento de tempo)" : ""}`);
 
