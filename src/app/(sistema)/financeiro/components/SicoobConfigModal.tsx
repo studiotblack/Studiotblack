@@ -22,6 +22,7 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
   const [regraContatoId, setRegraContatoId] = useState("");
   const [regraCategoriaId, setRegraCategoriaId] = useState("");
   const [regraCentroCustoId, setRegraCentroCustoId] = useState("");
+  const [regraValorMaximo, setRegraValorMaximo] = useState("");
   const [regraSaidaAtiva, setRegraSaidaAtiva] = useState(false);
   const [regraSaidaContatoId, setRegraSaidaContatoId] = useState("");
   const [regraSaidaCategoriaId, setRegraSaidaCategoriaId] = useState("");
@@ -40,6 +41,7 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
     setRegraContatoId(conta.regraEntradaContatoId || "");
     setRegraCategoriaId(conta.regraEntradaCategoriaId || "");
     setRegraCentroCustoId(conta.regraEntradaCentroCustoId || "");
+    setRegraValorMaximo(conta.regraEntradaValorMaximo != null ? String(conta.regraEntradaValorMaximo) : "");
     setRegraSaidaAtiva(conta.regraSaidaAtiva || false);
     setRegraSaidaContatoId(conta.regraSaidaContatoId || "");
     setRegraSaidaCategoriaId(conta.regraSaidaCategoriaId || "");
@@ -74,6 +76,7 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
           regraEntradaContatoId: regraAtiva ? (regraContatoId || null) : null,
           regraEntradaCategoriaId: regraAtiva ? (regraCategoriaId || null) : null,
           regraEntradaCentroCustoId: regraAtiva ? (regraCentroCustoId || null) : null,
+          ...(regraAtiva && regraValorMaximo ? { regraEntradaValorMaximo: Number(regraValorMaximo) } : {}),
           regraSaidaAtiva: regraSaidaAtiva,
           regraSaidaContatoId: regraSaidaAtiva ? (regraSaidaContatoId || null) : null,
           regraSaidaCategoriaId: regraSaidaAtiva ? (regraSaidaCategoriaId || null) : null,
@@ -161,6 +164,20 @@ export default function SicoobConfigModal({ conta, contatos, categorias, centros
                       {centros.filter(c => c.ativo).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label className="form-label">Valor máximo pra conciliar sozinho (opcional)</label>
+                  <input
+                    type="number" min={0} step="0.01" value={regraValorMaximo}
+                    onChange={e => setRegraValorMaximo(e.target.value)}
+                    placeholder="ex: 5000" style={{ maxWidth: 160 }}
+                  />
+                  <p style={{ fontSize: "0.72rem", color: "var(--color-muted)", margin: "0.35rem 0 0 0" }}>
+                    Entrada sem match acima desse valor não vira "Venda de Serviços" sozinha — fica
+                    pendente pra você revisar (protege contra aportes, transferências e outros
+                    valores grandes fora do padrão de venda serem contados como faturamento por
+                    engano). Em branco = sem limite.
+                  </p>
                 </div>
               </div>
             )}

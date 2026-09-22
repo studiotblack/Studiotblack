@@ -70,6 +70,7 @@ export async function PUT(request: NextRequest) {
         "regraEntradaContatoId" = COALESCE(${b.regraEntradaContatoId ?? null}, "regraEntradaContatoId"),
         "regraEntradaCategoriaId" = COALESCE(${b.regraEntradaCategoriaId ?? null}, "regraEntradaCategoriaId"),
         "regraEntradaCentroCustoId" = COALESCE(${b.regraEntradaCentroCustoId ?? null}, "regraEntradaCentroCustoId"),
+        "regraEntradaValorMaximo" = COALESCE(${typeof b.regraEntradaValorMaximo === "number" ? b.regraEntradaValorMaximo : null}, "regraEntradaValorMaximo"),
         "regraSaidaAtiva" = COALESCE(${typeof b.regraSaidaAtiva === "boolean" ? b.regraSaidaAtiva : null}, "regraSaidaAtiva"),
         "regraSaidaContatoId" = COALESCE(${b.regraSaidaContatoId ?? null}, "regraSaidaContatoId"),
         "regraSaidaCategoriaId" = COALESCE(${b.regraSaidaCategoriaId ?? null}, "regraSaidaCategoriaId"),

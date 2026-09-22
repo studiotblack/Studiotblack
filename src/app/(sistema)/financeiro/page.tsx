@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import {
-  Landmark, ArrowUpRight, Shield, BarChart3, List, FolderKanban, SlidersHorizontal,
+  Landmark, ArrowUpRight, Shield, BarChart3, List, FolderKanban, SlidersHorizontal, Receipt,
 } from "lucide-react";
 
 // DRE imports
@@ -15,9 +15,10 @@ import FluxoCaixaPanel from "./components/FluxoCaixaPanel";
 import AgendamentosTable from "./components/AgendamentosTable";
 import CadastrosPanel from "./components/CadastrosPanel";
 import RelatorioFinanceiroPanel from "./components/RelatorioFinanceiroPanel";
+import ConciliacaoFaturamentoPanel from "./components/ConciliacaoFaturamentoPanel";
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type Tab = "fluxo" | "dre" | "lancamentos" | "relatorio" | "cadastros" | "conciliacao" | "configuracao";
+type Tab = "fluxo" | "dre" | "faturamento" | "lancamentos" | "relatorio" | "cadastros" | "conciliacao" | "configuracao";
 
 export default function FinanceiroPage() {
   const [activeTab, setActiveTab] = useState<Tab>("fluxo");
@@ -50,6 +51,7 @@ export default function FinanceiroPage() {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "fluxo",        label: "Fluxo de Caixa",       icon: <ArrowUpRight size={14} /> },
     { id: "dre",          label: "DRE",                  icon: <BarChart3 size={14} />    },
+    { id: "faturamento",  label: "Faturamento",          icon: <Receipt size={14} />      },
     { id: "lancamentos",  label: "Contas a Pagar/Receber", icon: <List size={14} />       },
     { id: "conciliacao",  label: "Conciliação Bancária", icon: <Landmark size={14} />     },
     { id: "relatorio",    label: "Relatório",            icon: <SlidersHorizontal size={14} /> },
@@ -83,7 +85,7 @@ export default function FinanceiroPage() {
       </div>
 
       {/* ── TAB: FLUXO DE CAIXA ───────────────────────────────────────────── */}
-      {activeTab === "fluxo" && <FluxoCaixaPanel dreLinhas={dreLinhasUnificado} anoDre={anoFiltro} />}
+      {activeTab === "fluxo" && <FluxoCaixaPanel dreLinhas={dreLinhasUnificado} anoDre={anoFiltro} onAbrirFaturamento={() => setActiveTab("faturamento")} />}
 
       {/* ── TAB: DRE ─────────────────────────────────────────────────────── */}
       {activeTab === "dre" && (
@@ -117,6 +119,9 @@ export default function FinanceiroPage() {
           )}
         </>
       )}
+
+      {/* ── TAB: FATURAMENTO (AppBarber x Banco) ────────────────────────────── */}
+      {activeTab === "faturamento" && <ConciliacaoFaturamentoPanel />}
 
       {/* ── TAB: CONTAS A PAGAR/RECEBER ──────────────────────────────────── */}
       {activeTab === "lancamentos" && <AgendamentosTable />}

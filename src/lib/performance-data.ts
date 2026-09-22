@@ -251,6 +251,15 @@ export const parseComissoesRows = (jsonData: any[]): DesempenhoProfissional[] =>
       const cli = row["Cliente"] || "Cliente Avulso";
       const uid = `${prof}-${serv}-${String(dataStr)}-${cli}`.replace(/\s/g, "");
 
+      // Método de pagamento — precisa pra saber quais vendas NUNCA vão cair no banco
+      // ("Dinheiro" não é depositado) na hora de cruzar faturamento do AppBarber com o
+      // extrato do Sicoob (ver /api/financeiro/conciliacao-faturamento).
+      const pagamento: string | undefined = row["Pagamento"] || undefined;
+      const percentualRaw = row["%"];
+      const percentual = percentualRaw
+        ? parseFloat(String(percentualRaw).replace("%", "").replace(",", "."))
+        : undefined;
+
       return {
         id: uid,
         profissional: prof,
@@ -259,6 +268,8 @@ export const parseComissoesRows = (jsonData: any[]): DesempenhoProfissional[] =>
         item: serv,
         valorBruto,
         valorComissao,
+        pagamento,
+        percentual,
       };
     });
 };

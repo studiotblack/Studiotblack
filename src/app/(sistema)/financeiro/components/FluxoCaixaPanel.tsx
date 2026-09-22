@@ -35,6 +35,14 @@ interface TransferenciaRow {
 interface FluxoCaixaPanelProps {
   dreLinhas: DreLinhaImportada[];
   anoDre: number;
+  onAbrirFaturamento?: () => void;
+}
+
+interface ConciliacaoFaturamentoResumo {
+  totalAppBarber: number;
+  totalBanco: number;
+  totalDinheiro: number;
+  statusMes: "ok" | "revisar";
 }
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -76,12 +84,13 @@ function InsightChip({ icon: Icon, label, value, sub, tone }: {
   );
 }
 
-export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelProps) {
+export default function FluxoCaixaPanel({ dreLinhas, anoDre, onAbrirFaturamento }: FluxoCaixaPanelProps) {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [baixas, setBaixas] = useState<BaixaComTipo[]>([]);
   const [transferencias, setTransferencias] = useState<TransferenciaRow[]>([]);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [perfData, setPerfData] = useState<DesempenhoProfissional[]>([]);
+  const [conciliacaoFaturamento, setConciliacaoFaturamento] = useState<ConciliacaoFaturamentoResumo | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Meta de faturamento mensal do negócio (card "Receita Real do Mês")
@@ -93,7 +102,9 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
     const carregar = async () => {
       setLoading(true);
       try {
-        const [rContas, rBaixas, rTransf, rPagar, rReceber, rMeta, rPerf] = await Promise.all([
+        const hoje = new Date();
+        const mesAnoCorrente = `${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+        const [rContas, rBaixas, rTransf, rPagar, rReceber, rMeta, rPerf, rConciliacao] = await Promise.all([
           fetch("/api/financeiro/contas-bancarias"),
           fetch("/api/financeiro/baixas"),
           fetch("/api/financeiro/transferencias"),
@@ -101,6 +112,7 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
           fetch("/api/financeiro/agendamentos?tipo=receber"),
           fetch("/api/financeiro/meta"),
           fetch("/api/performance/comissoes"),
+          fetch(`/api/financeiro/conciliacao-faturamento?mesAno=${encodeURIComponent(mesAnoCorrente)}`),
         ]);
         setContas(rContas.ok ? await rContas.json() : []);
         setBaixas(rBaixas.ok ? await rBaixas.json() : []);
@@ -111,6 +123,7 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
         const metaData = rMeta.ok ? await rMeta.json() : { metaReceitaMensal: 0 };
         setMeta(metaData.metaReceitaMensal || 0);
         setPerfData(rPerf.ok ? await rPerf.json() : []);
+        setConciliacaoFaturamento(rConciliacao.ok ? await rConciliacao.json() : null);
       } catch (err) {
         console.error("Erro ao carregar fluxo de caixa:", err);
       } finally {
@@ -552,6 +565,32 @@ export default function FluxoCaixaPanel({ dreLinhas, anoDre }: FluxoCaixaPanelPr
             </>
           ) : (
             <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>DRE deste mês ainda não disponível.</span>
+          )}
+
+          {/* Conciliação dia a dia (AppBarber x Banco, exclui dinheiro) — pega anomalia de
+              categorização (ex: um aporte contado como venda) que a comparação só-do-total
+              acima não detecta sozinha. */}
+          {conciliacaoFaturamento && (
+            <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.6rem" }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>Conciliação do mês (AppBarber x Banco, sem dinheiro)</span>
+              {conciliacaoFaturamento.statusMes === "revisar" ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.2rem" }}>
+                  <AlertTriangle size={14} color="var(--color-danger)" />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-danger)" }}>
+                    Fora do esperado — vale revisar
+                  </span>
+                </div>
+              ) : (
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-success)", marginTop: "0.2rem" }}>
+                  Dentro do esperado ✓
+                </div>
+              )}
+              {onAbrirFaturamento && (
+                <button type="button" onClick={onAbrirFaturamento} className="btn btn-ghost btn-sm" style={{ marginTop: "0.4rem", padding: "0.25rem 0.5rem", fontSize: "0.72rem" }}>
+                  Ver dia a dia →
+                </button>
+              )}
+            </div>
           )}
         </div>
 

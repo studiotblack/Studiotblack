@@ -93,6 +93,11 @@ export async function ensureFinanceiroTables(sql: Sql) {
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaContatoId" TEXT REFERENCES "Contato"(id)`;
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaCategoriaId" TEXT REFERENCES "CategoriaFinanceira"(id)`;
   await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaCentroCustoId" TEXT REFERENCES "CentroCusto"(id)`;
+  // Trava de segurança: entrada sem match acima desse valor não auto-concilia sozinha como
+  // "Venda de Serviços" mesmo com a regra ativa — fica pendente pra revisão manual. Sem isso,
+  // um aporte/transferência grande (já aconteceu: um PIX de R$20.500) inflava o faturamento
+  // sem ninguém perceber. NULL (padrão) = sem limite, comportamento de antes continua igual.
+  await sql`ALTER TABLE "ContaBancaria" ADD COLUMN IF NOT EXISTS "regraEntradaValorMaximo" FLOAT`;
 
   // Cache do saldo real puxado do Sicoob na última sincronização — usado no Fluxo de Caixa
   // pra mostrar o saldo de verdade da conta em vez do calculado localmente, quando disponível.

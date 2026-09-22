@@ -212,6 +212,19 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         }
       }
 
+      // Trava de valor: entrada sem match acima do limite configurado não auto-concilia
+      // sozinha, mesmo com a regra ativa — já aconteceu de um PIX de R$20.500 (aporte, não
+      // venda) cair direto como "Venda de Serviços" sem ninguém perceber, só porque nenhuma
+      // conta a receber bateu com ele. Acima do limite, fica pendente igual a "sem regra".
+      // Só se aplica a ENTRADA — a trava é especificamente sobre a regra de entrada, não deve
+      // mudar o comportamento de saída (que já cai no "sem match e sem regra" mais abaixo).
+      const acimaDoLimite = tipo === "entrada" && conta.regraEntradaValorMaximo != null && valor > conta.regraEntradaValorMaximo;
+      if (acimaDoLimite) {
+        pendentes++;
+        detalhes.push({ data, valor, tipo, descricao, status: "pendente (acima do limite da regra automática)", categoria: null });
+        continue;
+      }
+
       // Sem match — se for entrada e a conta tiver regra automática configurada, cria e já baixa
       // o lançamento sozinho (ex: vendas avulsas de produto que não passam por "conta a receber").
       if (tipo === "entrada" && conta.regraEntradaAtiva && conta.regraEntradaContatoId) {

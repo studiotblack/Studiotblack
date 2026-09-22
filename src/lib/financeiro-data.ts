@@ -27,6 +27,7 @@ export interface ContaBancaria {
   regraEntradaContatoId?: string;
   regraEntradaCategoriaId?: string;
   regraEntradaCentroCustoId?: string;
+  regraEntradaValorMaximo?: number | null;
 
   // Regra de classificação automática de saída (fallback quando o dicionário de
   // palavras-chave do comprovante do WhatsApp não reconhece nada)
