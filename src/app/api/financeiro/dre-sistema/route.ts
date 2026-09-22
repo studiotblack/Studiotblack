@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import type { DreLinhaImportada } from "@/lib/dre-data";
+import { isProduto } from "@/lib/performance-data";
 
 export const dynamic = "force-dynamic";
+
+// O banco nunca sabe se um pagamento foi de um corte ou de um shampoo — a regra automática
+// de entrada joga tudo indiscriminadamente na mesma categoria ("Venda de Serviços"), então
+// "Vendas Produtos" ficava sempre zerada no DRE (confirmado: zero lançamentos reais nessa
+// categoria, mesmo com produto vendido todo mês). Só o AppBarber sabe essa divisão. Em vez
+// de tentar adivinhar por transação bancária, reclassifica por MÊS: pega o total de produto
+// vendido no AppBarber (sem dinheiro — isso nunca chega no banco pra reclassificar) e move
+// esse valor de "Venda de Serviços" pra "Vendas Produtos" na hora de montar o DRE — o total
+// de receita não muda, só a divisão entre as duas linhas fica certa. Recalculado do zero a
+// cada consulta (não grava nada no banco), então nunca dessincroniza nem duplica.
+const CODIGO_VENDA_SERVICOS = "1.1.1.01.001";
+const CODIGO_VENDA_PRODUTOS = "1.1.1.01.002";
 
 // Mapeia o campo "grupo" da CategoriaFinanceira (herdado do plano de contas do Nibo)
 // pro DREGrupo interno — mesma taxonomia de 5 grupos usada em todo o resto do sistema.
@@ -75,6 +88,44 @@ export async function GET(request: NextRequest) {
         entry.linha[mesKey] += Number(r.total);
         entry.linha.totalAno += Number(r.total);
       }
+    }
+
+    // Reclassificação Serviços → Produtos, mês a mês, a partir do AppBarber
+    const vendasAno = await sql`
+      SELECT data, item, "valorBruto", pagamento
+      FROM "DesempenhoProfissionalDB"
+      WHERE "mesAno" LIKE ${"%/" + ano}
+    `;
+    const produtoPorMes = new Array(12).fill(0);
+    for (const v of vendasAno as any[]) {
+      if (v.pagamento === "Dinheiro") continue; // nunca chega no banco — nada pra reclassificar
+      if (!isProduto(v.item)) continue;
+      const mesStr = String(v.data).split(" ")[0].split("/")[1];
+      const mesIdx = Number(mesStr) - 1;
+      if (mesIdx >= 0 && mesIdx < 12) produtoPorMes[mesIdx] += Number(v.valorBruto);
+    }
+
+    const servicosEntry = porCategoria.get(CODIGO_VENDA_SERVICOS);
+    if (servicosEntry && produtoPorMes.some((v) => v > 0)) {
+      if (!porCategoria.has(CODIGO_VENDA_PRODUTOS)) {
+        porCategoria.set(CODIGO_VENDA_PRODUTOS, {
+          nome: `${CODIGO_VENDA_PRODUTOS}-Vendas Produtos`,
+          grupo: servicosEntry.grupo,
+          linha: linhaVazia(`${CODIGO_VENDA_PRODUTOS}-Vendas Produtos`, 0),
+        });
+      }
+      const produtosEntry = porCategoria.get(CODIGO_VENDA_PRODUTOS)!;
+      MES_KEYS.forEach((mesKey, idx) => {
+        // Nunca reclassifica mais do que existe na linha de Serviços daquele mês — evita
+        // ficar negativo se por algum motivo o AppBarber apontar mais produto do que o banco
+        // efetivamente recebeu naquele mês (ex: venda ainda não compensada).
+        const reclassificar = Math.min(produtoPorMes[idx], Math.max(servicosEntry.linha[mesKey], 0));
+        if (reclassificar <= 0) return;
+        servicosEntry.linha[mesKey] -= reclassificar;
+        servicosEntry.linha.totalAno -= reclassificar;
+        produtosEntry.linha[mesKey] += reclassificar;
+        produtosEntry.linha.totalAno += reclassificar;
+      });
     }
 
     const linhas: DreLinhaImportada[] = [];
