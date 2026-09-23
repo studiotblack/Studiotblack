@@ -20,7 +20,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     }
 
     const resultado = await sql.begin(async (sql) => {
-      const [agendamento] = await sql`SELECT * FROM "LancamentoFinanceiro" WHERE id = ${id}`;
+      // FOR UPDATE trava a linha do agendamento assim que lida — sem isso, duas baixas
+      // concorrentes no mesmo agendamento (ex: duplo clique no BaixaModal, ou uma baixa manual
+      // coincidindo com o sync automático do banco achando o mesmo match) liam o mesmo
+      // valorPago desatualizado. Além de sub-contar o valor pago, isso podia gerar a PRÓXIMA
+      // ocorrência de uma conta recorrente DUAS VEZES (as duas leituras concorrentes viam
+      // "ainda não quitou" com base no valor antigo) — mesma classe de bug confirmada em
+      // vincular-comprovante.ts (comprovante "Água superior").
+      const [agendamento] = await sql`SELECT * FROM "LancamentoFinanceiro" WHERE id = ${id} FOR UPDATE`;
       if (!agendamento) throw new Error("Agendamento não encontrado");
 
       const novoValorPago = agendamento.valorPago + b.valor;

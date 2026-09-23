@@ -30,6 +30,9 @@ export async function POST(_request: Request, ctx: { params: Promise<{ transacao
     if (transacao.status !== "pendente") {
       return NextResponse.json({ error: "Esta transação já foi conciliada ou ignorada" }, { status: 400 });
     }
+    // Essa checagem é só resposta rápida pro caso comum — a proteção de verdade contra corrida
+    // (duplo clique em "Confirmar fatura", por exemplo) está no UPDATE condicional lá embaixo
+    // e no FOR UPDATE que trava as compras candidatas antes de decidir.
 
     const mesRef = mesAnoDe(transacao.data);
     const candidatas = await sql`
@@ -70,6 +73,18 @@ export async function POST(_request: Request, ctx: { params: Promise<{ transacao
     }
 
     const resultado = await sql.begin(async (sql) => {
+      // Trava as compras candidatas e a transação ANTES de escrever — sem isso, dois cliques
+      // concorrentes em "Confirmar fatura" (ou um clique coincidindo com outra sincronização)
+      // podiam achar a mesma lista de compras 'pendente' e processar as duas, cada uma criando
+      // seu próprio lançamento de fatura pra COMPRAS que já foram cobertas pela outra.
+      const idsCandidatas = (candidatas as any[]).map((c) => c.id);
+      const travadas = await sql`
+        SELECT id FROM "CompraCartaoCredito" WHERE id = ANY(${idsCandidatas}) AND status = 'pendente' FOR UPDATE
+      `;
+      if (travadas.length !== idsCandidatas.length) {
+        throw new Error("Alguma dessas compras já foi confirmada por outra ação — atualize a página e tente de novo.");
+      }
+
       const [novoLancamento] = await sql`
         INSERT INTO "LancamentoFinanceiro"
           (tipo, "contatoId", valor, "valorPago", "dataVencimento", "dataCompetencia", descricao, "contaBancariaId")
@@ -91,8 +106,10 @@ export async function POST(_request: Request, ctx: { params: Promise<{ transacao
         await sql`UPDATE "CompraCartaoCredito" SET status = 'baixado', "lancamentoId" = ${novoLancamento.id} WHERE id = ${c.id}`;
       }
       const [transacaoAtualizada] = await sql`
-        UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${novoLancamento.id} WHERE id = ${transacaoId} RETURNING *
+        UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${novoLancamento.id}
+        WHERE id = ${transacaoId} AND status = 'pendente' RETURNING *
       `;
+      if (!transacaoAtualizada) throw new Error("Esta transação já foi conciliada ou ignorada por outra ação");
       return { lancamento: novoLancamento, transacao: transacaoAtualizada };
     });
 
