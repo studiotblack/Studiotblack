@@ -95,46 +95,33 @@ export async function tentarVincularComprovante(sql: Sql, comp: any): Promise<Re
     }
 
     // Ainda sem transação — mas pode já ter sido conciliada pelo caminho NORMAL do sync do
-    // Sicoob (bate com uma conta a pagar/receber já cadastrada de verdade, ex: uma conta
-    // recorrente lançada manualmente com fornecedor e vencimento certos — não um lançamento
-    // genérico de regra). Diferente do caso acima, aqui o lançamento já está correto (tem
-    // contato, categoria, vencimento reais) — não faz sentido desfazer e recriar. O
-    // comprovante só serve de documentação de um pagamento que o sistema já sabe que
-    // aconteceu: só anexa (marca vinculado + aponta pra essa transação), sem mexer no
-    // lançamento nem na baixa. Achado de verdade: comprovante do pagamento de "Gestão do
-    // Studio" (João Henrique) ficava pra sempre "sem correspondência" mesmo a transação
-    // bancária existindo, porque ela já tinha sido conciliada pelo sync comum (observação
-    // "Conciliado automaticamente via Sicoob"), não por regra aprendida — o fallback acima só
-    // reconhece a regra aprendida.
+    // Sicoob (bate com uma conta a pagar/receber já cadastrada de verdade). ATENÇÃO: essa
+    // situação NÃO pode ser resolvida sozinha — valor+data batendo não prova que é o MESMO
+    // pagamento. Já causou dano real: o comprovante "Bonificação Vanessa" (legenda explícita,
+    // sem ambiguidade nenhuma) foi vinculado sozinho a uma transação do Caio só porque os
+    // R$400 e a data coincidiram — duas pessoas diferentes, dois pagamentos diferentes. A regra
+    // do projeto (ver CLAUDE.md) já é clara sobre isso: nunca casar por valor+data sozinho em
+    // ação automática quando existem contas de valor idêntico no sistema (aqui é pior ainda:
+    // nem é "mesmo valor todo mês", é qualquer coincidência entre QUALQUER lançamento de
+    // QUALQUER pessoa). Por isso, aqui só AVISA (não escreve nada no comprovante) — quem
+    // resolve isso é uma pessoa, olhando os dois lados antes de confirmar.
     if (!transacao) {
       const [jaConciliada] = await sql`
-        SELECT t.* FROM "TransacaoBancariaImportada" t
+        SELECT t.*, l.descricao AS "lancDescricao", c.nome AS "contatoNome"
+        FROM "TransacaoBancariaImportada" t
+        LEFT JOIN "LancamentoFinanceiro" l ON l.id = t."lancamentoId"
+        LEFT JOIN "Contato" c ON c.id = l."contatoId"
         WHERE t.tipo = 'saida' AND t.status = 'conciliado'
           AND t.valor BETWEEN ${comp.valorOcr - TOLERANCIA_VALOR} AND ${comp.valorOcr + TOLERANCIA_VALOR}
           AND ABS(t.data::date - ${dataComp}::date) <= ${TOLERANCIA_DIAS}
           AND NOT EXISTS (SELECT 1 FROM "WhatsappComprovante" wc WHERE wc."transacaoBancariaId" = t.id)
         ORDER BY ABS(t.data::date - ${dataComp}::date) ASC
         LIMIT 1
-        FOR UPDATE OF t
       `;
       if (jaConciliada) {
-        await sql`
-          UPDATE "WhatsappComprovante" SET status = 'vinculado', "transacaoBancariaId" = ${jaConciliada.id} WHERE id = ${comp.id}
-        `;
-        const [lancExistente] = await sql`
-          SELECT l.descricao, c.nome AS "contatoNome", cat.nome AS "categoriaNome"
-          FROM "LancamentoFinanceiro" l
-          LEFT JOIN "Contato" c ON c.id = l."contatoId"
-          LEFT JOIN "LancamentoFinanceiroCategoria" lc ON lc."lancamentoId" = l.id
-          LEFT JOIN "CategoriaFinanceira" cat ON cat.id = lc."categoriaId"
-          WHERE l.id = ${jaConciliada.lancamentoId}
-          LIMIT 1
-        `;
         resultado = {
-          status: "vinculado",
-          categoria: lancExistente?.categoriaNome ?? null,
-          contato: lancExistente?.contatoNome ?? null,
-          valor: jaConciliada.valor,
+          status: "sem_correspondencia",
+          motivo: `existe uma transação bancária de ${jaConciliada.data} com esse valor, mas já está conciliada com outro lançamento (${jaConciliada.lancDescricao || "?"} — ${jaConciliada.contatoNome || "sem contato"}) — confira manualmente se é o mesmo pagamento antes de vincular`,
         };
         return;
       }
