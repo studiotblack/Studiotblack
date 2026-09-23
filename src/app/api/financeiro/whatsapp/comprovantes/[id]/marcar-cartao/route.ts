@@ -28,14 +28,26 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     const [comp] = await sql`SELECT * FROM "WhatsappComprovante" WHERE id = ${id}`;
     if (!comp) return NextResponse.json({ error: "Comprovante não encontrado" }, { status: 404 });
 
-    await registrarParcelasCartao(sql, {
-      whatsappComprovanteId: comp.id,
-      descricao: comp.textoLegenda,
-      dataCompra: new Date(comp.dataHoraEnvio),
-      parcelas,
-      valorParcela,
+    // Reserva o comprovante ANTES de gravar as parcelas (mesma transação, pra não deixar
+    // status e parcelas dessincronizados se uma das duas etapas falhar no meio) — sem isso,
+    // um duplo clique em "Marcar como compra no cartão" gravava as parcelas duas vezes
+    // (registrarParcelasCartao só faz INSERT, não tem proteção própria contra repetição).
+    await sql.begin(async (sql) => {
+      const [reservado] = await sql`
+        UPDATE "WhatsappComprovante" SET status = 'cartao_registrado'
+        WHERE id = ${id} AND status IN ('pendente', 'erro_cartao') RETURNING *
+      `;
+      if (!reservado) {
+        throw new Error("Este comprovante já foi processado (recarregue a página)");
+      }
+      await registrarParcelasCartao(sql, {
+        whatsappComprovanteId: comp.id,
+        descricao: comp.textoLegenda,
+        dataCompra: new Date(comp.dataHoraEnvio),
+        parcelas,
+        valorParcela,
+      });
     });
-    await sql`UPDATE "WhatsappComprovante" SET status = 'cartao_registrado' WHERE id = ${id}`;
 
     return NextResponse.json({ ok: true, parcelas, valorParcela });
   } catch (error: any) {
