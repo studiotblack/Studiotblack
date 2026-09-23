@@ -23,17 +23,23 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     if (transacao.status !== "pendente") {
       return NextResponse.json({ error: "Esta transação já foi conciliada ou ignorada" }, { status: 400 });
     }
+    // Essa checagem acima é só uma resposta rápida pro caso comum — não protege contra corrida
+    // de verdade (ex: dois cliques rápidos, ou o sync automático processando a mesma transação
+    // ao mesmo tempo). Cada UPDATE que muda o status abaixo repete a condição "AND status =
+    // 'pendente'" e confere se realmente mudou algo — mesma proteção já usada em
+    // aplicar-regra-entrada e aplicar-regras-saida (que já tiveram esse bug de verdade antes).
 
     if (b.ignorar) {
       const [atualizado] = await sql`
-        UPDATE "TransacaoBancariaImportada" SET status = 'ignorado' WHERE id = ${id} RETURNING *
+        UPDATE "TransacaoBancariaImportada" SET status = 'ignorado' WHERE id = ${id} AND status = 'pendente' RETURNING *
       `;
+      if (!atualizado) return NextResponse.json({ error: "Esta transação já foi conciliada ou ignorada por outra ação" }, { status: 409 });
       return NextResponse.json(atualizado);
     }
 
     if (b.lancamentoId) {
       const resultado = await sql.begin(async (sql) => {
-        const [lancamento] = await sql`SELECT * FROM "LancamentoFinanceiro" WHERE id = ${b.lancamentoId}`;
+        const [lancamento] = await sql`SELECT * FROM "LancamentoFinanceiro" WHERE id = ${b.lancamentoId} FOR UPDATE`;
         if (!lancamento) throw new Error("Conta a pagar/receber não encontrada");
 
         const novoValorPago = lancamento.valorPago + transacao.valor;
@@ -49,8 +55,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           UPDATE "LancamentoFinanceiro" SET "valorPago" = ${novoValorPago}, "updatedAt" = NOW() WHERE id = ${b.lancamentoId}
         `;
         const [transacaoAtualizada] = await sql`
-          UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${b.lancamentoId} WHERE id = ${id} RETURNING *
+          UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${b.lancamentoId}
+          WHERE id = ${id} AND status = 'pendente' RETURNING *
         `;
+        if (!transacaoAtualizada) throw new Error("Esta transação já foi conciliada ou ignorada por outra ação");
         return transacaoAtualizada;
       });
       return NextResponse.json(resultado);
@@ -86,8 +94,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           VALUES (${novoLanc.id}, ${transacao.valor}, ${transacao.data}, ${transacao.contaBancariaId}, ${"Criado e conciliado manualmente via Sicoob"})
         `;
         const [transacaoAtualizada] = await sql`
-          UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${novoLanc.id} WHERE id = ${id} RETURNING *
+          UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${novoLanc.id}
+          WHERE id = ${id} AND status = 'pendente' RETURNING *
         `;
+        if (!transacaoAtualizada) throw new Error("Esta transação já foi conciliada ou ignorada por outra ação");
         return transacaoAtualizada;
       });
       return NextResponse.json(resultado);

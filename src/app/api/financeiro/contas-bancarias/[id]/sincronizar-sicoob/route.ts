@@ -103,36 +103,49 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
       // Tenta casar com uma conta a pagar/receber em aberto do mesmo tipo e valor equivalente,
       // priorizando a de vencimento mais próximo da data real do pagamento.
+      //
+      // A busca do candidato E o cálculo do novo valorPago (baseado no valorPago ATUAL, travado
+      // com FOR UPDATE) precisam estar dentro da mesma transação — antes disso, o SELECT rodava
+      // fora de qualquer lock e o UPDATE usava um "match.valorPago + valor" já desatualizado se
+      // duas execuções concorrentes (ex: essa rota rodando de novo antes da primeira terminar)
+      // casassem com o mesmo lançamento: a baixa de cada uma entra certinho na tabela Baixa, mas
+      // o valorPago do lançamento perde uma das duas — mesma classe de bug do desync confirmado
+      // no comprovante "Água superior" (ver vincular-comprovante.ts), só que no valorPago em vez
+      // do status da transação bancária.
       const tipoAgendamento = tipo === "entrada" ? "receber" : "pagar";
-      const [match] = await sql`
-        SELECT * FROM "LancamentoFinanceiro"
-        WHERE tipo = ${tipoAgendamento}
-          AND (valor - "valorPago") BETWEEN ${valor - TOLERANCIA_VALOR} AND ${valor + TOLERANCIA_VALOR}
-          AND ABS(COALESCE("dataVencimento"::date, ${data}::date) - ${data}::date) <= ${TOLERANCIA_DIAS}
-        ORDER BY ABS("dataVencimento"::date - ${data}::date) ASC
-        LIMIT 1
-      `;
+      const matchResultado = await sql.begin(async (sql) => {
+        const [match] = await sql`
+          SELECT * FROM "LancamentoFinanceiro"
+          WHERE tipo = ${tipoAgendamento}
+            AND (valor - "valorPago") BETWEEN ${valor - TOLERANCIA_VALOR} AND ${valor + TOLERANCIA_VALOR}
+            AND ABS(COALESCE("dataVencimento"::date, ${data}::date) - ${data}::date) <= ${TOLERANCIA_DIAS}
+          ORDER BY ABS("dataVencimento"::date - ${data}::date) ASC
+          LIMIT 1
+          FOR UPDATE
+        `;
+        if (!match) return null;
 
-      if (match) {
-        await sql.begin(async (sql) => {
-          await sql`
-            INSERT INTO "Baixa" ("lancamentoId", valor, data, "contaBancariaId", observacao)
-            VALUES (${match.id}, ${valor}, ${data}, ${id}, ${"Conciliado automaticamente via Sicoob"})
-          `;
-          await sql`
-            UPDATE "LancamentoFinanceiro" SET "valorPago" = ${match.valorPago + valor}, "updatedAt" = NOW()
-            WHERE id = ${match.id}
-          `;
-          await sql`
-            UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${match.id} WHERE id = ${reservada.id}
-          `;
-        });
+        await sql`
+          INSERT INTO "Baixa" ("lancamentoId", valor, data, "contaBancariaId", observacao)
+          VALUES (${match.id}, ${valor}, ${data}, ${id}, ${"Conciliado automaticamente via Sicoob"})
+        `;
+        await sql`
+          UPDATE "LancamentoFinanceiro" SET "valorPago" = ${match.valorPago + valor}, "updatedAt" = NOW()
+          WHERE id = ${match.id}
+        `;
+        await sql`
+          UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${match.id} WHERE id = ${reservada.id}
+        `;
+        return match;
+      });
+
+      if (matchResultado) {
         autoConciliados++;
         const [catMatch] = await sql`
           SELECT cat.nome FROM "LancamentoFinanceiroCategoria" lc JOIN "CategoriaFinanceira" cat ON cat.id = lc."categoriaId"
-          WHERE lc."lancamentoId" = ${match.id} LIMIT 1
+          WHERE lc."lancamentoId" = ${matchResultado.id} LIMIT 1
         `;
-        detalhes.push({ data, valor, tipo, descricao: match.descricao || descricao, status: "conciliado (conta existente)", categoria: catMatch?.nome ?? null });
+        detalhes.push({ data, valor, tipo, descricao: matchResultado.descricao || descricao, status: "conciliado (conta existente)", categoria: catMatch?.nome ?? null });
         continue;
       }
 
