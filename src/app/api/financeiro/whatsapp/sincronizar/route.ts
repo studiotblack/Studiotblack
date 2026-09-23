@@ -168,9 +168,13 @@ export async function POST() {
     // (cada item podia levar >20s só pra iniciar o worker) — a API do OCR.space responde em
     // segundos, então dá pra processar bem mais por execução sem estourar o orçamento.
     const MAX_OCR_POR_EXECUCAO = 15;
+    // Inclui 'erro_cartao' também — um comprovante marcado como compra no cartão cujo valor/
+    // parcela não deu pra ler na hora ficava preso nesse status pra sempre, porque o loop de
+    // match logo abaixo só olha 'pendente'. Se a imagem ainda estiver salva, merece a mesma
+    // segunda chance que qualquer outro comprovante pendente tem.
     const candidatosOcr = await sql`
-      SELECT id, "imagemBuffer" FROM "WhatsappComprovante"
-      WHERE status = 'pendente' AND "valorOcr" IS NULL AND "imagemBuffer" IS NOT NULL
+      SELECT id, "imagemBuffer", status FROM "WhatsappComprovante"
+      WHERE status IN ('pendente', 'erro_cartao') AND "valorOcr" IS NULL AND "imagemBuffer" IS NOT NULL
       ORDER BY "dataHoraEnvio" ASC
       LIMIT ${MAX_OCR_POR_EXECUCAO}
     `;
@@ -182,9 +186,16 @@ export async function POST() {
       try {
         const texto = await comTimeout(reconhecerTextoOcrSpace(cand.imagemBuffer as Buffer), 15_000, "OCR.space travou (>15s)");
         const valorOcr = extrairValor(texto);
-        // Sucesso: limpa o buffer guardado — não precisa mais dele, e não faz sentido
-        // acumular imagem no banco além do necessário pra tentar de novo.
-        await sql`UPDATE "WhatsappComprovante" SET "valorOcr" = ${valorOcr}, "textoOcr" = ${texto}, "dataHoraOcr" = NOW(), "imagemBuffer" = NULL WHERE id = ${cand.id}`;
+        // Sucesso: limpa o buffer guardado (não precisa mais dele) e, se estava travado em
+        // 'erro_cartao', volta pra 'pendente' — assim o loop de match logo abaixo (que só
+        // olha 'pendente') tenta de novo na mesma execução, com o textoOcr novo disponível
+        // pra extrairParcelas.
+        await sql`
+          UPDATE "WhatsappComprovante"
+          SET "valorOcr" = ${valorOcr}, "textoOcr" = ${texto}, "dataHoraOcr" = NOW(), "imagemBuffer" = NULL,
+              status = CASE WHEN status = 'erro_cartao' THEN 'pendente' ELSE status END
+          WHERE id = ${cand.id}
+        `;
         const item = comprovantesNovos.find((c) => c.id === cand.id);
         if (item) { item.valorOcr = valorOcr; item.textoOcr = texto; }
         ocrProcessadas++;
