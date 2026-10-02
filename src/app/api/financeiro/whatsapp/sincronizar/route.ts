@@ -181,8 +181,11 @@ export async function POST() {
     let ocrProcessadas = 0;
     let ocrParouPorTempo = false;
 
-    for (const cand of candidatosOcr) {
-      if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
+    // Em lotes paralelos: a chamada ao OCR.space é só espera de rede (~1s cada, mas já vimos a
+    // primeira levar ~10s), então uma a uma estourava o orçamento de tempo com 9 de 15
+    // processadas e o resto do backlog ficava parado com "não consegui ler valor" na tela.
+    const OCR_CONCORRENCIA = 5;
+    const processarOcr = async (cand: (typeof candidatosOcr)[number]) => {
       try {
         const texto = await comTimeout(reconhecerTextoOcrSpace(cand.imagemBuffer as Buffer), 15_000, "OCR.space travou (>15s)");
         const valorOcr = extrairValor(texto);
@@ -204,6 +207,10 @@ export async function POST() {
         console.error("[whatsapp/sincronizar] Erro no OCR:", err);
         await log(`OCR ${cand.id} falhou — ${err instanceof Error ? err.message : String(err)}`);
       }
+    };
+    for (let i = 0; i < candidatosOcr.length; i += OCR_CONCORRENCIA) {
+      if (tempoEsgotado()) { ocrParouPorTempo = true; break; }
+      await Promise.all(candidatosOcr.slice(i, i + OCR_CONCORRENCIA).map(processarOcr));
     }
     await log(`depois do OCR — ${ocrProcessadas} processada(s) de ${candidatosOcr.length}${ocrParouPorTempo ? " (parou por orçamento de tempo)" : ""}`);
 
