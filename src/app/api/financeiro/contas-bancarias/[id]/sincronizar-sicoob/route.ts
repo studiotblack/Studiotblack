@@ -56,8 +56,19 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     `;
 
     // 2. Extrato
-    const respostaExtrato = await client.getExtrato(conta.sicoobNumeroConta, mes, ano);
-    const transacoesRaw: any[] = respostaExtrato?.resultado?.transacoes ?? [];
+    // Sem mês explícito (cron), nos primeiros dias do mês também puxa o mês anterior: só olhar
+    // o mês corrente deixava os últimos dias do mês que acabou de virar sem nunca serem
+    // importados (ex: 29 e 30/09 sumiram quando o cron passou a olhar só outubro) — e os
+    // comprovantes do WhatsApp desses dias ficavam sem correspondência pra sempre.
+    const periodos = [{ mes, ano }];
+    if (body.mes === undefined && now.getDate() <= 7) {
+      periodos.unshift(mes === 1 ? { mes: 12, ano: ano - 1 } : { mes: mes - 1, ano });
+    }
+    const transacoesRaw: any[] = [];
+    for (const p of periodos) {
+      const respostaExtrato = await client.getExtrato(conta.sicoobNumeroConta, p.mes, p.ano);
+      transacoesRaw.push(...(respostaExtrato?.resultado?.transacoes ?? []));
+    }
 
     let novos = 0;
     let autoConciliados = 0;
