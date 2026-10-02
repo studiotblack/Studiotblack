@@ -21,6 +21,11 @@ interface DashboardBIProps {
 
 const COLORS = ['#d4af8c', '#3498db', '#2ecc71', '#e74c3c', '#9b59b6', '#f39c12'];
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// Versão curta pra rótulos dentro de gráficos (R$ 142,8 mil) — o valor completo fica no tooltip
+const brlCompacto = (v: number) =>
+  v >= 1000
+    ? `R$ ${(v / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} mil`
+    : `R$ ${Math.round(v)}`;
 
 // Rótulo de percentual pra fora das fatias dos gráficos de pizza (o texto padrão do recharts fica escuro demais no tema dark)
 const renderPieLabel = (props: any) => {
@@ -109,7 +114,7 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
         Faturado: faturado,
         Comissao: comissao
       };
-    }).sort((a, b) => b.Faturado - a.Faturado);
+    }).filter(r => r.Faturado > 0).sort((a, b) => b.Faturado - a.Faturado);
   }, [filteredData, ocupacao]);
 
   // Preparando dados para Gráfico: Serviços mais realizados (do mês selecionado)
@@ -237,7 +242,7 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
         name: p.split(" ")[0],
         Ticket: docs.length > 0 ? Number((faturado / docs.length).toFixed(2)) : 0
       };
-    }).sort((a, b) => b.Ticket - a.Ticket);
+    }).filter(r => r.Ticket > 0).sort((a, b) => b.Ticket - a.Ticket);
   }, [filteredData, ocupacao]);
 
   // Ocupação média do salão no período (com e sem o Tiago, que costuma puxar a média pra cima)
@@ -423,20 +428,21 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
           <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Award size={18} color="var(--color-gold)" /> Faturamento x Comissão por Profissional
           </h3>
-          <div style={{ width: '100%', height: 260 }}>
+          {/* Horizontal: com muitos profissionais, barras verticais empilhavam os rótulos uns sobre os outros */}
+          <div style={{ width: '100%', height: Math.max(260, faturamentoPorBarbeiro.length * 56 + 50) }}>
             <ResponsiveContainer>
-              <BarChart data={faturamentoPorBarbeiro} margin={{ top: 25, right: 0, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
-                <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
-                <Tooltip content={<CustomTooltip />} />
+              <BarChart data={faturamentoPorBarbeiro} layout="vertical" margin={{ top: 5, right: 80, left: 0, bottom: 5 }} barCategoryGap="22%" barGap={3}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" horizontal={false} />
+                <XAxis type="number" stroke="#7a6060" fontSize={11} tickLine={false} axisLine={false} tickFormatter={brlCompacto} />
+                <YAxis type="category" dataKey="name" width={85} stroke="#a89080" fontSize={12} tickLine={false} axisLine={false} interval={0} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                <Bar dataKey="Faturado" fill="#d4af8c" radius={[4, 4, 0, 0]} maxBarSize={50}
-                  label={{ position: 'top', fontSize: 10, fill: '#d4af8c', formatter: (v: any) => `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` }}
-                />
-                <Bar dataKey="Comissao" fill="#3498db" radius={[4, 4, 0, 0]} maxBarSize={50}
-                  label={{ position: 'top', fontSize: 10, fill: '#3498db', formatter: (v: any) => `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` }}
-                />
+                <Bar dataKey="Faturado" fill="#d4af8c" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                  <LabelList dataKey="Faturado" position="right" fontSize={11} fill="#d4af8c" formatter={(v: any) => brlCompacto(Number(v))} />
+                </Bar>
+                <Bar dataKey="Comissao" fill="#3498db" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                  <LabelList dataKey="Comissao" position="right" fontSize={11} fill="#5dade2" formatter={(v: any) => brlCompacto(Number(v))} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -492,19 +498,19 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
             <Ticket size={18} color="var(--color-gold)" /> Ticket Médio por Profissional
           </h3>
           <p style={{ fontSize: "0.78rem", color: "var(--color-muted)", margin: "0 0 1rem 0" }}>Quem está vendendo bem acima ou abaixo da média do salão (linha tracejada)</p>
-          <div style={{ width: '100%', height: 260 }}>
+          <div style={{ width: '100%', height: Math.max(260, ticketMedioPorProfissional.length * 34 + 60) }}>
             <ResponsiveContainer>
-              <BarChart data={ticketMedioPorProfissional} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" vertical={false} />
-                <XAxis dataKey="name" stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#7a6060" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
-                <Tooltip contentStyle={{ background: "rgba(22,15,16,0.9)", border: "1px solid var(--color-border)", borderRadius: "8px" }} formatter={(value: any) => [brl(Number(value)), 'Ticket Médio']} />
-                <ReferenceLine y={ticketMedioGeral} stroke="var(--color-gold)" strokeDasharray="4 3" label={{ value: `Média: ${brl(ticketMedioGeral)}`, position: 'insideTopRight', fill: 'var(--color-gold)', fontSize: 11 }} />
-                <Bar dataKey="Ticket" radius={[4, 4, 0, 0]} maxBarSize={45}>
+              <BarChart data={ticketMedioPorProfissional} layout="vertical" margin={{ top: 22, right: 70, left: 0, bottom: 5 }} barCategoryGap="25%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#2d1f20" horizontal={false} />
+                <XAxis type="number" stroke="#7a6060" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} domain={[0, (max: number) => Math.ceil(max * 1.1)]} />
+                <YAxis type="category" dataKey="name" width={85} stroke="#a89080" fontSize={12} tickLine={false} axisLine={false} interval={0} />
+                <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} contentStyle={{ background: "rgba(22,15,16,0.9)", border: "1px solid var(--color-border)", borderRadius: "8px" }} formatter={(value: any) => [brl(Number(value)), 'Ticket Médio']} />
+                <ReferenceLine x={ticketMedioGeral} stroke="var(--color-gold)" strokeDasharray="4 3" label={{ value: `Média: ${brl(ticketMedioGeral)}`, position: 'top', fill: 'var(--color-gold)', fontSize: 11 }} />
+                <Bar dataKey="Ticket" radius={[0, 4, 4, 0]} maxBarSize={20}>
                   {ticketMedioPorProfissional.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.Ticket >= ticketMedioGeral ? "#2ecc71" : "#e74c3c"} />
                   ))}
-                  <LabelList dataKey="Ticket" position="top" fontSize={10} fill="var(--color-cream-dim)" formatter={(v: any) => brl(Number(v))} />
+                  <LabelList dataKey="Ticket" position="right" fontSize={11} fill="var(--color-cream-dim)" formatter={(v: any) => brl(Number(v))} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
