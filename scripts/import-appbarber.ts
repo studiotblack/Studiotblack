@@ -268,8 +268,20 @@ async function processComissoesFile(sql: Sql, filePath: string) {
     throw new Error("parece ser uma planilha de TAXA DE OCUPAÇÃO — mova para Downloads/AppBarber/Ocupacao/<Nome do Profissional>/");
   }
 
+  // Confere as colunas ANTES de gravar: já aconteceu de uma exportação vir com cabeçalhos
+  // diferentes e o importador gravar o mês inteiro com valor R$ 0 (apagando o que estava certo).
+  const colunas = new Set(jsonData.flatMap(r => Object.keys(r)));
+  const faltando = ["Profissional", "Data", "Serviço/Produto/Pacote"].filter(c => !colunas.has(c));
+  if (!colunas.has("Valor Item") && !colunas.has("Valor")) faltando.push("Valor Item (ou Valor)");
+  if (faltando.length > 0) {
+    throw new Error(`colunas esperadas não encontradas: ${faltando.join(", ")}. Colunas da planilha: ${[...colunas].join(" | ")}`);
+  }
+
   const registros = parseComissoesRows(jsonData);
   if (registros.length === 0) throw new Error("nenhum registro de comissão reconhecido (colunas da planilha não batem com o esperado)");
+  if (registros.every(r => r.valorBruto === 0 && r.valorComissao === 0)) {
+    throw new Error("todos os valores vieram zerados — a planilha provavelmente tem outro layout; nada foi gravado");
+  }
 
   const grupos = new Map<string, { profissional: string; mesAno: string; items: DesempenhoProfissional[] }>();
   for (const r of registros) {
