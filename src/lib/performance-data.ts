@@ -236,7 +236,10 @@ export const isPlanilhaOcupacao = (keys: string[]): boolean => {
 // Converte as linhas cruas da planilha de Comissões do AppBarber (xlsx.utils.sheet_to_json) em DesempenhoProfissional[]
 export const parseComissoesRows = (jsonData: any[]): DesempenhoProfissional[] => {
   return jsonData
-    .filter(row => row.Profissional && row.Data && !String(row.Profissional).toLowerCase().includes("total") && !String(row.Profissional).toLowerCase().includes("comissã"))
+    // "Data" precisa ser uma data de verdade (serial do Excel ou dd/mm/aaaa): o rodapé de resumo
+    // da exportação ("Serviço Bruto", "Saldo", "Formas de pagamento", "PIX"...) também preenche
+    // as colunas Profissional/Data com texto e virava "profissional" fantasma no mês "Geral".
+    .filter(row => row.Profissional && row.Data && (typeof row.Data === "number" || /^\s*\d{1,2}\/\d{1,2}\/\d{4}/.test(String(row.Data))) && !String(row.Profissional).toLowerCase().includes("total") && !String(row.Profissional).toLowerCase().includes("comissã"))
     .map((row) => {
       const valorBruto = parseValorBR(row["Valor Item"] || row["Valor"] || 0);
       const valorComissao = parseValorBR(row["Valor"] || 0);
