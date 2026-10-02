@@ -4,7 +4,7 @@
  *
  * Convenção de pastas:
  *   Downloads/AppBarber/*.xlsx                        -> planilhas de COMISSÕES (têm a coluna "Profissional")
- *   Downloads/AppBarber/Ocupacao/<Nome>/*.xlsx         -> planilhas de TAXA DE OCUPAÇÃO (uma subpasta por profissional,
+ *   Downloads/AppBarber/Ocupacao/<Nome>/*.xlsx         (ou "Taxa de Ocupação") -> planilhas de TAXA DE OCUPAÇÃO (uma subpasta por profissional,
  *                                                         pois essa planilha não tem coluna de profissional)
  *   Downloads/AppBarber Financeiro/*.xlsx              -> planilha "Realizado" do DRE (sistema contábil)
  *
@@ -55,7 +55,10 @@ loadEnvFile();
 
 const HOME = os.homedir();
 const BASE_DIR = process.env.APPBARBER_WATCH_DIR || path.join(HOME, "Downloads", "AppBarber");
-const OCUPACAO_DIR = path.join(BASE_DIR, "Ocupacao");
+// Aceita "Ocupacao" ou "Taxa de Ocupação" como nome da pasta
+const OCUPACAO_DIR = ["Ocupacao", "Taxa de Ocupação"]
+  .map(n => path.join(BASE_DIR, n))
+  .find(p => fs.existsSync(p)) ?? path.join(BASE_DIR, "Ocupacao");
 const FINANCEIRO_DIR = process.env.APPBARBER_FINANCEIRO_DIR || path.join(HOME, "Downloads", "AppBarber Financeiro");
 const WATCH_INTERVAL_MS = 30_000;
 const LOCK_PATH = path.join(BASE_DIR, ".import-lock");
