@@ -220,13 +220,14 @@ export default function DashboardBI({ data, ocupacao, metas }: DashboardBIProps)
       const rec = (selectedMes && selectedMes !== "Todos")
         ? ocupacao.find(t => normalizeProfName(t.profissional) === normalized && t.mesAno === selectedMes)
         : ocupacao.find(t => normalizeProfName(t.profissional) === normalized);
-      const taxa = rec ? rec.taxaOcupacao * 100 : 0;
+      // Sem registro de ocupação (ex: RECEPÇÃO, que não tem agenda) fica de fora em vez de aparecer como linha vazia
+      if (!rec) return null;
 
       return {
         name: prof.split(" ")[0],
-        "Ocupação %": Number(taxa.toFixed(1))
+        "Ocupação %": Number((rec.taxaOcupacao * 100).toFixed(1))
       };
-    }).sort((a, b) => b["Ocupação %"] - a["Ocupação %"]);
+    }).filter((r): r is { name: string; "Ocupação %": number } => r !== null).sort((a, b) => b["Ocupação %"] - a["Ocupação %"]);
   }, [filteredData, selectedMes, ocupacao]);
 
   // Ticket médio geral do salão (faturamento / itens vendidos no período selecionado)

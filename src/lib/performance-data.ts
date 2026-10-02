@@ -151,7 +151,8 @@ export const normalizeProfName = (name: string): string => {
   const trimmed = name.trim();
   const firstWord = trimmed.toLowerCase().split(/\s+/)[0];
   if (firstWord === "henrique") return "Henrique Botelho";
-  if (firstWord === "wallacy") return "Wallacy";
+  // "Wallace" e "Wallacy" são a mesma pessoa (a pasta de ocupação usa um, o AppBarber usa o outro)
+  if (firstWord === "wallacy" || firstWord === "wallace") return "Wallacy";
   if (firstWord === "tiago") return "Tiago";
   if (firstWord === "vanessa") return "Vanessa";
   if (firstWord === "bruna") return "Bruna";
