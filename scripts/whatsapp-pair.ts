@@ -19,13 +19,29 @@ const QR_PATH = path.join(__dirname, "whatsapp-qr.png");
 async function conectar(sql: ReturnType<typeof getDb>): Promise<void> {
   const { state, saveCreds } = await carregarAuthStatePostgres(sql);
   const { version } = await fetchLatestBaileysVersion();
+  const telefone = process.argv[2]?.replace(/\D/g, "");
 
   const sock = makeWASocket({
     auth: state,
     version,
-    browser: Browsers.macOS("Desktop"),
+    // Pareamento por código só é aceito pelo WhatsApp se o aparelho se identifica como navegador comum
+    browser: telefone ? Browsers.ubuntu("Chrome") : Browsers.macOS("Desktop"),
     syncFullHistory: false,
   });
+
+  // Alternativa ao QR (que expira em ~20s): passando o número (com DDI, só dígitos) como
+  // argumento, gera um código de 8 caracteres pra digitar em Aparelhos conectados ->
+  // Conectar com número de telefone. Ex: npx tsx scripts/whatsapp-pair.ts 5512999999999
+  if (telefone && !state.creds.registered) {
+    setTimeout(async () => {
+      try {
+        const codigo = await sock.requestPairingCode(telefone);
+        console.log("CODIGO_PAREAMENTO:" + codigo);
+      } catch (err) {
+        console.log("ERRO_CODIGO", err);
+      }
+    }, 4000);
+  }
 
   return new Promise((resolve, reject) => {
     sock.ev.on("creds.update", saveCreds);
@@ -57,7 +73,11 @@ async function conectar(sql: ReturnType<typeof getDb>): Promise<void> {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const deveReconectar = statusCode !== DisconnectReason.loggedOut;
         console.log("CONEXAO_FECHADA statusCode=" + statusCode + " reconectar=" + deveReconectar);
-        if (deveReconectar) {
+        if (statusCode === DisconnectReason.timedOut && !state.creds.registered) {
+          // QR/código expirou sem ninguém parear: as credenciais parciais ficam "sujas" e uma
+          // reconexão com elas só leva 401. Melhor parar e rodar de novo do zero.
+          reject(new Error("QR/código expirou sem parear — limpe a WhatsappAuthState e rode de novo."));
+        } else if (deveReconectar) {
           // Reconexão exigida pelo próprio WhatsApp (comum logo após parear) — cria um
           // socket novo reaproveitando a mesma sessão salva, sem precisar de QR de novo.
           conectar(sql).then(resolve, reject);
