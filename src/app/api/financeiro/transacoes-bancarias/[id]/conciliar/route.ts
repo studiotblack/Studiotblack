@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
+import { gerarProximaOcorrencia } from "@/lib/financeiro-quitacao";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           WHERE id = ${id} AND status = 'pendente' RETURNING *
         `;
         if (!transacaoAtualizada) throw new Error("Esta transação já foi conciliada ou ignorada por outra ação");
+        // Conta recorrente quitada por aqui também precisa gerar a próxima ocorrência — antes só
+        // a baixa manual fazia isso, e o lembrete do mês seguinte sumia do Contas a Pagar.
+        await gerarProximaOcorrencia(sql, lancamento, novoValorPago);
         return transacaoAtualizada;
       });
       return NextResponse.json(resultado);

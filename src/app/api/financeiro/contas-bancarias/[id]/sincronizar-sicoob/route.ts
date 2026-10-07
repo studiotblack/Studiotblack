@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { SicoobClient } from "@/lib/bank/sicoob-client";
+import { gerarProximaOcorrencia } from "@/lib/financeiro-quitacao";
 import { DESCRICOES_GENERICAS_BANCO } from "@/lib/regra-conciliacao";
 
 export const dynamic = "force-dynamic";
@@ -147,6 +148,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         await sql`
           UPDATE "TransacaoBancariaImportada" SET status = 'conciliado', "lancamentoId" = ${match.id} WHERE id = ${reservada.id}
         `;
+        // Conta recorrente quitada pelo sync também gera a próxima ocorrência (antes só a baixa manual gerava)
+        await gerarProximaOcorrencia(sql, match, match.valorPago + valor);
         return match;
       });
 

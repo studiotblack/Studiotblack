@@ -16,8 +16,17 @@ export const DESCRICOES_GENERICAS_BANCO = [
   "cr antecipação visa",
   "cr antecipação mastercard",
   "déb.conv.demais empresas",
+  "transf.realizada pix sicoob",
+  // CNPJ do próprio Studio T'Black: aparece como PAGADOR no texto de TODA transferência Pix
+  // Sicoob. Uma regra aprendida em cima dele (aconteceu em 01/09, ligada a "Porto Seguro
+  // Consórcios") casa com qualquer transferência e as joga todas pra esse contato/categoria.
+  "27.972.578 0001-66",
 ];
 
+// CNPJ do próprio Studio, em qualquer formatação — nunca pode ser padrão de regra aprendida
+const CNPJ_PROPRIO_DIGITOS = "27972578000166";
+
 export function regraEhGenericaDemais(padraoDescricao: string): boolean {
-  return DESCRICOES_GENERICAS_BANCO.includes(padraoDescricao.toLowerCase().trim());
+  const normalizado = padraoDescricao.toLowerCase().trim();
+  return DESCRICOES_GENERICAS_BANCO.includes(normalizado) || normalizado.replace(/\D/g, "").includes(CNPJ_PROPRIO_DIGITOS);
 }
