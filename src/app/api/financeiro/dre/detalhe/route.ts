@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
+import {
+  carregarVendasAppBarber, entraNaReceitaDoDre, codigoReceita, CODIGO_VENDA_SERVICOS, CODIGO_VENDA_PRODUTOS,
+} from "@/lib/receita-appbarber";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +44,39 @@ export async function GET(request: NextRequest) {
       ORDER BY a."dataCompetencia" ASC
     `;
 
-    const totalNoSistema = rows.reduce((acc: number, r: any) => acc + (r.tipo === "receber" ? r.valor : -r.valor), 0);
+    const lancamentos: any[] = [...rows];
 
-    return NextResponse.json({ lancamentos: rows, totalNoSistema });
+    // Receita que o DRE soma direto do AppBarber (produto + dinheiro de serviço) não existe como
+    // lançamento — mostra por dia, com rótulo próprio, pra o drill-down fechar com o valor do DRE
+    // e deixar claro que NÃO passou pelo Sicoob.
+    if (codigo === CODIGO_VENDA_SERVICOS || codigo === CODIGO_VENDA_PRODUTOS) {
+      const vendas = await carregarVendasAppBarber(sql, `${mes.padStart(2, "0")}/${ano}`);
+      const porDia = new Map<string, number>();
+      for (const v of vendas) {
+        if (!entraNaReceitaDoDre(v) || codigoReceita(v) !== codigo) continue;
+        const dia = `${v.ano}-${String(v.mes).padStart(2, "0")}-${String(v.dia).padStart(2, "0")}`;
+        porDia.set(dia, (porDia.get(dia) ?? 0) + v.valor);
+      }
+      const ehProduto = codigo === CODIGO_VENDA_PRODUTOS;
+      for (const [dia, valor] of [...porDia.entries()].sort()) {
+        lancamentos.push({
+          id: `appbarber-${codigo}-${dia}`,
+          tipo: "receber",
+          valor: Number(valor.toFixed(2)),
+          valorPago: Number(valor.toFixed(2)),
+          dataCompetencia: dia,
+          dataVencimento: dia,
+          descricao: ehProduto ? "AppBarber — produtos vendidos no dia" : "AppBarber — serviços pagos em dinheiro no dia",
+          contatoNome: "AppBarber",
+          categoriaNome: ehProduto ? "Vendas Produtos" : "Venda de Serviços",
+          contaBancariaNome: ehProduto ? "Conta de produtos (fora do Sicoob)" : "Dinheiro (não passa pelo banco)",
+        });
+      }
+    }
+
+    const totalNoSistema = lancamentos.reduce((acc: number, r: any) => acc + (r.tipo === "receber" ? r.valor : -r.valor), 0);
+
+    return NextResponse.json({ lancamentos, totalNoSistema });
   } catch (error: any) {
     console.error("[GET /api/financeiro/dre/detalhe]", error);
     return NextResponse.json({ error: error?.message || "Erro ao buscar detalhe do DRE" }, { status: 500 });

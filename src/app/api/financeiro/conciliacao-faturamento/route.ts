@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
+import { isProduto } from "@/lib/performance-data";
 
 export const dynamic = "force-dynamic";
 
@@ -67,18 +68,25 @@ export async function GET(request: NextRequest) {
     // antes do fix que passou a capturar essa coluna) entram por padrão, já que não dá pra
     // saber se eram dinheiro ou não — sinalizado na resposta pra não confundir com "bateu"
     // de verdade.
+    // PRODUTO nunca cai no Sicoob (é liquidado em outra conta) — fora da comparação, senão
+    // o AppBarber ficaria sempre "maior" que o banco só por causa dele. Dinheiro idem.
     const vendas = await sql`
-      SELECT data, "valorBruto", pagamento
+      SELECT data, item, "valorBruto", pagamento
       FROM "DesempenhoProfissionalDB"
       WHERE "mesAno" = ${mesAno}
     `;
     const appBarberPorDia = new Map<number, number>();
     let totalDinheiro = 0;
+    let totalProdutos = 0;
     let temPagamentoDesconhecido = false;
     for (const v of vendas) {
       const diaStr = String(v.data).split(" ")[0].split("/")[0];
       const dia = Number(diaStr);
       if (!dia) continue;
+      if (isProduto(v.item)) {
+        totalProdutos += Number(v.valorBruto);
+        continue;
+      }
       if (v.pagamento === "Dinheiro") {
         totalDinheiro += Number(v.valorBruto);
         continue;
@@ -121,6 +129,7 @@ export async function GET(request: NextRequest) {
       totalAppBarber: Number(totalAppBarber.toFixed(2)),
       totalBanco: Number(totalBanco.toFixed(2)),
       totalDinheiro: Number(totalDinheiro.toFixed(2)),
+      totalProdutos: Number(totalProdutos.toFixed(2)),
       statusMes,
       temPagamentoDesconhecido,
     });
