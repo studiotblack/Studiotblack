@@ -42,6 +42,12 @@ export const catalogoServicos: Record<string, { tempo: number; comissao: number;
   "Avaliação/Mechas ( MASCULINA)": { tempo: 20, comissao: 0.35, preco: 300 },
   "Avaliação/Tratamento Capilar ( Masculina e Feminina )": { tempo: 20, comissao: 0.40, preco: 0 },
   "Avaliação/Coloração retoque de raiz": { tempo: 20, comissao: 0.35, preco: 160 },
+  // Grafia como vem do AppBarber (com o erro de digitação "Avaliaçõa") — sem estar aqui, o fallback
+  // de isProduto() tratava como PRODUTO (R$ 2.730 em mai-jul/2026), contando a venda em dobro no DRE
+  "Avaliaçõa/Coloração retoque de raiz": { tempo: 20, comissao: 0.35, preco: 195 },
+  // Combo de serviço (cílios/sobrancelha). Estava caindo como PRODUTO pelo fallback: em setembro/2026
+  // isso inflou "Vendas Produtos" em R$ 860 e deixou a comissão de serviço R$ 516 abaixo do app.
+  "Sobrancelha + Manutenção": { tempo: 60, comissao: 0.60, preco: 143 },
   "Barba": { tempo: 40, comissao: 0.35, preco: 60 },
   "Barba e depilação": { tempo: 40, comissao: 0.35, preco: 90 },
   "Brown Lamination": { tempo: 80, comissao: 0.60, preco: 120 },
