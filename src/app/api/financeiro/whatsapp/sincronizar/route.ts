@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { downloadMediaMessage, type WAMessage } from "@whiskeysockets/baileys";
+import { downloadMediaMessage, BufferJSON, type WAMessage } from "@whiskeysockets/baileys";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { coletarMensagensDoGrupo } from "@/lib/whatsapp/coletar-mensagens";
 import { extrairValor, extrairParcelas, ehComprovanteCartao } from "@/lib/whatsapp/extrair-valor";
@@ -105,27 +105,42 @@ export async function POST() {
     const comprovantesNovos: any[] = [];
     const paraOcr: { msg: WAMessage; comprovanteId: string }[] = [];
 
-    for (const msg of mensagens) {
-      const msgId = msg.key.id;
-      if (!msgId) continue;
-
-      const [existente] = await sql`SELECT id FROM "WhatsappComprovante" WHERE "mensagemWhatsappId" = ${msgId}`;
-      if (existente) { jaExistiam++; continue; }
-
+    // Gravação EM LOTE (um INSERT por 40 mensagens, em vez de SELECT+INSERT uma a uma — com um
+    // histórico de centenas de mensagens o laço antigo sozinho consumia boa parte do tempo) e já
+    // com os dados crus da mensagem (mensagemRaw): é isso que garante que nada se perde — a
+    // foto pode ser baixada agora ou numa rodada futura, a partir do que está no banco.
+    const novas = mensagens.filter((m) => m.key.id && !idsConhecidos.has(m.key.id as string));
+    jaExistiam = mensagens.length - novas.length;
+    const linhas = novas.map((msg) => {
       const caption = msg.message?.imageMessage?.caption || "";
       const valorOcr = extrairValor(caption);
       const timestampSeg = typeof msg.messageTimestamp === "number" ? msg.messageTimestamp : Number(msg.messageTimestamp);
-      const dataEnvio = new Date(timestampSeg * 1000);
-
-      const [comprovante] = await sql`
-        INSERT INTO "WhatsappComprovante"
-          (id, "mensagemWhatsappId", "grupoId", remetente, "dataHoraEnvio", "textoLegenda", "valorOcr", status)
-        VALUES
-          (gen_random_uuid()::text, ${msgId}, ${grupoJid}, ${msg.pushName || null}, ${dataEnvio.toISOString()}, ${caption}, ${valorOcr}, 'pendente')
+      return {
+        msg,
+        row: {
+          id: crypto.randomUUID(),
+          mensagemWhatsappId: msg.key.id as string,
+          grupoId: grupoJid,
+          remetente: msg.pushName || null,
+          dataHoraEnvio: new Date(timestampSeg * 1000).toISOString(),
+          textoLegenda: caption,
+          valorOcr,
+          status: "pendente",
+          mensagemRaw: valorOcr === null ? JSON.stringify(msg, BufferJSON.replacer) : null,
+        },
+      };
+    });
+    for (let i = 0; i < linhas.length; i += 40) {
+      const lote = linhas.slice(i, i + 40);
+      const gravados = await sql`
+        INSERT INTO "WhatsappComprovante" ${sql(lote.map((l) => l.row) as any, "id", "mensagemWhatsappId", "grupoId", "remetente", "dataHoraEnvio", "textoLegenda", "valorOcr", "status", "mensagemRaw")}
         RETURNING *
       `;
-      comprovantesNovos.push(comprovante);
-      if (valorOcr === null) paraOcr.push({ msg, comprovanteId: comprovante.id });
+      for (const g of gravados) {
+        comprovantesNovos.push(g);
+        const origem = lote.find((l) => l.row.id === g.id);
+        if (origem && g.valorOcr === null) paraOcr.push({ msg: origem.msg, comprovanteId: g.id });
+      }
     }
     await log(`depois de gravar os novos — ${comprovantesNovos.length} novo(s), ${jaExistiam} já existia(m), ${paraOcr.length} precisam de OCR`);
 
@@ -174,6 +189,33 @@ export async function POST() {
     }
     await log(`depois de baixar imagens — ${imagensBaixadas} de ${paraOcr.length}${downloadParouPorTempo ? " (parou por orçamento de tempo)" : ""}`);
 
+    // 2b-bis. Fila de recuperação: comprovantes já gravados (de execuções anteriores) cuja foto
+    // ainda não foi baixada — baixa a partir dos dados crus guardados no banco, em lotes de 5, no
+    // máximo 20 por execução. Cada execução drena um pedaço; se sobrar, a próxima continua. Falha
+    // conta tentativa (até 5) pra uma mídia expirada não travar a fila.
+    const semImagem = await sql`
+      SELECT id, "mensagemRaw" FROM "WhatsappComprovante"
+      WHERE status IN ('pendente', 'erro_cartao') AND "valorOcr" IS NULL AND "imagemBuffer" IS NULL
+        AND "mensagemRaw" IS NOT NULL AND "tentativasMidia" < 5
+      ORDER BY "dataHoraEnvio" DESC LIMIT 20
+    `;
+    let recuperadasDaFila = 0;
+    for (let i = 0; i < semImagem.length; i += 5) {
+      if (Date.now() - inicio > LIMITE_GRAVAR_IMAGENS_MS) { downloadParouPorTempo = true; break; }
+      await Promise.all(semImagem.slice(i, i + 5).map(async (r) => {
+        try {
+          const msg = JSON.parse(r.mensagemRaw as string, BufferJSON.reviver);
+          const buffer = await comTimeout(downloadMediaMessage(msg, "buffer", {}).then((b) => b as Buffer), 15_000, "download da mídia travou (>15s)");
+          await sql`UPDATE "WhatsappComprovante" SET "imagemBuffer" = ${buffer} WHERE id = ${r.id}`;
+          recuperadasDaFila++;
+        } catch (err) {
+          await sql`UPDATE "WhatsappComprovante" SET "tentativasMidia" = "tentativasMidia" + 1 WHERE id = ${r.id}`;
+          await log(`fila de mídia: ${r.id} falhou — ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }));
+    }
+    await log(`fila de mídia — ${recuperadasDaFila} de ${semImagem.length} baixada(s)`);
+
     // 2c. OCR só pra um número limitado de comprovantes por execução — busca direto no
     // banco (não só os coletados agora) pra incluir backlog de execuções anteriores que
     // tinham imagem salva mas não deu tempo/a API de OCR não respondeu. Prioriza os mais
@@ -208,7 +250,7 @@ export async function POST() {
         // pra extrairParcelas.
         await sql`
           UPDATE "WhatsappComprovante"
-          SET "valorOcr" = ${valorOcr}, "textoOcr" = ${texto}, "dataHoraOcr" = NOW(), "imagemBuffer" = NULL,
+          SET "valorOcr" = ${valorOcr}, "textoOcr" = ${texto}, "dataHoraOcr" = NOW(), "imagemBuffer" = NULL, "mensagemRaw" = NULL,
               status = CASE WHEN status = 'erro_cartao' THEN 'pendente' ELSE status END
           WHERE id = ${cand.id}
         `;

@@ -264,6 +264,15 @@ export async function ensureFinanceiroTables(sql: Sql) {
   // uma sincronização futura pode tentar o OCR de novo — limpo (setado NULL) depois que o
   // OCR resolve o valor com sucesso, pra não acumular imagem sem necessidade.
   await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "imagemBuffer" BYTEA`;
+  // Dados crus da mensagem (chave e endereço da mídia no WhatsApp), gravados NO MOMENTO em que a
+  // mensagem chega — antes de qualquer download/OCR. Com isso o download da foto vira um passo
+  // separado e retomável (a mídia continua disponível nos servidores do WhatsApp por semanas),
+  // e a regra "cada mensagem chega UMA vez" deixa de poder causar perda: mesmo que o tempo da
+  // função acabe, a mensagem já está guardada e a foto é baixada na próxima rodada.
+  // Limpo (NULL) quando o OCR resolve o valor. `tentativasMidia` evita insistir pra sempre numa
+  // mídia que expirou e travar a fila.
+  await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "mensagemRaw" TEXT`;
+  await sql`ALTER TABLE "WhatsappComprovante" ADD COLUMN IF NOT EXISTS "tentativasMidia" INTEGER NOT NULL DEFAULT 0`;
 
   // Parcelas de compras no cartão de crédito, marcadas manualmente (legenda "cartao" no
   // comprovante) — ficam acumuladas aqui até a fatura inteira (soma de várias) aparecer
