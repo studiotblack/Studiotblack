@@ -4,9 +4,11 @@ import makeWASocket, {
   DisconnectReason,
   proto,
   normalizeMessageContent,
+  downloadMediaMessage,
   type WAMessage,
 } from "@whiskeysockets/baileys";
 import type { Sql } from "@/lib/financeiro-db";
+import { extrairValor } from "./extrair-valor";
 import { carregarAuthStatePostgres } from "./auth-state";
 import type { Logger } from "@/lib/diagnostico";
 
@@ -46,11 +48,39 @@ function aguardar(ms: number) {
 // Conecta no WhatsApp reaproveitando a sessão já pareada, escuta por um tempo curto,
 // coleta as mensagens de IMAGEM do grupo alvo, e desconecta. Não fica ligado — é chamado
 // uma vez por clique de "Sincronizar".
-export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string, log: Logger): Promise<WAMessage[]> {
+//
+// As imagens das mensagens NOVAS (que ainda não têm comprovante gravado, `idsConhecidos`) e
+// cuja legenda não traz o valor começam a baixar NO INSTANTE em que a mensagem chega, em
+// paralelo, enquanto a janela de escuta ainda está aberta. Antes o download só começava depois
+// que a coleta terminava, um a um: quando o WhatsApp despejou o histórico inteiro (377
+// mensagens) o orçamento de tempo da função acabou antes de baixar as fotos, e como cada
+// mensagem só chega UMA vez, as imagens se perderam. O download vai pela CDN (não pelo socket),
+// então continua depois que a conexão fecha.
+export async function coletarMensagensDoGrupo(
+  sql: Sql,
+  grupoJid: string,
+  log: Logger,
+  idsConhecidos: Set<string> = new Set()
+): Promise<{ mensagens: WAMessage[]; imagens: Map<string, Promise<Buffer | null>> }> {
   const mensagens: WAMessage[] = [];
+  const imagens = new Map<string, Promise<Buffer | null>>();
 
   const idsColetados = new Set<string>();
   let tentativas = 0;
+
+  function iniciarDownload(msg: WAMessage) {
+    const id = msg.key.id;
+    if (!id || imagens.has(id) || idsConhecidos.has(id)) return;
+    if (extrairValor(msg.message?.imageMessage?.caption || "") !== null) return; // valor já veio na legenda
+    const tentativa = Promise.race([
+      downloadMediaMessage(msg, "buffer", {}) as Promise<Buffer>,
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("download da mídia travou (>25s)")), 25_000)),
+    ]).catch((err) => {
+      console.error("[whatsapp] falha ao baixar imagem", id, err instanceof Error ? err.message : err);
+      return null;
+    });
+    imagens.set(id, tentativa);
+  }
 
   function coletar(msg: WAMessage) {
     if (msg.key.remoteJid !== grupoJid) return;
@@ -66,7 +96,9 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string, log: L
       if (idsColetados.has(id)) return;
       idsColetados.add(id);
     }
-    mensagens.push({ ...msg, message: conteudo });
+    const normalizada = { ...msg, message: conteudo };
+    mensagens.push(normalizada);
+    iniciarDownload(normalizada);
   }
 
   async function conectar(): Promise<void> {
@@ -161,6 +193,6 @@ export async function coletarMensagensDoGrupo(sql: Sql, grupoJid: string, log: L
   });
 
   await Promise.race([conectar(), timeoutTotal]);
-  await log(`retornando ${mensagens.length} mensagem(ns)`);
-  return mensagens;
+  await log(`retornando ${mensagens.length} mensagem(ns), ${imagens.size} download(s) de imagem em andamento`);
+  return { mensagens, imagens };
 }

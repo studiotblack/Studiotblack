@@ -88,7 +88,10 @@ export async function POST() {
 
     // 1. Conecta e coleta as mensagens de imagem novas do grupo
     await log("antes de conectar no WhatsApp");
-    const mensagens = await coletarMensagensDoGrupo(sql, grupoJid, log);
+    // Ids que já têm comprovante gravado: pra eles o coletor nem tenta baixar a imagem de novo
+    const conhecidos = await sql`SELECT "mensagemWhatsappId" FROM "WhatsappComprovante"`;
+    const idsConhecidos = new Set<string>(conhecidos.map((c) => c.mensagemWhatsappId as string));
+    const { mensagens, imagens } = await coletarMensagensDoGrupo(sql, grupoJid, log, idsConhecidos);
     await log(`depois de conectar — ${mensagens.length} mensagem(ns) coletada(s)`);
 
     // 2a. Grava TODAS as mensagens novas imediatamente — só regex na legenda (extrairValor),
@@ -148,10 +151,20 @@ export async function POST() {
     // fica mais preso pra sempre só porque o worker não esquentou a tempo dessa vez.
     let downloadParouPorTempo = false;
     let imagensBaixadas = 0;
+    // Os downloads já foram disparados em paralelo pelo coletor, assim que cada mensagem chegou
+    // — aqui só se espera o resultado e grava. Gravar a imagem é o que impede a perda definitiva
+    // (a mensagem não chega de novo), então esse laço só desiste bem perto do teto de 60s.
+    const LIMITE_GRAVAR_IMAGENS_MS = 52_000;
     for (const { msg, comprovanteId } of paraOcr) {
-      if (tempoEsgotado()) { downloadParouPorTempo = true; break; }
+      if (Date.now() - inicio > LIMITE_GRAVAR_IMAGENS_MS) { downloadParouPorTempo = true; break; }
       try {
-        const buffer = await comTimeout(downloadMediaMessage(msg, "buffer", {}), 15_000, "download da mídia do WhatsApp travou (>15s)");
+        const msgId = msg.key.id as string;
+        const buffer = await comTimeout(
+          imagens.get(msgId) ?? downloadMediaMessage(msg, "buffer", {}).then((b) => b as Buffer),
+          15_000,
+          "download da mídia do WhatsApp travou (>15s)"
+        );
+        if (!buffer) throw new Error("download da imagem falhou");
         await sql`UPDATE "WhatsappComprovante" SET "imagemBuffer" = ${buffer as Buffer} WHERE id = ${comprovanteId}`;
         imagensBaixadas++;
       } catch (err) {
