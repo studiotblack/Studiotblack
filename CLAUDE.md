@@ -130,7 +130,21 @@ categoria, ou com categoria sem código (`codigo IS NULL`), NÃO aparece no DRE*
 — sempre conferir isso no fechamento. Itens de folha/comissão entram pela DATA
 DO PAGAMENTO (comissão de agosto paga em setembro cai em setembro; salário
 da recepção chegou a ter 2 meses em setembro) — explicar isso ao comparar meses.
-- **Receita = Sicoob + AppBarber fora do banco** (`src/lib/receita-appbarber.ts`):
+- **É um COMPARATIVO, não só uma soma.** O faturamento do AppBarber (a verdade
+  da venda) tem que FECHAR com o que entrou no Sicoob mais o que nunca passa por
+  ele. A conta de conferência, por mês:
+  `AppBarber total  =  serviço no Sicoob (≈ cartão/PIX de serviço)  +  produto (outra conta)  +  dinheiro  ±  taxas de cartão/timing`.
+  Passos: (1) comparar SÓ serviço sem dinheiro do AppBarber × vendas do Sicoob;
+  (2) a diferença é explicada por produto + dinheiro + taxa de cartão (~5-6%) +
+  defasagem de fim de mês; (3) "bate" quando o resíduo é pequeno e explicado.
+  Exemplo set/2026: AppBarber 64.027 − produto 6.925 − dinheiro 1.705 = 55.397 de
+  serviço esperado no banco; Sicoob recebeu 53.984 (−2,6%, taxas de cartão
+  compensadas por PIX a mais). Na janela jul-set o banco ficou +2% acima, ou
+  seja, sem vazamento. A tela Faturamento (`conciliacao-faturamento`) faz o
+  passo (1) e devolve `totalProdutos` e `totalDinheiro` para a ponte.
+- **Na hora de montar a RECEITA do DRE**, as mesmas fontes são somadas, sem
+  sobreposição (`src/lib/receita-appbarber.ts`) — Sicoob (serviço) + AppBarber
+  fora do banco:
   - Serviço recebido no Sicoob → "Venda de Serviços" (regra automática de entrada).
   - **PRODUTO nunca passa pelo Sicoob** (liquidado em outra conta; confirmado
     pelo dono). Soma como "Vendas Produtos" (1.1.1.01.002) a partir do
