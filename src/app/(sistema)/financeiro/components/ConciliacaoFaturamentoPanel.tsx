@@ -13,8 +13,22 @@ interface DiaConciliacao {
   destaque: boolean;
 }
 
+interface PonteConciliacao {
+  appBarberBruto: number;
+  produtos: number;
+  dinheiroServico: number;
+  servicoEsperadoNoBanco: number;
+  bancoRecebido: number;
+  residuo: number;
+  residuoPct: number;
+  cartao: { appBarber: number; banco: number; diferenca: number } | null;
+  pix: { appBarber: number; banco: number; diferenca: number } | null;
+  outrasEntradas: number;
+}
+
 interface RespostaConciliacao {
   mesAno: string;
+  ponte?: PonteConciliacao;
   dias: DiaConciliacao[];
   totalAppBarber: number;
   totalBanco: number;
@@ -40,6 +54,77 @@ const fmtData = (d: string | null | undefined) => (d ? new Date(d + "T12:00:00")
 function mesAnoAtual(): string {
   const hoje = new Date();
   return `${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+}
+
+// Linha da ponte: rótulo à esquerda, valor à direita; `sinal` só colore (saída/entrada/total)
+function LinhaPonte({ rotulo, valor, dica, tipo = "normal" }: { rotulo: string; valor: number; dica?: string; tipo?: "normal" | "menos" | "total" | "resultado" }) {
+  const cor = tipo === "menos" ? "var(--color-danger)" : tipo === "resultado" ? "var(--color-gold)" : "var(--color-cream)";
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "1rem", padding: "0.4rem 0", borderTop: tipo === "total" || tipo === "resultado" ? "1px solid var(--color-border)" : "none", fontWeight: tipo === "total" || tipo === "resultado" ? 700 : 400 }}>
+      <span style={{ fontSize: "0.85rem", color: "var(--color-cream-dim)" }}>
+        {rotulo}
+        {dica && <span style={{ display: "block", fontSize: "0.7rem", color: "var(--color-muted)", fontWeight: 400 }}>{dica}</span>}
+      </span>
+      <span style={{ fontSize: tipo === "resultado" ? "1.05rem" : "0.9rem", color: cor, whiteSpace: "nowrap" }}>
+        {tipo === "menos" ? "− " : tipo === "resultado" ? (valor >= 0 ? "+ " : "− ") : ""}{brl(Math.abs(valor))}
+      </span>
+    </div>
+  );
+}
+
+// Ponte AppBarber → Sicoob. Tudo passa pelo Sicoob, exceto produto (outra conta), dinheiro e o que a
+// maquininha retém (taxa + antecipação). Mostra o resíduo e onde ele está (cartão × PIX × outras entradas).
+function PonteCard({ ponte, statusMes }: { ponte: PonteConciliacao; statusMes: "ok" | "revisar" }) {
+  const sinal = (n: number) => `${n >= 0 ? "+" : "−"} ${brl(Math.abs(n))}`;
+  const cartaoPct = ponte.cartao && ponte.cartao.appBarber > 0 ? (ponte.cartao.diferenca / ponte.cartao.appBarber) * 100 : 0;
+  return (
+    <div className="card" style={{ padding: "1.25rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.5rem" }}>
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Ponte: do AppBarber até o Sicoob</h3>
+        <span className="badge" style={{ background: statusMes === "ok" ? "rgba(46,204,113,0.12)" : "rgba(231,76,60,0.12)", color: statusMes === "ok" ? "var(--color-success)" : "var(--color-danger)", border: `1px solid ${statusMes === "ok" ? "var(--color-success)" : "var(--color-danger)"}`, fontSize: "0.72rem" }}>
+          {statusMes === "ok" ? "Bate" : "Revisar"} · resíduo {ponte.residuoPct.toFixed(1).replace(".", ",")}%
+        </span>
+      </div>
+      <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: "0 0 0.5rem 0" }}>
+        Tudo passa pelo Sicoob, exceto produto, dinheiro e o que a maquininha retém.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1.5rem" }}>
+        <div>
+          <LinhaPonte rotulo="Faturamento do AppBarber (bruto)" valor={ponte.appBarberBruto} />
+          <LinhaPonte rotulo="Produtos" dica="liquidados em outra conta" valor={ponte.produtos} tipo="menos" />
+          <LinhaPonte rotulo="Dinheiro de serviço" dica="não passa pelo banco" valor={ponte.dinheiroServico} tipo="menos" />
+          <LinhaPonte rotulo="Serviço que deveria cair no Sicoob" valor={ponte.servicoEsperadoNoBanco} tipo="total" />
+          <LinhaPonte rotulo="Venda de Serviços no Sicoob" valor={ponte.bancoRecebido} />
+          <LinhaPonte rotulo={`Resíduo (${ponte.residuo >= 0 ? "banco acima" : "banco abaixo"})`} dica="taxa de maquininha/antecipação, defasagem do fim do mês e entradas avulsas" valor={ponte.residuo} tipo="resultado" />
+        </div>
+        <div>
+          <p style={{ fontSize: "0.72rem", color: "var(--color-muted)", margin: "0 0 0.25rem 0", textTransform: "uppercase", letterSpacing: "0.04em" }}>Onde está o resíduo</p>
+          {ponte.cartao && ponte.pix ? (
+            <>
+              <LinhaPonte
+                rotulo="Cartão"
+                dica={`AppBarber ${brl(ponte.cartao.appBarber)} → banco ${brl(ponte.cartao.banco)} (${cartaoPct.toFixed(1).replace(".", ",")}%) — esperado ~5-6% a menos por taxa + antecipação`}
+                valor={ponte.cartao.diferenca}
+              />
+              <div style={{ fontSize: "0.7rem", color: "var(--color-muted)", textAlign: "right", marginTop: "-0.3rem" }}>{sinal(ponte.cartao.diferenca)}</div>
+              <LinhaPonte
+                rotulo="PIX"
+                dica={`AppBarber ${brl(ponte.pix.appBarber)} → banco ${brl(ponte.pix.banco)} — PIX não tem taxa, deveria bater`}
+                valor={ponte.pix.diferenca}
+              />
+              <div style={{ fontSize: "0.7rem", color: "var(--color-muted)", textAlign: "right", marginTop: "-0.3rem" }}>{sinal(ponte.pix.diferenca)}</div>
+            </>
+          ) : (
+            <p style={{ fontSize: "0.78rem", color: "var(--color-muted)", margin: "0.25rem 0 0.5rem 0" }}>
+              Esse mês não tem forma de pagamento no AppBarber (foi importado antes de set/2026), então não dá pra
+              separar cartão de PIX. Reimporte o relatório de comissões desse mês para ver a quebra.
+            </p>
+          )}
+          <LinhaPonte rotulo="Outras entradas lançadas como venda" dica="transferências, devoluções de PIX etc. — vale conferir" valor={ponte.outrasEntradas} />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function ConciliacaoFaturamentoPanel() {
@@ -94,6 +179,8 @@ export default function ConciliacaoFaturamentoPanel() {
         <div style={{ textAlign: "center", padding: "3rem", color: "var(--color-muted)" }}>Não foi possível carregar.</div>
       ) : (
         <>
+          {dados.ponte && <PonteCard ponte={dados.ponte} statusMes={dados.statusMes} />}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
             <div className="kpi-card">
               <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>AppBarber (sem dinheiro)</span>

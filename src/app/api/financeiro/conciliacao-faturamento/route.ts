@@ -78,6 +78,8 @@ export async function GET(request: NextRequest) {
     const appBarberPorDia = new Map<number, number>();
     let totalDinheiro = 0;
     let totalProdutos = 0;
+    let cartaoServico = 0;
+    let pixServico = 0;
     let temPagamentoDesconhecido = false;
     for (const v of vendas) {
       const diaStr = String(v.data).split(" ")[0].split("/")[0];
@@ -92,6 +94,9 @@ export async function GET(request: NextRequest) {
         continue;
       }
       if (v.pagamento == null) temPagamentoDesconhecido = true;
+      // Quebra por forma só pra ponte abaixo — serviço pago em cartão ou PIX (os dois caem no banco)
+      if (/cart/i.test(String(v.pagamento ?? ""))) cartaoServico += Number(v.valorBruto);
+      else if (v.pagamento === "PIX") pixServico += Number(v.valorBruto);
       appBarberPorDia.set(dia, (appBarberPorDia.get(dia) || 0) + Number(v.valorBruto));
     }
 
@@ -123,8 +128,49 @@ export async function GET(request: NextRequest) {
       ? (totalBanco === 0 ? "ok" : "revisar")
       : Math.abs(diferencaMes) / totalAppBarber <= TOLERANCIA_RELATIVA_MES ? "ok" : "revisar";
 
+    // Quebra do lado do banco por tipo de entrada (cartão = "CR ..." da maquininha; PIX = "PIX RECEBIDO"),
+    // só das entradas que viraram venda — pra ponte mostrar onde está o resíduo.
+    let bancoCartao = 0, bancoPix = 0, bancoOutros = 0;
+    if (categoriaIds.length > 0) {
+      const porTipo = await sql`
+        SELECT CASE WHEN t.descricao LIKE 'CR %' THEN 'cartao' WHEN t.descricao LIKE 'PIX RECEBIDO%' THEN 'pix' ELSE 'outros' END AS tipo,
+               SUM(acat.valor) AS total
+        FROM "TransacaoBancariaImportada" t
+        JOIN "LancamentoFinanceiro" a ON a.id = t."lancamentoId"
+        JOIN "LancamentoFinanceiroCategoria" acat ON acat."lancamentoId" = a.id
+        WHERE t.tipo = 'entrada' AND a.tipo = 'receber'
+          AND a."dataCompetencia" LIKE ${prefixoDataCompetencia + "%"}
+          AND acat."categoriaId" = ANY(${categoriaIds})
+        GROUP BY 1
+      `;
+      for (const r of porTipo) {
+        if (r.tipo === "cartao") bancoCartao = Number(r.total);
+        else if (r.tipo === "pix") bancoPix = Number(r.total);
+        else bancoOutros = Number(r.total);
+      }
+    }
+    const r2 = (n: number) => Number(n.toFixed(2));
+    // PONTE: AppBarber (verdade da venda) -> o que deveria cair no Sicoob -> o que caiu. Tudo passa pelo
+    // Sicoob, exceto produto (outra conta), dinheiro e o que a maquininha retém (taxa + antecipação).
+    // Sicoob = AppBarber − produto − dinheiro − taxa de maquininha ± defasagem de fim de mês.
+    const ponte = {
+      appBarberBruto: r2(totalAppBarber + totalDinheiro + totalProdutos),
+      produtos: r2(totalProdutos),
+      dinheiroServico: r2(totalDinheiro),
+      servicoEsperadoNoBanco: r2(totalAppBarber),
+      bancoRecebido: r2(totalBanco),
+      residuo: r2(diferencaMes),
+      residuoPct: totalAppBarber > 0 ? r2((diferencaMes / totalAppBarber) * 100) : 0,
+      // Sem forma de pagamento no AppBarber (meses importados antes de set/2026) não dá pra quebrar por
+      // cartão × PIX — mostrar o banco inteiro como "diferença" enganaria. null = indisponível.
+      cartao: temPagamentoDesconhecido ? null : { appBarber: r2(cartaoServico), banco: r2(bancoCartao), diferenca: r2(bancoCartao - cartaoServico) },
+      pix: temPagamentoDesconhecido ? null : { appBarber: r2(pixServico), banco: r2(bancoPix), diferenca: r2(bancoPix - pixServico) },
+      outrasEntradas: r2(bancoOutros),
+    };
+
     return NextResponse.json({
       mesAno,
+      ponte,
       dias,
       totalAppBarber: Number(totalAppBarber.toFixed(2)),
       totalBanco: Number(totalBanco.toFixed(2)),

@@ -139,11 +139,15 @@ da recepção chegou a ter 2 meses em setembro) — explicar isso ao comparar me
   que deveria cair no Sicoob; (3) a diferença contra o banco tem que ser
   explicada por taxa de cartão (~5-6%) + timing + PIX/entradas avulsas; "bate"
   quando o resíduo é pequeno e explicado.
-  Exemplo set/2026: AppBarber 64.027 − produto 6.925 − dinheiro 1.705 = 55.397
-  esperado; Sicoob recebeu 53.984 (−2,6%: taxas ~2.385 compensadas por PIX e
-  outras entradas ~+970). Na janela jul-set o banco ficou +2% acima, ou seja,
-  sem vazamento. A tela Faturamento (`conciliacao-faturamento`) faz os passos
-  (1)-(2) e devolve `totalProdutos` e `totalDinheiro` para a ponte.
+  Exemplo set/2026 (catálogo já corrigido): AppBarber 64.027 − produto 6.065 −
+  dinheiro 1.705 = 56.257 esperado; Sicoob recebeu 53.984 (−4,0%): cartão
+  −2.675 (−5,8%, taxa + antecipação), PIX +188, outras entradas 214.
+  A tela **Faturamento** (`ConciliacaoFaturamentoPanel.tsx`, `PonteCard`) mostra
+  essa ponte no topo — a API (`conciliacao-faturamento/route.ts`) devolve o
+  objeto `ponte` (bruto, produtos, dinheiro, esperado, recebido, resíduo e a
+  quebra cartão × PIX × outras entradas). Meses sem forma de pagamento no
+  AppBarber (antes de set/2026) devolvem `cartao`/`pix` = null e a tela avisa
+  pra reimportar — nunca mostrar o banco inteiro como "diferença".
 - **Na hora de montar a RECEITA do DRE**, as mesmas fontes são somadas, sem
   sobreposição (`src/lib/receita-appbarber.ts`) — Sicoob (serviço) + AppBarber
   fora do banco:
