@@ -295,9 +295,12 @@ da recepção chegou a ter 2 meses em setembro) — explicar isso ao comparar me
 
 ## Site do studio e apresentação (outros entregáveis)
 
+- **Site NO AR (desde 13/10/2026):** `https://www.studiotblack.com.br`. O trabalho
+  no site é tocado pelo dono em OUTRA conversa/sessão do Claude; aqui só vale
+  como contexto (ex.: o agendamento do site aponta para o AppBarber).
 - **Site (repositório separado, do Yoji):** `github.com/yoji-kojio/studio-tblack`,
   privado, landing page Nuxt 4 + Nuxt UI + Tailwind 4, publicada na Vercel
-  (`studio-tblack.vercel.app`). Clone local em
+  (`studio-tblack.vercel.app`, agora também no domínio acima). Clone local em
   `C:\Users\USER\.gemini\antigravity\scratch\studio-tblack` (a `main` publica o
   site: trabalhar em BRANCH + PR, nunca direto na `main`, e só mesclar com o ok
   do dono). Tem `CLAUDE.md` próprio com regras de SEO e design (tema escuro
