@@ -293,22 +293,60 @@ da recepção chegou a ter 2 meses em setembro) — explicar isso ao comparar me
   Dado sensível guardado no banco: sessão do WhatsApp, chave privada e
   certificado do Sicoob (`ContaBancaria`), hash de senha (`User`).
 
-## Estado e pendências (08/10/2026)
+## Site do studio e apresentação (outros entregáveis)
 
-- DRE de setembro/2026: receita R$ 61.704 (serviços 55.689 + produtos 6.065),
-  resultado operacional R$ 2.039. Julho está INCOMPLETO no sistema (comissões
-  R$ 7 mil e pró-labore R$ 529 destoam do padrão; faltam 10 linhas do AppBarber,
-  R$ 1.145) — não usar como referência até completar.
-- Agosto de receita pode estar inflado em até R$ 3,4 mil por 3 entradas
-  classificadas como venda (Adriana Francisca R$ 1.500 e R$ 830; R$ 1.078 do
-  próprio CNPJ do studio) — aguardando o dono dizer o que são.
-- Aguardando o dono: autorização para importar jul/ago do arquivo de comissões;
-  origem dos R$ 468,35 de 30/09 (crédito); lista de compras da fatura do cartão
-  de setembro (compras acumuladas: set R$ 1.007,14, out/nov R$ 702,69; o débito
-  de R$ 661,58 de 22/09 já está como Cartão de Crédito); R$ 1.385,94 de
-  06/01/2026 (boleto sem destinatário, pendente); R$ 250 (08/09) e R$ 2,50
-  (25/09) pendentes; 14 comprovantes de 02-06/10 só com legenda (reenviar
-  fotos); PIX R$ 468,75 já como consórcio.
+- **Site (repositório separado, do Yoji):** `github.com/yoji-kojio/studio-tblack`,
+  privado, landing page Nuxt 4 + Nuxt UI + Tailwind 4, publicada na Vercel
+  (`studio-tblack.vercel.app`). Clone local em
+  `C:\Users\USER\.gemini\antigravity\scratch\studio-tblack` (a `main` publica o
+  site: trabalhar em BRANCH + PR, nunca direto na `main`, e só mesclar com o ok
+  do dono). Tem `CLAUDE.md` próprio com regras de SEO e design (tema escuro
+  permanente, cores só por token, NAP só em `app/data/business.ts`) — LER ANTES
+  de mexer. O acesso usa o mesmo login do GitHub da conta do studio.
+- **Apresentação gerencial de setembro/2026** (Artifact "Slides", privado):
+  `https://claude.ai/artifact/7cTJ61cHkvJdaPiaGQTrh1`, 16 slides, estilo do site
+  (bronze `#edbd9a` sobre `#131312`, Bodoni Moda + Hanken Grotesk). Números reais
+  do sistema; compara agosto × setembro. A meta de R$ 100 mil de dezembro do
+  relatório anterior (Jan–Jul, Nibo) usava outra base de medição (julho = R$ 46,7
+  mil contra R$ 66,6 mil no sistema atual) — não comparar direto, recalibrar.
+- **Login do sistema:** `admin@admin.com.br`. A senha foi redefinida em 01/10 pelo
+  dono (hash bcrypt `$2a$10$…` via `extensions.crypt(..., gen_salt('bf',10))` no
+  SQL Editor). NÃO guardar senha em arquivo; para redefinir, rodar o `UPDATE
+  "User"` com `crypt` no Supabase (o dono escolhe a senha).
+
+## Estado e pendências (13/10/2026)
+
+- **DRE de setembro/2026 (com as regras atuais):** receita R$ 61.704 (serviços
+  55.689 + produtos 6.065), margem de contribuição 68,6%, resultado operacional
+  R$ 2.039 (3,3%, já depois de R$ 5.128 de pró-labore; R$ 7,2 mil antes dele).
+  Ponto de equilíbrio ≈ R$ 58,7 mil (folga de 4,8%). Caixa depois de dívidas e
+  obras (sem RDC e aporte): −R$ 5,9 mil; amortização de empréstimo R$ 6,6 mil/mês
+  (R$ 18,2 mil no 3º trimestre). Marketing R$ 3.042 (4,9%), CAC ≈ R$ 19.
+- Julho está INCOMPLETO no sistema (comissões R$ 7 mil e pró-labore R$ 529
+  destoam; faltam 10 linhas do AppBarber, R$ 1.145) — não usar como referência.
+  Comparação confiável de lucro: agosto × setembro.
+- **Fila zerada em 13/10:** WhatsApp 0 pendentes (os 14 comprovantes só com
+  legenda foram resolvidos/ignorados por decisão do dono: tudo Alimentação,
+  exceto Caio = Marketing; padaria R$ 28 → Alimentação); banco 2026 só com 2
+  pendentes — R$ 122,57 boleto de 13/10 (quitado, beneficiário desconhecido;
+  conferir no app do Sicoob, pode ser pagamento em duplicidade do "Pagamento
+  imposto" de 08/10) e R$ 2.563,59 AGENDADO para 22/10 (fatura do cartão;
+  não conciliar antes de acontecer). R$ 250 (08/09), R$ 2,50 (25/09) e
+  R$ 1.385,94 (06/01) foram IGNORADOS por decisão do dono.
+- Categorizados na auditoria de 13/10: "Fornecedor Fernando" R$ 250 → Uso e
+  Consumo; "Pagamento imposto" R$ 122,57 → Simples Nacional (palpites, conferir).
+  Lançamentos 2026 sem categoria: 0.
+- **Aguardando o dono:** autorização para importar jul/ago do arquivo de
+  comissões (traz dinheiro e a quebra cartão × PIX desses meses; NÃO importar
+  setembro dele); lista de compras do cartão de setembro e outubro (acumulado:
+  set R$ 1.007,14, out/nov R$ 702,69 por mês; fatura de 22/09 R$ 661,58 já como
+  Cartão de Crédito); origem dos R$ 468,35 de 30/09 (possível transferência da
+  Maria Justa de R$ 468 em 01/10, "só veio no crédito"); o que são as entradas de
+  agosto da Adriana Francisca (R$ 1.500 e R$ 830) e do próprio CNPJ (R$ 1.078),
+  que podem inflar a receita de agosto em até R$ 3,4 mil; rodar o SQL de RLS no
+  Supabase (alerta de segurança de 03/10; conferir depois); decidir se as 4
+  compras da Padaria Pão de Queijo de jul–set (R$ 432, em Benefício) passam a
+  Alimentação.
 - Dados de 2025 (≈260 saídas bancárias pendentes, R$ 94,5 mil) são IGNORADOS por
   decisão do dono: o foco é 2026.
 - Pós-mortem de antes de 06/10 está em `CONTEXTO-ANTERIOR.md` (arquivo do dono,
