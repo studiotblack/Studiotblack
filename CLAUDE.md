@@ -308,7 +308,7 @@ da recepção chegou a ter 2 meses em setembro) — explicar isso ao comparar me
   propósito (a recepção não conta). Item já pedido e ainda pendente aparece
   "aguardando compra" (dá pra "pedir de novo"). "Outro item" cria `CompraItem`
   com `aprovado=false` (entra no pedido; o dono aprova em Itens).
-- Envio avisa no WhatsApp (grupo de avisos, `enviar-aviso.ts`) via `after()` —
+- Envio avisa no WhatsApp via `after()` para `CompraConfig.whatsappDestino` (5512988340011, editável na aba Link; vazio = grupo de avisos; número solto é resolvido por `sock.onWhatsApp`, `enviar-aviso.ts`) —
   falha no aviso não invalida o envio. `semAviso:true` no POST só funciona fora
   de produção (usar nos testes pra não mandar mensagem de verdade).
 - **Vincular ao Contas a Pagar é decisão do dono** (botão geral + modal

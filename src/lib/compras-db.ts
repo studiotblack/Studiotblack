@@ -71,6 +71,8 @@ export async function ensureComprasTables(sql: Sql) {
       "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `;
+  // Destino do aviso por WhatsApp (só dígitos, DDI+DDD+número). Vazio = grupo de avisos.
+  await sql`ALTER TABLE "CompraConfig" ADD COLUMN IF NOT EXISTS "whatsappDestino" TEXT`;
   // Mesma regra do alerta de segurança de 03/10 (RLS): tabelas novas já nascem fechadas
   // pra API pública do Supabase — o sistema acessa pelo usuário postgres, que ignora RLS.
   for (const t of ["CompraItem", "CompraChecklist", "CompraPedidoItem", "CompraConfig"]) {
@@ -89,7 +91,11 @@ export async function ensureComprasTables(sql: Sql) {
 
   const [cfg] = await sql`SELECT id FROM "CompraConfig" WHERE id = 'default'`;
   if (!cfg) {
-    await sql`INSERT INTO "CompraConfig" (id, token) VALUES ('default', ${gerarToken()}) ON CONFLICT (id) DO NOTHING`;
+    // destino inicial definido pelo dono em 15/10/2026
+    await sql`INSERT INTO "CompraConfig" (id, token, "whatsappDestino") VALUES ('default', ${gerarToken()}, '5512988340011') ON CONFLICT (id) DO NOTHING`;
+  } else {
+    // a linha já existia sem destino (criada antes da coluna): preenche uma vez só
+    await sql`UPDATE "CompraConfig" SET "whatsappDestino" = '5512988340011' WHERE id = 'default' AND "whatsappDestino" IS NULL`;
   }
 
   tablesEnsured = true;

@@ -301,6 +301,21 @@ function AbaLink({ token, onToken }: { token: string | null; onToken: (t: string
   const [erro, setErro] = useState("");
   const url = token && typeof window !== "undefined" ? `${window.location.origin}/compras/lista/${token}` : "";
 
+  const [destino, setDestino] = useState("");
+  const [destinoMsg, setDestinoMsg] = useState("");
+  const formatarNumero = (d: string) => (d.length === 13 ? `+${d.slice(0, 2)} ${d.slice(2, 4)} ${d.slice(4, 9)}-${d.slice(9)}` : d ? `+${d}` : "");
+  useEffect(() => {
+    fetch("/api/compras/config").then((r) => (r.ok ? r.json() : null)).then((j) => j && setDestino(formatarNumero(j.whatsappDestino ?? "")));
+  }, []);
+  const salvarDestino = async () => {
+    setDestinoMsg("");
+    const r = await fetch("/api/compras/config", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsappDestino: destino }) });
+    const j = await r.json();
+    if (!r.ok) { setDestinoMsg(j.error || "Erro ao salvar"); return; }
+    setDestino(formatarNumero(j.whatsappDestino));
+    setDestinoMsg("Salvo.");
+  };
+
   const copiar = async () => {
     try { await navigator.clipboard.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 2000); } catch { /* sem clipboard */ }
   };
@@ -326,6 +341,17 @@ function AbaLink({ token, onToken }: { token: string | null; onToken: (t: string
       </div>
       <div>
         <button className="btn btn-ghost btn-sm" onClick={() => setConfirmando(true)}><RefreshCw size={14} /> Trocar link</button>
+      </div>
+
+      <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", width: "100%" }} />
+      <h2 style={{ margin: 0, fontSize: "1.05rem", color: "var(--color-cream)" }}>Aviso por WhatsApp</h2>
+      <div style={{ color: "var(--color-cream-dim)", fontSize: "0.9rem" }}>
+        Quando a recepção envia a lista, a mensagem chega neste número. Deixe em branco para usar o grupo de avisos.
+      </div>
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <input value={destino} onChange={(e) => setDestino(e.target.value)} placeholder="+55 12 98834-0011" inputMode="tel" style={{ ...inp, minWidth: 220 }} />
+        <button className="btn btn-gold btn-sm" onClick={salvarDestino}>Salvar</button>
+        {destinoMsg && <span style={{ fontSize: "0.85rem", color: destinoMsg.startsWith("Salvo") ? "var(--color-success)" : "var(--color-danger)" }}>{destinoMsg}</span>}
       </div>
       {erro && <div style={{ color: "var(--color-danger)" }}>{erro}</div>}
 

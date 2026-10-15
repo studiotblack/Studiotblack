@@ -131,7 +131,15 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ token:
     after(async () => {
       if (semAviso) return;
       try {
-        const jid = await obterGrupoAvisosJid();
+        const sqlCfg = getDb();
+        let destino: string | null = null;
+        try {
+          const [cfg] = await sqlCfg`SELECT "whatsappDestino" FROM "CompraConfig" WHERE id = 'default'`;
+          destino = cfg?.whatsappDestino || null;
+        } finally {
+          await sqlCfg.end();
+        }
+        const jid = destino || (await obterGrupoAvisosJid());
         if (!jid) return;
         await enviarTextoWhatsApp(jid, montarAviso(nome, resumo));
       } catch (err) {

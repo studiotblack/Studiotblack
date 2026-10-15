@@ -47,7 +47,15 @@ export async function enviarTextoWhatsApp(jid: string, texto: string): Promise<v
         const { connection, lastDisconnect } = update;
         if (connection === "open") {
           try {
-            await sock.sendMessage(jid, { text: texto });
+            // Número solto (só dígitos, DDI+DDD+número): resolve o JID real no WhatsApp — o
+            // Brasil tem contas com e sem o 9º dígito, e mandar pro JID errado "some".
+            let destino = jid;
+            if (!jid.includes("@")) {
+              const [r] = (await sock.onWhatsApp(jid)) ?? [];
+              if (!r?.exists) throw new Error(`O número ${jid} não tem WhatsApp.`);
+              destino = r.jid;
+            }
+            await sock.sendMessage(destino, { text: texto });
             encerrar();
           } catch (err) {
             encerrar(err instanceof Error ? err : new Error(String(err)));
