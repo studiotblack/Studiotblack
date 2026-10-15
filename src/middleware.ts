@@ -8,7 +8,12 @@ const EXTENSOES_ESTATICAS = [".png", ".jpg", ".jpeg", ".svg", ".ico", ".css", ".
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isRotaPublica = rotasPublicas.includes(pathname);
+  // Checkpoint semanal de compras da recepção: abre no celular sem login. Só estes dois
+  // prefixos; a chave de acesso é o token longo na URL (validado dentro da rota).
+  const isChecklistPublico =
+    pathname.startsWith("/compras/lista/") || pathname.startsWith("/api/compras/publico/");
+
+  const isRotaPublica = rotasPublicas.includes(pathname) || isChecklistPublico;
   const isArquivoEstatico =
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||

@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   Scissors, LayoutDashboard, CalendarDays, Users, Wrench,
   Package, DollarSign, UserCheck, BarChart3, Settings,
-  LogOut, ChevronRight, X, Shield, Menu, TrendingUp,
+  LogOut, ChevronRight, X, Shield, Menu, TrendingUp, ShoppingCart,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -16,6 +16,7 @@ const navItems = [
   { href: "/servicos",      icon: Scissors,        label: "Serviços"       },
   { href: "/produtos",      icon: Package,         label: "Produtos"       },
   { href: "/financeiro",    icon: DollarSign,      label: "Financeiro"     },
+  { href: "/compras",       icon: ShoppingCart,    label: "Compras"        },
   { href: "/performance",   icon: TrendingUp,      label: "Performance"    },
   { href: "/colaboradores", icon: UserCheck,       label: "Colaboradores"  },
   { href: "/relatorios",    icon: BarChart3,       label: "Relatórios"     },

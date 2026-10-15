@@ -9,6 +9,7 @@ export const ALL_MENUS = [
   { href: "/servicos",      label: "Serviços"       },
   { href: "/produtos",      label: "Produtos"       },
   { href: "/financeiro",    label: "Financeiro"     },
+  { href: "/compras",       label: "Compras"        },
   { href: "/performance",   label: "Performance"    },
   { href: "/colaboradores", label: "Colaboradores"  },
   { href: "/relatorios",    label: "Relatórios"     },

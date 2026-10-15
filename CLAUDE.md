@@ -293,6 +293,29 @@ da recepção chegou a ter 2 meses em setembro) — explicar isso ao comparar me
   Dado sensível guardado no banco: sessão do WhatsApp, chave privada e
   certificado do Sicoob (`ContaBancaria`), hash de senha (`User`).
 
+## Módulo Compras (checklist semanal da recepção) — criado em 15/10/2026
+
+- Menu **Compras** (`/compras`, `src/app/(sistema)/compras/page.tsx`): abas Pedidos /
+  Itens / Link da recepção. Tabelas `CompraItem`, `CompraChecklist`,
+  `CompraPedidoItem`, `CompraConfig` em `src/lib/compras-db.ts` (próprio
+  `ensureComprasTables`, sequencial, RLS já ligado; semeia a lista do dono na
+  1ª vez — marcas WS, Mirra, Raise, Burb, Soulta, Studio + Copa).
+- **Formulário público sem login:** `/compras/lista/<token>` (celular). O token
+  (`CompraConfig`, 24 bytes) é a única chave; trocável na aba Link. Rotas
+  públicas liberadas no `middleware.ts` só por prefixo
+  (`/compras/lista/`, `/api/compras/publico/`). Nunca expõe dado financeiro.
+- Item mostra "último pedido" e "N× em 90 dias" (giro) — NÃO tem estoque, de
+  propósito (a recepção não conta). Item já pedido e ainda pendente aparece
+  "aguardando compra" (dá pra "pedir de novo"). "Outro item" cria `CompraItem`
+  com `aprovado=false` (entra no pedido; o dono aprova em Itens).
+- Envio avisa no WhatsApp (grupo de avisos, `enviar-aviso.ts`) via `after()` —
+  falha no aviso não invalida o envio. `semAviso:true` no POST só funciona fora
+  de produção (usar nos testes pra não mandar mensagem de verdade).
+- **Vincular ao Contas a Pagar é decisão do dono** (botão geral + modal
+  Sim/Não, `POST /api/compras/vincular`): vira UM lançamento `pagar` rateado por
+  tipo — revenda → 1.1.2.01.001, consumo → 1.1.2.02.011 — com `FOR UPDATE` pra
+  não vincular duas vezes. Nada vira lançamento sozinho.
+
 ## Site do studio e apresentação (outros entregáveis)
 
 - **Site NO AR (desde 13/10/2026):** `https://www.studiotblack.com.br`. O trabalho
