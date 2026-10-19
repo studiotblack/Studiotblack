@@ -263,10 +263,18 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
               ('receber', ${conta.regraEntradaContatoId}, ${valor}, ${valor}, ${data}, ${data}, ${descricao}, ${id})
             RETURNING *
           `;
-          if (conta.regraEntradaCategoriaId) {
+          // "ESTORNO ..." (débito devolvido pelo banco) NÃO é venda: contar como Venda de
+          // Serviços infla receita e despesa ao mesmo tempo (aconteceu 4× em 2026, o maior
+          // R$ 995). Vai pra "Estorno de Despesas" (1.1.2.02.039), que abate a despesa.
+          let categoriaEntradaId: string | null = conta.regraEntradaCategoriaId;
+          if (/^\s*estorno/i.test(descricao)) {
+            const [catEstorno] = await sql`SELECT id FROM "CategoriaFinanceira" WHERE codigo = '1.1.2.02.039' LIMIT 1`;
+            if (catEstorno) categoriaEntradaId = catEstorno.id;
+          }
+          if (categoriaEntradaId) {
             await sql`
               INSERT INTO "LancamentoFinanceiroCategoria" ("lancamentoId", "categoriaId", valor)
-              VALUES (${novoLancamento.id}, ${conta.regraEntradaCategoriaId}, ${valor})
+              VALUES (${novoLancamento.id}, ${categoriaEntradaId}, ${valor})
             `;
           }
           if (conta.regraEntradaCentroCustoId) {
