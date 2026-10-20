@@ -1,3 +1,4 @@
+import { contatoApareceNoComprovante } from "@/lib/nome-compativel";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, ensureFinanceiroTables } from "@/lib/financeiro-db";
 import { SicoobClient } from "@/lib/bank/sicoob-client";
@@ -126,15 +127,33 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       // do status da transação bancária.
       const tipoAgendamento = tipo === "entrada" ? "receber" : "pagar";
       const matchResultado = await sql.begin(async (sql) => {
-        const [match] = await sql`
-          SELECT * FROM "LancamentoFinanceiro"
-          WHERE tipo = ${tipoAgendamento}
-            AND (valor - "valorPago") BETWEEN ${valor - TOLERANCIA_VALOR} AND ${valor + TOLERANCIA_VALOR}
-            AND ABS(COALESCE("dataVencimento"::date, ${data}::date) - ${data}::date) <= ${TOLERANCIA_DIAS}
-          ORDER BY ABS("dataVencimento"::date - ${data}::date) ASC
-          LIMIT 1
-          FOR UPDATE
+        const candidatos = await sql`
+          SELECT l.*, c.nome AS "contatoNome" FROM "LancamentoFinanceiro" l
+          JOIN "Contato" c ON c.id = l."contatoId"
+          WHERE l.tipo = ${tipoAgendamento}
+            AND (l.valor - l."valorPago") BETWEEN ${valor - TOLERANCIA_VALOR} AND ${valor + TOLERANCIA_VALOR}
+            AND ABS(COALESCE(l."dataVencimento"::date, ${data}::date) - ${data}::date) <= ${TOLERANCIA_DIAS}
+          ORDER BY ABS(l."dataVencimento"::date - ${data}::date) ASC
+          LIMIT 10
+          FOR UPDATE OF l
         `;
+
+        // Trava de favorecido: se há comprovante do WhatsApp pendente esperando esse mesmo
+        // valor/data, a conta só casa se o favorecido dela aparece nesse comprovante. Sem isso,
+        // contas recorrentes de mesmo valor se roubam (19/10/2026: Pix de R$ 1.500 da Gestão
+        // quitou a Terceirização Financeira da Fabro, e ainda gerou a próxima ocorrência dela).
+        let comprovantes: { textoOcr: string | null }[] = [];
+        if (tipo === "saida" && candidatos.length > 0) {
+          comprovantes = await sql`
+            SELECT "textoOcr" FROM "WhatsappComprovante"
+            WHERE status = 'pendente' AND "valorOcr" IS NOT NULL
+              AND "valorOcr" BETWEEN ${valor - 0.02} AND ${valor + 0.02}
+              AND ABS("dataHoraEnvio"::date - ${data}::date) <= 15
+          ` as any;
+        }
+        const match = candidatos.find((cand: any) =>
+          comprovantes.length === 0 || comprovantes.some((c) => contatoApareceNoComprovante(cand.contatoNome, c.textoOcr))
+        );
         if (!match) return null;
 
         await sql`
