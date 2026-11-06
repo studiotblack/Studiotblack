@@ -264,6 +264,15 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       // conta a receber bateu com ele. Acima do limite, fica pendente igual a "sem regra".
       // Só se aplica a ENTRADA — a trava é especificamente sobre a regra de entrada, não deve
       // mudar o comportamento de saída (que já cai no "sem match e sem regra" mais abaixo).
+      // Entrada vinda do próprio dono (Tiago) nunca é venda: é aporte ou devolução de saída
+      // (30/10/2026: R$ 3.000 devolvidos por ele caíram como Venda de Serviços). Fica pendente
+      // pra decidir a categoria (Estorno de Despesas / Entrada de Recursos a Alocar).
+      if (tipo === "entrada" && /tiago henrique|\*\*\*\.018\.036/i.test(descricaoComplementar || "")) {
+        pendentes++;
+        detalhes.push({ data, valor, tipo, descricao, status: "pendente (entrada do dono — não é venda)", categoria: null });
+        continue;
+      }
+
       const acimaDoLimite = tipo === "entrada" && conta.regraEntradaValorMaximo != null && valor > conta.regraEntradaValorMaximo;
       if (acimaDoLimite) {
         pendentes++;
@@ -286,7 +295,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           // Serviços infla receita e despesa ao mesmo tempo (aconteceu 4× em 2026, o maior
           // R$ 995). Vai pra "Estorno de Despesas" (1.1.2.02.039), que abate a despesa.
           let categoriaEntradaId: string | null = conta.regraEntradaCategoriaId;
-          if (/^\s*estorno/i.test(descricao)) {
+          // "CRÉDITO DEVOLUÇÃO PIX" (Pix devolvido pelo recebedor) é o mesmo caso.
+          if (/^\s*(estorno|cr[eé]dito\s+devolu|devolu)/i.test(descricao)) {
             const [catEstorno] = await sql`SELECT id FROM "CategoriaFinanceira" WHERE codigo = '1.1.2.02.039' LIMIT 1`;
             if (catEstorno) categoriaEntradaId = catEstorno.id;
           }

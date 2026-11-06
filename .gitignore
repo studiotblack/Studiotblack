@@ -50,3 +50,6 @@ next-env.d.ts
 
 # dados de idioma baixados pelo tesseract.js (OCR) na primeira execução, nunca commitar
 /*.traineddata
+
+# exportações financeiras (dados sensíveis, nunca no git)
+/exports/
