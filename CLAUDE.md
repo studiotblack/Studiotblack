@@ -340,6 +340,41 @@ da recepção chegou a ter 2 meses em setembro) — explicar isso ao comparar me
   SQL Editor). NÃO guardar senha em arquivo; para redefinir, rodar o `UPDATE
   "User"` com `crypt` no Supabase (o dono escolhe a senha).
 
+## Aprendizados da conciliação de 03–06/11/2026
+
+- **O botão "Sincronizar" da tela puxa só o mês corrente** (a trava de "mês anterior nos
+  primeiros 7 dias" só vale pro cron, sem `mes` no body). Em 03/11 ficaram de fora 23–31/10
+  (76 transações, inclusive R$ 3.034,68 e o aluguel). Antes de fechar um mês, rodar também o
+  mês anterior (`POST sincronizar-sicoob` com `{mes, ano}`; roda local com `NextRequest`).
+- **Pagamento de comissão/VT/aluguel que o sync não casa com o lembrete vira lançamento NOVO**
+  (valor fora da tolerância ou data > 15 dias) e o lembrete fica aberto = despesa em dobro no
+  DRE. Conferir sempre depois do sync: lembretes "Comissão — X" em aberto com lançamento novo
+  do mesmo contato no mesmo dia. Correção: mover `Baixa` e `TransacaoBancariaImportada` pro
+  lembrete, ajustar `valor`/`valorPago`, apagar o duplicado e chamar `gerarProximaOcorrencia`
+  (passar o valor-base do lembrete) — assim nasce o lembrete do mês seguinte.
+- **Comissão é paga no 5º dia útil do mês seguinte** e o lembrete de "novembro" (venc. ~09/11)
+  É o pagamento do trabalho de outubro. Salário da recepção (Clara, Ana Clara) também vence no
+  5º dia útil; VT segue dia 30. Salário é sempre R$ 800; qualquer outro Pix pra elas é VT
+  (categoria Benefício para Funcionários) e baixa o lembrete de VT (valor ajustado à soma).
+- **Dois Pix de mesmo valor pra pessoas diferentes (ex.: 800 pra Clara e 800 pra Ana Clara)
+  podem ser conciliados trocados.** O `textoOcr` do comprovante do WhatsApp (nome do
+  recebedor + hora) é a verdade pra desfazer a troca.
+- **Linha "agendada" do Sicoob duplica o pagamento:** a linha futura (id próprio) é importada
+  dias antes e a executada chega depois com id novo (faxina R$ 150 de 28/10). Marcar a antiga
+  como `ignorado` (não apagar a linha — o id voltaria no próximo sync) e apagar o lançamento dela.
+- **Devolução de Pix ("CRÉDITO DEVOLUÇÃO PIX") e entrada do próprio dono** (CPF do Tiago) não
+  são venda: o sync agora manda a devolução pra Estorno de Despesas (1.1.2.02.039) e deixa a
+  entrada do Tiago pendente. Dinheiro do dono que volta = estorno da despesa que ele pagou.
+- **Aluguel:** boleto de R$ 7.002,50 (DÉB.TIT.COMPE, ~dia 26 todo mês), categoria Alugueis
+  Imoveis; não tem lembrete automático confiável — conferir se o do mês existe.
+- WhatsApp ficou fora do ar de 22/10 a 04/11: comprovantes desse período não existem e não
+  dá pra recuperar. Pix sem comprovante só se identifica perguntando ao dono (app do Sicoob
+  mostra o nome completo do favorecido).
+- Convenções do dono (Nov/2026): curso/treinamento do Tiago e hotel → Treinamentos (favorecido
+  "G4"); Google Ads → contato "Meta Ads / Google Ads", Patrocínios; lembrancinhas/canecas →
+  Brindes; tapete (parcelado) → Compras de Ativo Imobilizado; auxiliar de cabelo (Maria) e
+  maquiadora → Prestadores de Serviço; lavagem de toalhas → Prestadores de Serviço.
+
 ## Estado e pendências (13/10/2026)
 
 - **DRE de setembro/2026 (com as regras atuais):** receita R$ 61.704 (serviços
